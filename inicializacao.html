@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Arquivos de Inicialização — .bashrc, .profile e companhia | Guia Bash</title>
+<meta name="description" content="Entenda shell de login e interativo, quais arquivos o Bash lê ao abrir (/etc/profile, ~/.bash_profile, ~/.profile, ~/.bashrc, ~/.bash_logout, BASH_ENV), o .bashrc linha por linha, source e como consertar um .bashrc quebrado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Arquivos de Inicialização</span></h1>
+
+<p class="intro">Toda vez que um Bash começa, ele pode ler alguns arquivos de configuração antes de mostrar o prompt. É neles que moram seus aliases, o <code>PATH</code> com a sua pasta <code>~/bin</code>, o formato do prompt e o tamanho do histórico. Saber <strong>qual arquivo é lido em qual situação</strong> resolve o mistério mais comum do terminal: "coloquei no arquivo e não funcionou".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é um shell <strong>de login</strong> e um shell <strong>interativo</strong>, e como descobrir qual é o seu.</li>
+  <li>Quais arquivos cada tipo de shell lê: <code>/etc/profile</code>, <code>~/.bash_profile</code>, <code>~/.profile</code>, <code>~/.bashrc</code>, <code>~/.bash_logout</code> e <code>BASH_ENV</code>.</li>
+  <li>O <code>.bashrc</code> da Ana linha por linha, incluindo o <code>case $-</code> do topo.</li>
+  <li>Como aplicar uma mudança sem fechar o terminal (<code>source</code>).</li>
+  <li>Como consertar um <code>.bashrc</code> quebrado com <code>bash --norc</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: onde guardar as suas preferências?</h2>
+<p>A Ana cria um atalho no terminal:</p>
+
+<pre class="term">$ alias oi='echo Olá, Ana'
+$ oi
+Olá, Ana</pre>
+
+<p>Funciona. Mas ela fecha a janela, abre outra, e o atalho sumiu:</p>
+
+<pre class="term">$ oi
+bash: oi: comando não encontrado</pre>
+
+<p>Tudo o que você digita vale só para <strong>aquele</strong> shell. Quando ele termina, as variáveis, aliases e funções vão embora junto. Para que algo valha "sempre", ele precisa estar escrito num arquivo que o Bash lê sozinho quando começa. Esses são os <strong>arquivos de inicialização</strong> (em inglês, <em>startup files</em>; também chamados de <em>dotfiles</em>, porque o nome começa com ponto e por isso ficam ocultos no <code>ls</code>).</p>
+
+<p>O detalhe é que existem vários arquivos, e o Bash escolhe quais ler conforme o <strong>tipo</strong> de shell. Então primeiro vamos entender os tipos.</p>
+
+<hr>
+
+<h2>Dois "sim ou não": login e interativo</h2>
+<p>Todo Bash que começa responde a duas perguntas independentes:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Sim quando…</th><th>Não quando…</th></tr>
+<tr><td><strong>É interativo?</strong><br>Uma pessoa está digitando nele?</td><td>Você vê um prompt e digita comandos: a janela do terminal, uma sessão <code>ssh</code>.</td><td>Ele está rodando um script ou um comando passado com <code>bash -c</code>. Ninguém digita nada.</td></tr>
+<tr><td><strong>É de login?</strong><br>É o primeiro shell da sua sessão?</td><td>Você acabou de "entrar" com usuário e senha: o terminal de texto (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>), <code>ssh</code>, <code>su -</code>, <code>bash -l</code>.</td><td>Você já estava logado e só abriu mais um shell: uma janela de terminal no Linux, um <code>bash</code> digitado dentro de outro.</td></tr>
+</table>
+</div>
+
+<p>Combinando as duas respostas, há quatro tipos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>De login</th><th>Não é de login</th></tr>
+<tr><th>Interativo</th><td>Terminal de texto (TTY), <code>ssh ana@servidor</code>, <code>su - ana</code>, <code>bash -l</code>, cada aba do Terminal do macOS</td><td><strong>A janela de terminal do Linux</strong> (GNOME Terminal, Konsole…), um <code>bash</code> digitado no prompt</td></tr>
+<tr><th>Não interativo</th><td><code>bash -lc 'comando'</code> (raro)</td><td><strong>Scripts</strong> (<code>bash script.sh</code>, <code>./script.sh</code>), <code>bash -c 'comando'</code></td></tr>
+</table>
+</div>
+
+<p>No dia a dia de quem usa Linux com interface gráfica, os dois tipos que importam são os destacados: a <strong>janela de terminal</strong> (interativo, não-login) e os <strong>scripts</strong> (não interativo, não-login).</p>
+
+<h3>Como saber se o shell é interativo: <code>$-</code></h3>
+<p>A variável especial <code>$-</code> guarda as <strong>opções ligadas</strong> no shell atual, cada uma como uma letra. Se a letra <code>i</code> (de <em>interactive</em>) estiver lá, o shell é interativo.</p>
+
+<pre class="term">$ echo $-
+himBHs                  « tem um "i": interativo
+$ bash -c 'echo $-'
+hBc                     « um bash rodando um comando: sem "i"</pre>
+
+<p>Cada letra é uma opção: <code>h</code> lembra onde os comandos estão (<a href="path.html">hash</a>), <code>m</code> é o controle de jobs (<em>monitor</em>), <code>B</code> liga a <a href="chaves.html">expansão de chaves</a>, <code>H</code> liga o <code>!</code> do <a href="historico.html">histórico</a>, <code>s</code> diz que os comandos vêm da entrada padrão e <code>c</code> que vieram de <code>-c</code>. Para a nossa pergunta, só o <code>i</code> interessa. O teste fica assim:</p>
+
+<dl class="anatomy">
+  <dt>[[ $- == *i* ]]</dt><dd>"O texto de <code>$-</code> tem um <code>i</code> em qualquer posição?" O <code>*i*</code> é um <a href="curingas.html">curinga</a>: qualquer coisa, um i, qualquer coisa.</dd>
+  <dt>&amp;&amp; echo interativo</dt><dd>Só roda se o teste deu certo (código 0). Veja <a href="operadores.html">; &amp;&amp; ||</a>.</dd>
+</dl>
+
+<pre class="term">$ [[ $- == *i* ]] &amp;&amp; echo interativo
+interativo</pre>
+
+<h3>Como saber se o shell é de login: <code>shopt login_shell</code></h3>
+<p>O Bash guarda essa resposta numa opção somente leitura chamada <code>login_shell</code>. O comando <code>shopt</code> (<em>shell options</em>) mostra o valor:</p>
+
+<pre class="term">$ shopt login_shell
+login_shell         	off     « a janela de terminal não é de login
+$ bash -l               « -l = --login: abre um bash de login aqui dentro
+$ shopt login_shell
+login_shell         	on
+$ logout                « shell de login termina com logout (ou exit)
+$ logout
+bash: logout: não é um shell de login: use `exit'</pre>
+
+<p>Repare na última linha: de volta ao shell da janela, que não é de login, o <code>logout</code> recusa e manda usar <code>exit</code>. É outra forma de descobrir o tipo. Uma terceira pista: num login de verdade (TTY, ssh), <code>echo $0</code> mostra <code>-bash</code>, com um hífen na frente; é assim que o programa de login avisa ao Bash que ele é de login.</p>
+
+<h3>Os dois testes num script</h3>
+<p>O script abaixo responde às duas perguntas. Vamos rodá-lo de dois jeitos diferentes:</p>
+
+<pre class="file" data-file="tipo.sh">#!/usr/bin/env bash
+if [[ $- == *i* ]]; then
+    echo "interativo"
+else
+    echo "não interativo"
+fi
+if shopt -q login_shell; then
+    echo "de login"
+else
+    echo "não é de login"
+fi
+</pre>
+
+<dl class="anatomy">
+  <dt>shopt</dt><dd>Mostra ou muda opções do shell.</dd>
+  <dt>-q</dt><dd><em>quiet</em> (quieto): não escreve nada, só devolve o código de saída: 0 se a opção está ligada, 1 se está desligada. Perfeito para o <code>if</code>.</dd>
+  <dt>login_shell</dt><dd>A opção que o Bash liga sozinho quando é de login.</dd>
+</dl>
+
+<pre class="term">$ bash tipo.sh
+não interativo          « um bash novo foi criado só para rodar o script
+não é de login
+$ source tipo.sh
+interativo              « o próprio shell da janela leu o arquivo
+não é de login</pre>
+
+<p>Com <code>bash tipo.sh</code>, nasce um Bash novo para rodar o script, e esse Bash não é interativo. Com <code>source tipo.sh</code>, quem lê o arquivo é o shell em que você está digitando, que é interativo. Essa diferença volta daqui a pouco, quando formos aplicar mudanças no <code>.bashrc</code>.</p>
+
+<hr>
+
+<h2>Quais arquivos cada tipo de shell lê</h2>
+<p>Agora o mapa completo. Os arquivos em <code>/etc</code> valem para todos os usuários (são do administrador); os que começam com <code>~/</code> ficam na sua pasta pessoal e valem só para você.</p>
+
+<pre class="syntax">SHELL DE LOGIN  (TTY, ssh, su -, bash -l, Terminal do macOS)
+  1. /etc/profile                  ── que costuma ler também /etc/profile.d/*.sh
+  2. o PRIMEIRO destes que existir (só um!):
+       ~/.bash_profile  ──►  ~/.bash_login  ──►  ~/.profile
+  ao sair:  ~/.bash_logout
+
+SHELL INTERATIVO QUE NÃO É DE LOGIN  (janela de terminal no Linux, "bash" digitado)
+  1. /etc/bash.bashrc              ── só onde existe (Debian, Ubuntu, Arch…)
+  2. ~/.bashrc
+
+SHELL NÃO INTERATIVO  (scripts, bash -c)
+  nenhum arquivo, a não ser o que estiver na variável BASH_ENV</pre>
+
+<p>Três detalhes importantes:</p>
+<ul>
+  <li><strong>O shell de login não lê o <code>~/.bashrc</code></strong> por conta própria. Quem faz isso é o <code>~/.profile</code> (ou o <code>~/.bash_profile</code>), que costuma ter um trecho mandando ler o <code>.bashrc</code>. Assim os aliases funcionam também no ssh e no TTY.</li>
+  <li>Da lista <code>~/.bash_profile</code> → <code>~/.bash_login</code> → <code>~/.profile</code>, o Bash lê <strong>só o primeiro que existir</strong> e para. Se você criar um <code>.bash_profile</code>, o <code>.profile</code> deixa de ser lido.</li>
+  <li><strong>Scripts não leem o <code>.bashrc</code>.</strong> Um script não vê os seus aliases nem as variáveis que você criou no <code>.bashrc</code> sem <code>export</code>. Ele herda só as <a href="variaveis.html">variáveis exportadas</a> do shell que o chamou.</li>
+</ul>
+
+<h3>A prova: um "dedo-duro" em cada arquivo</h3>
+<p>Para ver o mapa funcionando, colocamos um <code>echo</code> no começo do <code>~/.profile</code>, outro no <code>~/.bashrc</code> (logo depois do <code>case</code>, na parte que só roda em shell interativo) e criamos um <code>~/.bash_logout</code> com um terceiro. Depois abrimos cada tipo de shell com as opções <code>-l</code> (login), <code>-i</code> (interativo) e <code>-c</code> (rodar um comando):</p>
+
+<pre class="term">$ bash -c true                « não interativo, não-login
+$ bash -ic true               « interativo, não-login
+&gt;&gt; lendo ~/.bashrc (parte interativa)
+$ bash -lc true               « não interativo, de login
+&gt;&gt; lendo ~/.profile
+$ bash -lic true              « interativo, de login
+&gt;&gt; lendo ~/.profile
+&gt;&gt; lendo ~/.bashrc (parte interativa)</pre>
+
+<p>Linha por linha:</p>
+<ul>
+  <li><code>bash -c true</code> não leu nada. É assim que seus scripts rodam.</li>
+  <li><code>bash -ic</code> leu só o <code>.bashrc</code>: é o caso da janela de terminal.</li>
+  <li><code>bash -lc</code> leu o <code>.profile</code>. O <code>.profile</code> da Ana manda ler o <code>.bashrc</code>, mas como o shell não é interativo, o <code>case</code> do topo do <code>.bashrc</code> o mandou embora antes do nosso <code>echo</code>.</li>
+  <li><code>bash -lic</code> leu o <code>.profile</code>, e o <code>.profile</code> leu o <code>.bashrc</code> inteiro. É o que acontece num ssh.</li>
+</ul>
+
+<p>E o <code>.bash_logout</code> aparece quando um shell de login termina:</p>
+
+<pre class="term">$ bash -lic exit
+&gt;&gt; lendo ~/.profile
+&gt;&gt; lendo ~/.bashrc (parte interativa)
+sair                          « o Bash avisa que está saindo de um shell de login
+&gt;&gt; lendo ~/.bash_logout</pre>
+
+<p>O <code>.bash_logout</code> serve para "arrumar a casa" ao sair: limpar a tela do TTY, apagar arquivos temporários. Muita gente nem tem esse arquivo, e tudo bem.</p>
+
+<h3>O <code>.bash_profile</code> que esconde o <code>.profile</code></h3>
+<p>Agora a Ana cria um <code>~/.bash_profile</code> (muitos tutoriais mandam fazer isso):</p>
+
+<pre class="term">$ echo 'echo "&gt;&gt; lendo ~/.bash_profile"' &gt; ~/.bash_profile
+$ bash -lc true
+&gt;&gt; lendo ~/.bash_profile      « o .profile não foi lido!
+$ rm ~/.bash_profile
+$ bash -lc true
+&gt;&gt; lendo ~/.profile           « sem o .bash_profile, o .profile volta a valer</pre>
+
+<p>Como o Bash lê só o primeiro que existir, tudo o que estava no <code>.profile</code> (o <code>~/bin</code> no <code>PATH</code>, a leitura do <code>.bashrc</code>) parou de valer nos logins. Se você precisa de um <code>.bash_profile</code>, faça-o carregar o <code>.profile</code>:</p>
+
+<pre class="file" data-file="~/.bash_profile"># carrega o .profile (que por sua vez carrega o .bashrc)
+if [ -f ~/.profile ]; then
+    . ~/.profile
+fi
+</pre>
+
+<h3>E o <code>BASH_ENV</code>?</h3>
+<p>Um shell não interativo não lê arquivo nenhum, exceto um: se a variável <code>BASH_ENV</code> tiver o caminho de um arquivo, o Bash lê esse arquivo antes de rodar o script.</p>
+
+<pre class="term">$ echo 'echo "&gt;&gt; lendo env.sh"' &gt; ~/env.sh
+$ BASH_ENV=~/env.sh bash -c "echo oi"
+&gt;&gt; lendo env.sh
+oi
+$ bash -c "echo oi"
+oi                            « sem BASH_ENV, nada é lido</pre>
+
+<p>É um recurso para casos especiais (preparar o ambiente de scripts num servidor de testes, por exemplo). No uso normal você não precisa dele. Se um script se comporta de um jeito estranho só na sua máquina, vale conferir se <code>echo $BASH_ENV</code> está vazio.</p>
+
+<div class="tip">
+<strong>Opções que mudam a leitura</strong>
+<p><code>bash --norc</code> não lê o <code>~/.bashrc</code>; <code>bash --noprofile</code> não lê os arquivos de login; <code>bash --rcfile arquivo</code> lê <code>arquivo</code> no lugar do <code>~/.bashrc</code>. A primeira vai salvar você quando o <code>.bashrc</code> quebrar (veja "Quando não funciona").</p>
+</div>
+
+<hr>
+
+<h2>O <code>.bashrc</code> da Ana, linha por linha</h2>
+<p>O <code>rc</code> do nome vem de <em>run commands</em> ("comandos para rodar"), uma tradição dos anos 1960. É o arquivo que você mais vai editar. O da Ana é uma versão curta do que o Debian e o Ubuntu colocam em toda conta nova (o original fica em <code>/etc/skel/.bashrc</code>):</p>
+
+<pre class="term">$ cat -n ~/.bashrc
+     1	# ~/.bashrc: executado pelo bash(1) para shells interativos.
+     2	
+     3	# Se não for interativo, não faz nada
+     4	case $- in
+     5	    *i*) ;;
+     6	      *) return;;
+     7	esac
+     8	
+     9	HISTCONTROL=ignoreboth
+    10	HISTSIZE=1000
+    11	HISTFILESIZE=2000
+    12	shopt -s histappend
+    13	shopt -s checkwinsize
+    14	
+    15	PS1='\u@\h:\w\$ '
+    16	
+    17	alias ls='ls --color=auto'
+    18	alias grep='grep --color=auto'
+    19	alias ll='ls -alF'
+    20	alias la='ls -A'
+    21	alias l='ls -CF'</pre>
+
+<h3>Linhas 4 a 7: o porteiro</h3>
+
+<dl class="anatomy">
+  <dt>case $- in</dt><dd>Compara o texto de <code>$-</code> (as opções do shell) com os padrões abaixo. Veja <a href="case.html">case</a>.</dd>
+  <dt>*i*) ;;</dt><dd>Se tem um <code>i</code> (interativo): não faz nada (<code>;;</code> logo depois do padrão) e segue lendo o arquivo.</dd>
+  <dt>*) return;;</dt><dd>Qualquer outro caso: <code>return</code> para de ler o arquivo aqui mesmo e volta para quem chamou.</dd>
+  <dt>esac</dt><dd>Fim do <code>case</code> (<code>case</code> de trás para frente).</dd>
+</dl>
+
+<p>Por que isso existe, se o <code>.bashrc</code> já é "para shells interativos"? Porque ele pode ser lido por shells que não são interativos: o <code>.profile</code> o carrega num <code>bash -lc</code>, e o Bash também o lê quando é iniciado pelo <code>ssh</code> só para rodar um comando (<code>ssh servidor 'ls'</code>). Nesses casos, um <code>echo</code> no <code>.bashrc</code> sujaria a saída e quebraria programas como <code>scp</code> e <code>rsync</code>. O porteiro garante: se ninguém está digitando, nada daqui roda.</p>
+
+<p>O mesmo teste pode ser escrito como <code>[[ $- != *i* ]] &amp;&amp; return</code>. O <code>case</code> é usado porque também funciona em shells mais antigos que não têm <code>[[ ]]</code>.</p>
+
+<h3>Linhas 9 a 21: as preferências</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th><th>Aula</th></tr>
+<tr><td><code>HISTCONTROL=ignoreboth</code></td><td>Não guarda no histórico comandos repetidos em sequência nem os que começam com espaço.</td><td><a href="historico.html">Histórico</a></td></tr>
+<tr><td><code>HISTSIZE=1000</code></td><td>Lembra até 1000 comandos na memória do shell aberto.</td><td><a href="historico.html">Histórico</a></td></tr>
+<tr><td><code>HISTFILESIZE=2000</code></td><td>Guarda até 2000 linhas no arquivo <code>~/.bash_history</code>.</td><td><a href="historico.html">Histórico</a></td></tr>
+<tr><td><code>shopt -s histappend</code></td><td>Ao fechar, <strong>acrescenta</strong> ao <code>.bash_history</code> em vez de sobrescrever. Sem isso, duas janelas abertas apagariam o histórico uma da outra.</td><td><a href="shopt.html">set e shopt</a></td></tr>
+<tr><td><code>shopt -s checkwinsize</code></td><td>Depois de cada comando, confere o tamanho da janela e atualiza <code>LINES</code> e <code>COLUMNS</code>. Assim a linha de comando não se embaralha quando você redimensiona a janela.</td><td><a href="shopt.html">set e shopt</a></td></tr>
+<tr><td><code>PS1='\u@\h:\w\$ '</code></td><td>O formato do prompt: usuário@máquina:pasta$.</td><td><a href="ps1.html">Personalizar o prompt</a></td></tr>
+<tr><td><code>alias …</code></td><td>Atalhos: <code>ls</code> e <code>grep</code> coloridos, e <code>ll</code>, <code>la</code>, <code>l</code> para listagens.</td><td><a href="alias.html">alias</a></td></tr>
+</table>
+</div>
+
+<p>Note que as variáveis <code>HIST…</code> e <code>PS1</code> não têm <code>export</code>. Elas só interessam ao próprio shell interativo, e cada novo shell interativo lê o <code>.bashrc</code> de novo, então não precisam ser passadas adiante.</p>
+
+<h3>E o <code>.profile</code>?</h3>
+<p>O <code>.profile</code> da Ana tem duas tarefas:</p>
+
+<pre class="file" data-file="~/.profile"># ~/.profile: executado pelo shell de login.
+
+# se estiver rodando bash, carrega o .bashrc
+if [ -n "$BASH_VERSION" ]; then
+    if [ -f "$HOME/.bashrc" ]; then
+        . "$HOME/.bashrc"
+    fi
+fi
+
+# inclui a pasta bin pessoal no PATH, se existir
+if [ -d "$HOME/bin" ] ; then
+    PATH="$HOME/bin:$PATH"
+fi
+if [ -d "$HOME/.local/bin" ] ; then
+    PATH="$HOME/.local/bin:$PATH"
+fi
+</pre>
+
+<dl class="anatomy">
+  <dt>[ -n "$BASH_VERSION" ]</dt><dd>"A variável <code>BASH_VERSION</code> não está vazia?" O <code>.profile</code> também é lido por outros shells (como o <code>sh</code>); esse teste garante que o <code>.bashrc</code>, que é do Bash, só seja carregado pelo Bash.</dd>
+  <dt>[ -f "$HOME/.bashrc" ]</dt><dd>"O arquivo existe?" Evita erro se não existir.</dd>
+  <dt>. "$HOME/.bashrc"</dt><dd>O ponto é o mesmo que <code>source</code>: lê o arquivo dentro deste shell.</dd>
+  <dt>[ -d "$HOME/bin" ]</dt><dd>"A pasta <code>~/bin</code> existe?" Se existir, ela entra no começo do <code>PATH</code> (veja <a href="path.html">PATH</a>).</dd>
+</dl>
+
+<p>Coisas que só precisam ser feitas <strong>uma vez por sessão</strong> e que os programas filhos herdam, como o <code>PATH</code>, ficam no <code>.profile</code>. Coisas do shell interativo (aliases, prompt, histórico) ficam no <code>.bashrc</code>. Como o <code>.profile</code> só é lido no login, a pasta <code>~/bin</code> criada agora só entra no <code>PATH</code> no próximo login:</p>
+
+<pre class="term">$ mkdir -p ~/bin
+$ bash -lc 'echo $PATH'                « simula um login novo
+/home/ana/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin</pre>
+
+<p>O <code>/home/ana/bin</code> apareceu no começo. O <code>/snap/bin</code> no fim foi acrescentado por um arquivo de <code>/etc/profile.d/</code>, que o <code>/etc/profile</code> lê; no seu sistema essa parte pode ser diferente.</p>
+
+<hr>
+
+<h2>Onde colocar cada coisa</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quero…</th><th>Arquivo</th><th>Por quê</th></tr>
+<tr><td>Aliases e funções de uso no terminal</td><td><code>~/.bashrc</code> (ou <code>~/.bash_aliases</code>, veja <a href="alias.html">alias</a>)</td><td>Só fazem sentido em shell interativo e não são herdados.</td></tr>
+<tr><td>Prompt, histórico, <code>shopt</code> do dia a dia</td><td><code>~/.bashrc</code></td><td>São do shell interativo.</td></tr>
+<tr><td>Pasta no <code>PATH</code>, <code>EDITOR</code>, <code>LANG</code></td><td><code>~/.profile</code> (ou <code>~/.bash_profile</code>)</td><td>São exportados e herdados por todos os programas da sessão, até os gráficos.</td></tr>
+<tr><td>Algo ao sair do login</td><td><code>~/.bash_logout</code></td><td>Lido só quando um shell de login termina.</td></tr>
+<tr><td>Algo para todos os usuários</td><td><code>/etc/profile.d/meu.sh</code> ou <code>/etc/bash.bashrc</code></td><td>Exige ser administrador. Prefira o <code>profile.d</code>, que não é sobrescrito em atualizações.</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Na prática, muita gente põe o <code>PATH</code> no <code>.bashrc</code></strong>
+<p>Funciona para o terminal, mas tem um efeito colateral: cada vez que o <code>.bashrc</code> é relido, a pasta é acrescentada de novo. Veja o que acontece depois de três <code>source</code>:</p>
+<pre class="term">$ echo 'PATH="$HOME/bin:$PATH"' &gt;&gt; ~/.bashrc
+$ source ~/.bashrc
+$ source ~/.bashrc
+$ source ~/.bashrc
+$ echo $PATH
+/home/ana/bin:/home/ana/bin:/home/ana/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</pre>
+<p>Não quebra nada, mas polui. Na aula de <a href="path.html">PATH</a> você vê como adicionar só se a pasta ainda não estiver lá.</p>
+</div>
+
+<hr>
+
+<h2>Aplicar uma mudança: <code>source</code></h2>
+<p>Editar o <code>.bashrc</code> não muda o shell que já está aberto: o arquivo só é lido quando um shell começa. A Ana acrescenta um alias ao arquivo:</p>
+
+<pre class="term">$ echo "alias oi='echo Olá, Ana'" &gt;&gt; ~/.bashrc
+$ tail -n 2 ~/.bashrc
+alias l='ls -CF'
+alias oi='echo Olá, Ana'      « está no arquivo…
+$ oi
+bash: oi: comando não encontrado    « …mas o shell aberto ainda não leu
+$ echo $?
+127</pre>
+
+<p>O código <code>127</code> é o "comando não encontrado" (veja <a href="codigo-saida.html">código de saída</a>). Para o shell atual ler o arquivo de novo, use <code>source</code>:</p>
+
+<dl class="anatomy">
+  <dt>source</dt><dd>"Leia este arquivo e execute cada linha <strong>aqui, neste shell</strong>." (<em>source</em> = fonte.)</dd>
+  <dt>~/.bashrc</dt><dd>O arquivo a ler.</dd>
+</dl>
+
+<pre class="term">$ source ~/.bashrc
+$ oi
+Olá, Ana
+$ echo $?
+0</pre>
+
+<p>O <code>source</code> não mostra nada quando dá certo. O ponto (<code>. ~/.bashrc</code>) faz exatamente a mesma coisa: é o nome antigo, do padrão POSIX, e funciona até no <code>sh</code>. O <code>source</code> é o nome do Bash, mais fácil de ler.</p>
+
+<h3>Formas diferentes de aplicar</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que acontece</th><th>Qual usar?</th></tr>
+<tr><td><code>source ~/.bashrc</code></td><td>Relê o arquivo no shell atual. O que já existia continua (um alias apagado do arquivo continua valendo até fechar).</td><td>O dia a dia: acrescentou algo, aplique.</td></tr>
+<tr><td><code>. ~/.bashrc</code></td><td>Igual ao <code>source</code>.</td><td>Em arquivos que também rodam no <code>sh</code>, como o <code>.profile</code>.</td></tr>
+<tr><td><code>exec bash</code></td><td>Troca o shell atual por um Bash novinho, que lê o <code>.bashrc</code> do zero. Variáveis criadas à mão se perdem.</td><td>Quando você <strong>removeu</strong> coisas do arquivo e quer começar limpo.</td></tr>
+<tr><td>Fechar e abrir o terminal</td><td>Um shell novo, do zero.</td><td>Sempre funciona; é o teste final.</td></tr>
+<tr><td><code>bash ~/.bashrc</code></td><td>Roda o arquivo num <strong>outro</strong> Bash, que termina em seguida. Não muda nada no seu.</td><td>Nunca (veja abaixo).</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="contains:~/.bashrc=alias hoje=,alias:hoje" data-solucao="echo &quot;alias hoje='date +%d/%m/%Y'&quot; &gt;&gt; ~/.bashrc;;source ~/.bashrc">
+<p class="try-task"><strong>Missão:</strong> acrescente ao fim do <code>~/.bashrc</code> um alias chamado <code>hoje</code> que rode <code>date +%d/%m/%Y</code>. Use <code>echo "…" &gt;&gt; ~/.bashrc</code> (com <strong>dois</strong> <code>&gt;</code>, para não apagar o arquivo!). Depois aplique a mudança no shell atual e teste digitando <code>hoje</code>.</p>
+</div>
+
+<hr>
+
+<h2>Cada sistema, um jeito</h2>
+<p>As regras do Bash são as mesmas em todo lugar; o que muda é <strong>qual tipo de shell</strong> o terminal abre e quais arquivos vêm prontos na conta nova. Isso explica por que um tutorial manda editar o <code>.bashrc</code> e outro o <code>.bash_profile</code>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>A janela de terminal abre…</th><th>Arquivos que vêm na conta nova</th><th>Arquivo do sistema</th></tr>
+<tr><td>Debian, Ubuntu, Mint</td><td>Interativo, não-login → lê o <code>~/.bashrc</code></td><td><code>.bashrc</code>, <code>.profile</code> (que carrega o <code>.bashrc</code>), <code>.bash_logout</code></td><td><code>/etc/bash.bashrc</code> (lido também no login, pelo <code>/etc/profile</code>)</td></tr>
+<tr><td>Fedora, RHEL</td><td>Interativo, não-login → lê o <code>~/.bashrc</code></td><td><code>.bashrc</code> (que carrega <code>/etc/bashrc</code>), <code>.bash_profile</code> (que carrega o <code>.bashrc</code>), <code>.bash_logout</code></td><td><code>/etc/bashrc</code>, carregado pelo seu <code>.bashrc</code></td></tr>
+<tr><td>Arch</td><td>Interativo, não-login → lê o <code>~/.bashrc</code></td><td><code>.bashrc</code>, <code>.bash_profile</code> (que carrega o <code>.bashrc</code>), <code>.bash_logout</code></td><td><code>/etc/bash.bashrc</code></td></tr>
+<tr><td>macOS (Terminal)</td><td><strong>De login, em cada aba</strong> → lê o <code>~/.bash_profile</code>, não o <code>.bashrc</code></td><td>Nenhum: o shell padrão é o zsh (<code>~/.zshrc</code>)</td><td><code>/etc/profile</code></td></tr>
+<tr><td>Windows: WSL</td><td>Igual à distro instalada (Ubuntu, na maioria)</td><td>Os da distro</td><td>Os da distro</td></tr>
+<tr><td>Windows: Git Bash</td><td>De login → lê o <code>~/.bash_profile</code></td><td>Cria um <code>.bash_profile</code> que carrega o <code>.bashrc</code> se você só tiver o <code>.bashrc</code></td><td><code>/etc/profile</code> do Git</td></tr>
+</table>
+</div>
+
+<p>A receita que funciona em todos: <strong>coloque suas preferências no <code>~/.bashrc</code> e garanta que o arquivo de login (<code>.profile</code> ou <code>.bash_profile</code>) carregue o <code>.bashrc</code></strong>. No macOS com Bash instalado, crie um <code>~/.bash_profile</code> com esta linha:</p>
+
+<pre class="file" data-file="~/.bash_profile">[ -r ~/.bashrc ] &amp;&amp; . ~/.bashrc
+</pre>
+
+<p>O <code>-r</code> testa se o arquivo existe e pode ser lido (<em>readable</em>). Lembre-se de que o <code>/bin/bash</code> do macOS é a versão 3.2; veja <a href="onde-tem-bash.html">Bash em cada sistema</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Coloquei no <code>.bashrc</code> e "não funciona"</strong>
+<pre class="term">$ oi
+bash: oi: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> quase sempre é uma destas três coisas: (1) o shell aberto ainda não leu o arquivo; (2) você está num shell de login cujo <code>.profile</code>/<code>.bash_profile</code> não carrega o <code>.bashrc</code> (ssh, macOS, um <code>.bash_profile</code> recém-criado); (3) você está num <strong>script</strong>, que não lê o <code>.bashrc</code>.</p>
+<p><strong>Como confirmar:</strong> <code>grep oi ~/.bashrc</code> (está no arquivo?), <code>shopt login_shell</code> (é de login?), <code>ls -a ~ | grep bash_profile</code> (existe um <code>.bash_profile</code> escondendo o <code>.profile</code>?).</p>
+<p><strong>Como resolver:</strong> <code>source ~/.bashrc</code>; se for login, faça o <code>.bash_profile</code> carregar o <code>.profile</code> ou o <code>.bashrc</code>, como mostrado acima. Num script, não use alias: use uma <a href="funcoes.html">função</a> ou o comando completo.</p>
+</div>
+
+<div class="cenario">
+<strong>Rodei <code>bash ~/.bashrc</code> e apareceu um erro de <code>return</code></strong>
+<pre class="term">$ bash ~/.bashrc
+/home/ana/.bashrc: linha 6: return: possível retornar (`return') apenas de uma função ou script carregado (com `source')
+$ echo $?
+0</pre>
+<p><strong>O que aconteceu:</strong> <code>bash arquivo</code> roda o arquivo como um <strong>script</strong>, num Bash novo e não interativo. O porteiro do topo tentou o <code>return</code>, que só funciona em funções ou em arquivos lidos com <code>source</code>. E mesmo que tivesse rodado tudo, os aliases seriam criados nesse outro Bash, que termina em seguida.</p>
+<p><strong>Como resolver:</strong> use <code>source ~/.bashrc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Mensagens de erro toda vez que abro o terminal</strong>
+<pre class="term">$ bash -ic true
+alias ll='ls -alF'
+bash: alias: =: não encontrado
+bash: alias: ls -l: não encontrado</pre>
+<p><strong>O que aconteceu:</strong> a Ana acrescentou <code>alias ll = 'ls -l'</code>, com espaços em volta do <code>=</code>. O Bash entendeu três pedidos separados: "mostre o alias <code>ll</code>" (por isso a primeira linha), "mostre o alias <code>=</code>" e "mostre o alias <code>ls -l</code>".</p>
+<p><strong>Como resolver:</strong> abra o arquivo (<code>nano ~/.bashrc</code>), escreva sem espaços (<code>alias ll='ls -l'</code>), salve e rode <code>source ~/.bashrc</code>. O erro não impede o resto do arquivo de rodar, por isso o terminal continua utilizável.</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe: fim inesperado do arquivo"</strong>
+<pre class="term">$ bash -ic true
+bash: /home/ana/.bashrc: linha 24: erro de sintaxe: fim inesperado do arquivo do comando `if' na linha 22</pre>
+<p><strong>O que aconteceu:</strong> um <code>if</code> começou na linha 22 e o arquivo acabou sem o <code>fi</code>. Com um erro de sintaxe, o Bash não consegue rodar o bloco quebrado.</p>
+<p><strong>Como confirmar:</strong> <code>bash -n ~/.bashrc</code> confere a sintaxe sem rodar nada (veja <a href="depuracao.html">depurar</a>); <code>tail -n 5 ~/.bashrc</code> mostra o fim do arquivo.</p>
+<p><strong>Como resolver:</strong> feche o bloco (<code>fi</code>, <code>done</code>, <code>esac</code>, <code>}</code> ou a aspa que faltou) e rode <code>source ~/.bashrc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal abre e fecha na hora</strong>
+<p><strong>O que aconteceu:</strong> alguma linha do <code>.bashrc</code> encerra o shell: um <code>exit</code> esquecido, ou um <code>exec</code> de um programa que não existe. A janela abre, lê o arquivo, o shell termina, a janela fecha. Na simulação abaixo, a Ana acrescentou <code>exit</code> no fim do arquivo; o <code>bash -i</code> termina sem nem mostrar o prompt:</p>
+<pre class="term">$ echo "exit" &gt;&gt; ~/.bashrc
+$ bash -i; echo "código: $?"
+código: 0                     « o bash novo leu o .bashrc e saiu na hora</pre>
+<p><strong>Como resolver:</strong> você precisa de um shell que <strong>não leia</strong> o <code>.bashrc</code>:</p>
+<ol>
+  <li>Se ainda tem algum terminal aberto, rode <code>bash --norc</code> nele. O prompt vira o padrão do Bash, porque nada foi configurado:
+<pre class="term">$ bash --norc
+bash-5.3$ nano ~/.bashrc      « apague a linha com problema, salve
+bash-5.3$ exit</pre></li>
+  <li>Sem terminal aberto: nas preferências do terminal (no GNOME Terminal, em Preferências → perfil → Comando), marque "executar um comando personalizado" com <code>bash --norc</code>; ou abra o <code>.bashrc</code> num editor gráfico (no gerenciador de arquivos, <kbd>Ctrl</kbd>+<kbd>H</kbd> mostra os arquivos ocultos).</li>
+  <li>Para voltar ao <code>.bashrc</code> original da distribuição: <code>cp /etc/skel/.bashrc ~/</code> (você perde suas personalizações; faça uma cópia antes).</li>
+</ol>
+<p><strong>Para não passar por isso:</strong> antes de mexer, faça uma cópia (<code>cp ~/.bashrc ~/.bashrc.bak</code>) e, depois de editar, teste num Bash novo (<code>bash</code>) <strong>sem fechar</strong> a janela atual.</p>
+</div>
+
+<div class="cenario">
+<strong>Uma variável do <code>.bashrc</code> não chega no script</strong>
+<p><strong>O que aconteceu:</strong> o script não lê o <code>.bashrc</code>; ele só recebe as variáveis <strong>exportadas</strong> pelo shell que o chamou. Se o <code>.bashrc</code> tem <code>PASTA_BACKUP=~/bkp</code> sem <code>export</code>, o script vê a variável vazia.</p>
+<p><strong>Como resolver:</strong> <code>export PASTA_BACKUP=~/bkp</code> no <code>.bashrc</code> (ou no <code>.profile</code>), depois <code>source</code>. Veja <a href="variaveis.html">Variáveis, escopo e export</a>.</p>
+</div>
+
+<hr>
+
+<h2>Experimente: detectar o tipo de shell</h2>
+
+<div class="tryscript" data-file="tipo.sh" data-goal="out:não interativo,src:\$-">
+<p class="try-task"><strong>Missão:</strong> complete o script para que ele escreva <code>interativo</code> ou <code>não interativo</code>, testando se a variável <code>$-</code> contém a letra <code>i</code>. Clique em Rodar: como o simulador roda <code>bash tipo.sh</code>, a resposta certa é "não interativo".</p>
+<pre class="script">#!/usr/bin/env bash
+# troque o false pelo teste
+if false; then
+    echo "interativo"
+else
+    echo "não interativo"
+fi
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+# troque o false pelo teste
+if [[ $- == *i* ]]; then
+    echo "interativo"
+else
+    echo "não interativo"
+fi
+</pre>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Arquivo / recurso</th><th>Lido por</th><th>Uso típico</th></tr>
+<tr><td><code>/etc/profile</code></td><td>Shell de login (todos os usuários)</td><td>Ambiente do sistema; lê <code>/etc/profile.d/*.sh</code></td></tr>
+<tr><td><code>~/.bash_profile</code></td><td>Shell de login (1º da lista)</td><td>Fedora, Arch, macOS; deve carregar o <code>.bashrc</code></td></tr>
+<tr><td><code>~/.bash_login</code></td><td>Shell de login, se não houver <code>.bash_profile</code></td><td>Raramente usado</td></tr>
+<tr><td><code>~/.profile</code></td><td>Shell de login, se não houver os dois acima (e também o <code>sh</code>)</td><td>Debian/Ubuntu: <code>PATH</code> e carregar o <code>.bashrc</code></td></tr>
+<tr><td><code>/etc/bash.bashrc</code></td><td>Interativo não-login (onde existe)</td><td>Padrões do sistema para o terminal</td></tr>
+<tr><td><code>~/.bashrc</code></td><td>Interativo não-login</td><td>Aliases, funções, prompt, histórico</td></tr>
+<tr><td><code>~/.bash_logout</code></td><td>Saída de um shell de login</td><td>Limpar a tela, arrumar arquivos</td></tr>
+<tr><td><code>$BASH_ENV</code></td><td>Não interativo (scripts)</td><td>Casos especiais</td></tr>
+<tr><td><code>[[ $- == *i* ]]</code></td><td colspan="2">Verdadeiro se o shell é interativo</td></tr>
+<tr><td><code>shopt -q login_shell</code></td><td colspan="2">Verdadeiro (código 0) se o shell é de login</td></tr>
+<tr><td><code>source arq</code> / <code>. arq</code></td><td colspan="2">Lê e executa o arquivo no shell atual</td></tr>
+<tr><td><code>bash -l</code> / <code>-i</code> / <code>-c</code></td><td colspan="2">Abre um Bash de login / interativo / que roda um comando</td></tr>
+<tr><td><code>bash --norc</code> / <code>--noprofile</code></td><td colspan="2">Não lê o <code>.bashrc</code> / os arquivos de login</td></tr>
+<tr><td><code>bash --rcfile arq</code></td><td colspan="2">Lê <code>arq</code> no lugar do <code>~/.bashrc</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Aplicar sem fechar</h3>
+<p>Você editou o <code>.bashrc</code>. Complete o comando que faz o shell atual ler o arquivo de novo:</p>
+<div class="ex-code"><input data-answer="source|." aria-label="comando"> ~/.bashrc</div>
+</div>
+
+<div class="exercise">
+<h3>2. É interativo?</h3>
+<p>Complete o teste que é verdadeiro quando o shell é interativo:</p>
+<div class="ex-code">[[ $- == <input data-answer="*i*" aria-label="padrão"> ]]</div>
+</div>
+
+<div class="exercise">
+<h3>3. Socorro, o terminal fecha sozinho</h3>
+<p>Complete o comando que abre um Bash <strong>sem</strong> ler o <code>~/.bashrc</code>:</p>
+<div class="ex-code">bash <input data-answer="--norc" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. A Ana criou um <code>~/.bash_profile</code> vazio. No próximo login pelo ssh, o <code>~/bin</code> sumiu do <code>PATH</code>. Por quê?</p>
+<label><input type="radio" name="q4"> Porque o <code>.bash_profile</code> apaga o <code>PATH</code>.</label>
+<label><input type="radio" name="q4"> Porque o ssh nunca lê arquivos de inicialização.</label>
+<label><input type="radio" name="q4"> Porque o Bash de login lê só o primeiro que existir entre <code>.bash_profile</code>, <code>.bash_login</code> e <code>.profile</code>, e agora o <code>.profile</code> é ignorado.</label>
+<label><input type="radio" name="q4"> Porque o <code>.bashrc</code> tem o <code>case $-</code> no topo.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Para que serve o <code>case $- in *i*) ;; *) return;; esac</code> no topo do <code>.bashrc</code>?</p>
+<label><input type="radio" name="q5"> Para o arquivo rodar só em shells de login.</label>
+<label><input type="radio" name="q5"> Para parar de ler o arquivo quando o shell não é interativo, evitando que aliases e <code>echo</code> atrapalhem scripts, <code>scp</code> e afins.</label>
+<label><input type="radio" name="q5"> Para ligar o modo interativo.</label>
+<label><input type="radio" name="q5"> Para testar se o arquivo tem erro de sintaxe.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Você abriu a janela de terminal no Ubuntu. Que tipo de shell é?</p>
+<label><input type="radio" name="q6"> Interativo e não-login: lê o <code>~/.bashrc</code>.</label>
+<label><input type="radio" name="q6"> Interativo e de login: lê o <code>~/.profile</code>.</label>
+<label><input type="radio" name="q6"> Não interativo: não lê nada.</label>
+<label><input type="radio" name="q6"> Depende do conteúdo do <code>.bash_logout</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Todo Bash é (ou não) <strong>interativo</strong> (<code>[[ $- == *i* ]]</code>) e (ou não) <strong>de login</strong> (<code>shopt login_shell</code>).</li>
+  <li>Login lê <code>/etc/profile</code> e o primeiro de <code>~/.bash_profile</code>, <code>~/.bash_login</code>, <code>~/.profile</code>. Interativo não-login lê <code>~/.bashrc</code>. Scripts não leem nada (só <code>$BASH_ENV</code>).</li>
+  <li>Preferências do terminal no <code>.bashrc</code>; <code>PATH</code> e variáveis exportadas no <code>.profile</code>; e o arquivo de login deve carregar o <code>.bashrc</code>.</li>
+  <li>Depois de editar, <code>source ~/.bashrc</code> (ou <code>. ~/.bashrc</code>). Nunca <code>bash ~/.bashrc</code>.</li>
+  <li>Faça cópia antes de editar; se quebrar, <code>bash --norc</code> e <code>bash -n ~/.bashrc</code> são seus amigos.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
