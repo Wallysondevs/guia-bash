@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Boas Práticas — checklist comentado e um script refatorado | Guia Bash</title>
+<meta name="description" content="Checklist comentado de boas práticas em Bash: shebang, set -euo pipefail, aspas, [[ ]], $( ), local, nomes de variável, não parsear ls, find -print0, mktemp e trap, printf, --, readonly, main, mensagens de uso, códigos de saída, ShellCheck, quando trocar por Python, e um script antes × depois.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Boas Práticas</span></h1>
+
+<p class="intro">Esta aula junta, numa lista só, os hábitos que fazem um script ser <strong>seguro, legível e fácil de manter</strong>. Cada item tem o porquê, com uma demonstração real, e um link para a aula onde o assunto é explicado a fundo. No fim, um script "do jeito que todo mundo escreve no começo" é refatorado passo a passo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Um checklist de 20 hábitos, do shebang ao ShellCheck, cada um com o motivo.</li>
+  <li>Por que aspas, <code>--</code> e <code>printf</code> protegem contra nomes de arquivo "estranhos".</li>
+  <li>Como organizar um script com constantes, funções e <code>main "$@"</code>.</li>
+  <li>Quando o Bash deixa de ser a ferramenta certa.</li>
+  <li>A refatorar um script real, entendendo cada mudança.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Por que se preocupar?</h2>
+<p>A maioria dos scripts funciona no dia em que é escrita, com os arquivos de teste de quem escreveu. Eles quebram depois: com um nome de arquivo com espaço, uma pasta que não existe, uma variável vazia, outra pessoa rodando de outra pasta. As boas práticas são a experiência acumulada de quem já passou por isso. Veja o script da Ana com uma lista de compras chamada <code>lista de compras.txt</code>:</p>
+
+<pre class="term">$ f="lista de compras.txt"
+$ wc -l textos/$f
+wc: textos/lista: Arquivo ou diretório inexistente
+wc: de: Arquivo ou diretório inexistente
+wc: compras.txt: Arquivo ou diretório inexistente
+0 total
+$ wc -l "textos/$f"
+2 textos/lista de compras.txt                  « com aspas, um nome só</pre>
+
+<p>Duas aspas de diferença. É disso que esta aula trata.</p>
+
+<hr>
+
+<h2>O checklist</h2>
+
+<h3>1. Comece com o shebang certo</h3>
+<pre class="file" data-file="script.sh">#!/usr/bin/env bash
+</pre>
+<p>A primeira linha diz qual programa interpreta o arquivo (<a href="script-primeiro.html">Seu Primeiro Script</a>). <code>#!/usr/bin/env bash</code> procura o <code>bash</code> no <code>PATH</code>, o que funciona também em sistemas onde ele não está em <code>/bin</code> (macOS com Homebrew, BSDs, NixOS). <code>#!/bin/bash</code> também é aceitável no Linux. Se o script usa recursos do Bash, <strong>nunca</strong> ponha <code>#!/bin/sh</code>: no Debian e no Ubuntu, <code>sh</code> é o <code>dash</code>, que não entende <code>[[ ]]</code>, arrays etc. (<a href="portabilidade.html">POSIX sh e Bashismos</a>).</p>
+
+<h3>2. Ligue o modo estrito, sabendo dos limites</h3>
+<pre class="file" data-file="script.sh">set -euo pipefail
+</pre>
+<p>Para no primeiro erro, em variáveis inexistentes e em falhas no meio de pipes. É uma rede de segurança, não uma garantia: há casos em que o <code>-e</code> não age e casos em que ele para o script sem aviso (<code>grep</code> sem resultado, <code>((n++))</code>). Leia as ressalvas em <a href="modo-estrito.html">Modo Estrito</a> e continue tratando os erros importantes.</p>
+
+<h3>3. Aspas duplas em toda expansão: <code>"$var"</code>, <code>"$(cmd)"</code>, <code>"$@"</code></h3>
+<p>Sem aspas, o Bash parte o valor nos espaços e expande curingas (<code>*</code>, <code>?</code>) que estiverem nele. Com aspas, o valor fica inteiro. A regra é simples: <strong>sempre aspas</strong>, a não ser que você saiba explicar por que não. Para repassar argumentos, <code>"$@"</code> é a única forma que preserva cada um:</p>
+
+<pre class="file" data-file="args.sh">#!/usr/bin/env bash
+echo 'Com "$@":'
+for a in "$@"; do echo "  [$a]"; done
+echo 'Com $*:'
+for a in $*; do echo "  [$a]"; done
+</pre>
+
+<pre class="term">$ bash args.sh "foto de férias.jpg" notas.txt
+Com "$@":
+  [foto de férias.jpg]                         « dois argumentos, como foram passados
+  [notas.txt]
+Com $*:
+  [foto]                                       « o nome da foto virou três pedaços
+  [de]
+  [férias.jpg]
+  [notas.txt]</pre>
+
+<p>As exceções seguras: dentro de <code>[[ ]]</code> e numa atribuição simples (<code>a=$b</code>), o Bash não parte nada. Ainda assim, aspas nunca atrapalham. Veja <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<h3>4. Use <code>[[ ]]</code> para testes</h3>
+<p>No Bash, <code>[[ ]]</code> é mais seguro que <code>[ ]</code>: não parte variáveis, aceita <code>&amp;&amp;</code>, <code>||</code>, padrões (<code>== *.txt</code>) e regex (<code>=~</code>). <code>[ ]</code> só é necessário em scripts <code>sh</code>. Detalhes em <a href="testes.html">Testes</a>.</p>
+
+<h3>5. <code>$( )</code> em vez de crases</h3>
+<p><code>$(cmd)</code> se aninha sem confusão (<code>$(dirname "$(pwd)")</code>) e não se mistura com aspas. As crases são da época do Bourne shell. O ShellCheck avisa (SC2006). Veja <a href="substituicao-comando.html">Substituição de Comando</a>.</p>
+
+<h3>6. Variáveis de função são <code>local</code></h3>
+<p>Sem <code>local</code>, toda variável criada numa função é global e pode sobrescrever outra com o mesmo nome no resto do script. Declare <code>local</code> no começo da função. E lembre: <code>local x=$(cmd)</code> esconde a falha de <code>cmd</code>; separe em duas linhas (<a href="funcoes-retorno.html">local, return e Saída</a>).</p>
+
+<h3>7. Nomes: minúsculas para as suas, MAIÚSCULAS para o ambiente</h3>
+<p>Variáveis do sistema e de ambiente são em maiúsculas: <code>PATH</code>, <code>HOME</code>, <code>USER</code>, <code>LANG</code>, <code>IFS</code>. Se você usa maiúsculas nas suas, um dia vai sobrescrever uma delas sem querer:</p>
+
+<pre class="file" data-file="path.sh">#!/usr/bin/env bash
+PATH=~/projeto
+echo "Procurando arquivos em $PATH"
+ls "$PATH"
+</pre>
+
+<pre class="term">$ bash path.sh
+Procurando arquivos em /home/ana/projeto
+path.sh: linha 4: ls: comando não encontrado   « PATH era a lista de pastas onde os comandos moram</pre>
+
+<p>A Ana só queria uma variável com o caminho do projeto. Use minúsculas (<code>pasta</code>, <code>arquivo</code>, <code>total</code>), com <code>_</code> para separar palavras (<code>pasta_destino</code>). Maiúsculas só para variáveis que você <code>export</code>a de propósito e, se quiser, para constantes do script (<code>readonly MAX=3</code>). Veja <a href="path.html">PATH</a>.</p>
+
+<h3>8. Não parseie a saída do <code>ls</code></h3>
+<p>A saída do <code>ls</code> é feita para pessoas lerem. <code>for f in $(ls)</code> quebra em espaços e o <code>ls</code> pode trocar caracteres estranhos por <code>?</code>. Para percorrer arquivos, use o <a href="curingas.html">curinga</a> direto:</p>
+
+<pre class="file" data-file="trecho.sh">for f in ~/Imagens/*.jpg; do
+  [[ -e $f ]] || continue      # se nenhum arquivo casar, o padrão fica literal
+  echo "foto: $f"
+done
+</pre>
+
+<p>Com <code>shopt -s nullglob</code>, um padrão sem resultado vira "nada" e o <code>[[ -e ]]</code> é dispensável. Para buscar em subpastas, use <code>shopt -s globstar</code> e <code>**/*.jpg</code>, ou o <code>find</code> do próximo item.</p>
+
+<h3>9. <code>find -print0 | xargs -0</code> e <code>while read -d ''</code></h3>
+<p>Nomes de arquivo podem conter espaços e até quebras de linha. O único caractere que <strong>não</strong> pode aparecer num caminho de arquivo é o byte nulo (<code>\0</code>). Por isso, a forma segura de passar listas de arquivos é separá-los com <code>\0</code>:</p>
+
+<pre class="term">$ find textos -name '*.txt' | xargs wc -l
+  7 textos/frutas.txt
+  4 textos/notas.txt
+wc: textos/lista: Arquivo ou diretório inexistente   « o xargs separou nos espaços
+wc: de: Arquivo ou diretório inexistente
+wc: compras.txt: Arquivo ou diretório inexistente
+ 11 total
+$ find textos -name '*.txt' -print0 | xargs -0 wc -l
+  7 textos/frutas.txt
+  4 textos/notas.txt
+  2 textos/lista de compras.txt
+ 13 total</pre>
+
+<dl class="anatomy">
+  <dt>-print0</dt><dd>O <code>find</code> termina cada nome com <code>\0</code>, em vez de quebra de linha.</dd>
+  <dt>xargs -0</dt><dd>O <code>xargs</code> separa a entrada por <code>\0</code>.</dd>
+</dl>
+
+<p>Para processar cada arquivo num laço do próprio Bash, leia com <code>read -d ''</code> (o delimitador vazio é o <code>\0</code>):</p>
+
+<pre class="term">$ while IFS= read -r -d '' arq; do echo "achei: [$arq]"; done &lt; &lt;(find textos -name '*.txt' -print0)
+achei: [textos/frutas.txt]
+achei: [textos/notas.txt]
+achei: [textos/lista de compras.txt]</pre>
+
+<p><code>IFS=</code> preserva espaços no começo e no fim, <code>-r</code> preserva barras invertidas. O <code>&lt;(…)</code> é uma <a href="substituicao-processo.html">substituição de processo</a>. Mais em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+
+<h3>10. Temporários com <code>mktemp</code> e limpeza com <code>trap</code></h3>
+<pre class="file" data-file="trecho.sh">tmp=$(mktemp)
+trap 'rm -f -- "$tmp"' EXIT
+</pre>
+<p>Nunca use nomes fixos como <code>/tmp/relatorio.txt</code>: dois scripts (ou duas cópias do mesmo) usariam o mesmo arquivo, e outro usuário poderia criá-lo antes de você. <code>mktemp</code> cria um nome único e o <code>trap … EXIT</code> apaga mesmo se o script falhar (<a href="trap.html">trap e Sinais</a>). E, sempre que der, dispense o temporário: uma variável ou um pipe resolvem muitos casos.</p>
+
+<h3>11. <code>printf</code> para dados, <code>echo</code> só para texto fixo</h3>
+<p>O <code>echo</code> trata alguns valores como opções e, com <code>-e</code>, interpreta barras invertidas. Com dados que vêm de fora (nomes de arquivo, entradas do usuário), o resultado é imprevisível:</p>
+
+<pre class="term">$ x="-n"
+$ echo "$x"                                     « nada aparece: o echo achou que -n era uma opção
+$ printf '%s\n' "$x"
+-n
+$ x='C:\novo\teste'
+$ echo -e "$x"
+C:
+ovo	este                                      « \n virou quebra de linha e \t virou tab
+$ printf '%s\n' "$x"
+C:\novo\teste</pre>
+
+<p><code>printf '%s\n' "$valor"</code> mostra o valor exatamente como é. O formato vai no primeiro argumento, e os dados nunca são interpretados. Veja <a href="printf.html">printf e echo</a>.</p>
+
+<h3>12. <code>--</code> antes de nomes de arquivo</h3>
+<p>Se um arquivo se chama <code>-l</code>, um curinga o entrega ao comando, que o lê como opção:</p>
+
+<pre class="term">$ mkdir truque &amp;&amp; cd truque
+$ touch -- -l a.txt b.txt
+$ ls *
+-rw-rw-r-- 1 ana ana 0 out 15 10:30 a.txt     « o arquivo "-l" virou a opção -l do ls!
+-rw-rw-r-- 1 ana ana 0 out 15 10:30 b.txt
+$ ls -- *
+a.txt
+b.txt
+-l
+$ ls ./*
+./a.txt
+./b.txt
+./-l</pre>
+
+<p>O <code>--</code> diz "acabaram as opções; o resto são nomes". Com <code>rm *</code> e um arquivo chamado <code>-rf</code>, isso deixa de ser curiosidade. Use <code>cp -- "$a" "$b"</code>, <code>rm -- "$f"</code>, ou prefixe os curingas com <code>./</code>.</p>
+
+<h3>13. <code>readonly</code> para constantes</h3>
+<pre class="term">$ readonly MAX_TENTATIVAS=3
+$ MAX_TENTATIVAS=5
+bash: MAX_TENTATIVAS: a variável permite somente leitura
+$ echo $?
+1</pre>
+<p>Valores que não devem mudar (caminhos, limites, o nome do script) ficam no topo, como <code>readonly</code>. Quem lê o script acha as configurações num lugar só, e um erro de digitação que tentasse mudá-las vira erro na hora.</p>
+
+<h3>14. Organize em funções e termine com <code>main "$@"</code></h3>
+<pre class="file" data-file="esqueleto.sh">#!/usr/bin/env bash
+set -euo pipefail
+
+readonly PROG=${0##*/}
+
+uso()  { printf 'Uso: %s ARQUIVO\n' "$PROG"; }
+erro() { printf '%s: erro: %s\n' "$PROG" "$1" &gt;&amp;2; exit "${2:-1}"; }
+
+main() {
+  [[ $# -eq 1 ]] || { uso &gt;&amp;2; exit 2; }
+  # … o trabalho …
+}
+
+main "$@"
+</pre>
+<p>Com tudo dentro de funções, o script lê de cima para baixo como um índice: constantes, ajudantes, <code>main</code>. A última linha chama <code>main</code> com todos os argumentos. Uma vantagem extra: o Bash só começa a executar depois de ler o arquivo <strong>inteiro</strong> até essa linha, então editar o script enquanto ele roda não causa comportamento estranho.</p>
+
+<h3>15. Mensagem de uso e <code>-h</code></h3>
+<p>Todo script que recebe argumentos deve dizer como usá-lo: quando chamado errado (no canal de erro, código 2) e quando pedido com <code>-h</code>/<code>--help</code> (no canal normal, código 0). Veja <a href="getopts.html">getopts</a>.</p>
+
+<h3>16. Erros no canal 2, com o nome do script</h3>
+<p><code>echo "$PROG: erro: …" &gt;&amp;2</code>. Assim, quem redireciona a saída recebe só dados, e o erro diz quem reclamou (<a href="erros.html">Tratar Erros</a>).</p>
+
+<h3>17. Códigos de saída que significam algo</h3>
+<p>0 sucesso, 1 erro, 2 uso errado; 64–78 se quiser detalhar. Nunca termine um script que falhou com 0, e nunca use números acima de 125 (<a href="erros.html">Tratar Erros</a>).</p>
+
+<h3>18. Valide antes de agir</h3>
+<p>Confira argumentos, arquivos (<code>[[ -f ]]</code>, <code>[[ -r ]]</code>) e programas (<code>command -v</code>) no início, antes de criar ou apagar qualquer coisa. E sempre <code>cd … || exit</code>.</p>
+
+<h3>19. Passe no ShellCheck</h3>
+<p>Ele pega quase tudo desta lista automaticamente. Ligue no editor e rode antes de cada commit (<a href="shellcheck.html">ShellCheck</a>).</p>
+
+<h3>20. Comente o porquê, não o quê</h3>
+<p><code># soma 1 em n</code> não ajuda ninguém. <code># o servidor conta a partir de 1</code> ajuda. Ponha no topo um comentário dizendo o que o script faz e como usar.</p>
+
+<hr>
+
+<h2>Antes × depois: refatorando um script</h2>
+<p>A Ana escreveu este script para contar as linhas dos arquivos <code>.txt</code> de uma pasta. A pasta <code>textos</code> tem <code>frutas.txt</code>, <code>notas.txt</code> e <code>lista de compras.txt</code>.</p>
+
+<h3>Antes</h3>
+<pre class="file" data-file="antes.sh">#!/bin/bash
+DIR=$1
+cd $DIR
+for ARQ in `ls *.txt`
+do
+  LINHAS=`cat $ARQ | wc -l`
+  echo "$ARQ: $LINHAS linhas" &gt;&gt; /tmp/relatorio.txt
+done
+echo -e "Relatório pronto:\n$(cat /tmp/relatorio.txt)"
+rm /tmp/relatorio.txt
+</pre>
+
+<pre class="term">$ bash antes.sh textos
+cat: lista: Arquivo ou diretório inexistente
+cat: de: Arquivo ou diretório inexistente
+cat: compras.txt: Arquivo ou diretório inexistente
+Relatório pronto:
+frutas.txt: 7 linhas
+lista: 0 linhas                                « a lista de compras virou três "arquivos"
+de: 0 linhas
+compras.txt: 0 linhas
+notas.txt: 4 linhas
+$ bash antes.sh pasta-errada
+antes.sh: linha 3: cd: pasta-errada: Arquivo ou diretório inexistente
+Relatório pronto:
+frutas.txt: 7 linhas                           « o cd falhou e ele contou a pasta pessoal
+$ bash antes.sh
+Relatório pronto:
+frutas.txt: 7 linhas                           « sem argumento: cd sem destino vai para ~</pre>
+
+<p>Três chamadas, três problemas. E há outros invisíveis: se o script for interrompido antes do <code>rm</code>, a próxima execução acrescenta ao relatório antigo; duas execuções ao mesmo tempo misturam os resultados. O ShellCheck aponta 7 avisos, inclusive um <code>error</code> (SC2045, "percorrer a saída do <code>ls</code> é frágil").</p>
+
+<h3>Depois</h3>
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+# relatorio.sh — conta as linhas dos arquivos .txt de uma pasta
+set -euo pipefail
+
+readonly PROG=${0##*/}
+
+uso() {
+  printf 'Uso: %s PASTA\n' "$PROG"
+  printf 'Mostra quantas linhas tem cada arquivo .txt de PASTA.\n'
+}
+
+erro() {
+  printf '%s: erro: %s\n' "$PROG" "$1" &gt;&amp;2
+  exit "${2:-1}"
+}
+
+main() {
+  if [[ $# -ne 1 ]]; then
+    uso &gt;&amp;2
+    exit 2
+  fi
+  local pasta=$1
+  [[ -d $pasta ]] || erro "'$pasta' não é uma pasta" 66
+
+  local arquivos=("$pasta"/*.txt)
+  [[ -e ${arquivos[0]} ]] || erro "nenhum .txt em '$pasta'" 66
+
+  printf 'Relatório de %s:\n' "$pasta"
+  local arq linhas
+  for arq in "${arquivos[@]}"; do
+    linhas=$(wc -l &lt; "$arq")
+    printf '%s: %s linhas\n' "${arq##*/}" "$linhas"
+  done
+}
+
+main "$@"
+</pre>
+
+<pre class="term">$ bash relatorio.sh textos
+Relatório de textos:
+frutas.txt: 7 linhas
+lista de compras.txt: 2 linhas                 « um nome só, contado certo
+notas.txt: 4 linhas
+$ bash relatorio.sh
+Uso: relatorio.sh PASTA
+Mostra quantas linhas tem cada arquivo .txt de PASTA.
+$ echo $?
+2
+$ bash relatorio.sh pasta-errada
+relatorio.sh: erro: 'pasta-errada' não é uma pasta
+$ echo $?
+66
+$ bash relatorio.sh Imagens
+relatorio.sh: erro: nenhum .txt em 'Imagens'
+$ shellcheck relatorio.sh
+$ echo $?
+0</pre>
+
+<h3>Cada mudança, explicada</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Antes</th><th>Depois</th><th>Por quê</th></tr>
+<tr><td><code>#!/bin/bash</code></td><td><code>#!/usr/bin/env bash</code></td><td>Acha o Bash onde ele estiver (item 1).</td></tr>
+<tr><td>—</td><td><code>set -euo pipefail</code></td><td>Rede de segurança (item 2).</td></tr>
+<tr><td>—</td><td>Comentário no topo, <code>uso()</code></td><td>Diz o que o script faz e como chamá-lo (itens 15 e 20).</td></tr>
+<tr><td><code>DIR=$1</code></td><td><code>local pasta=$1</code>, dentro de <code>main</code></td><td>Minúsculas, para não esbarrar em variáveis do sistema; <code>local</code> (itens 6 e 7).</td></tr>
+<tr><td>Nenhuma checagem</td><td><code>[[ $# -ne 1 ]]</code>, <code>[[ -d $pasta ]]</code></td><td>Valida antes de agir, com código e mensagem certos (itens 16–18).</td></tr>
+<tr><td><code>cd $DIR</code></td><td>Sem <code>cd</code>: usa <code>"$pasta"/*.txt</code></td><td>Sem <code>cd</code>, não há <code>cd</code> que falhe, e os caminhos relativos do usuário continuam valendo.</td></tr>
+<tr><td><code>`ls *.txt`</code></td><td><code>("$pasta"/*.txt)</code> num array</td><td>Curinga em vez de <code>ls</code>: nomes com espaço continuam inteiros (itens 3, 5 e 8).</td></tr>
+<tr><td>—</td><td><code>[[ -e ${arquivos[0]} ]]</code></td><td>Se nenhum arquivo casar, o padrão ficaria literal (<code>textos/*.txt</code>).</td></tr>
+<tr><td><code>cat $ARQ | wc -l</code></td><td><code>wc -l &lt; "$arq"</code></td><td>Sem <code>cat</code> à toa, com aspas; o <code>&lt;</code> faz o <code>wc</code> mostrar só o número.</td></tr>
+<tr><td><code>/tmp/relatorio.txt</code></td><td>Nada: imprime direto</td><td>O temporário não era necessário. Sem ele, não há colisão nem lixo (item 10).</td></tr>
+<tr><td><code>echo -e "…\n…"</code></td><td><code>printf</code></td><td>Saída previsível com qualquer nome de arquivo (item 11).</td></tr>
+<tr><td><code>"$ARQ"</code> com a pasta</td><td><code>"${arq##*/}"</code></td><td>Mostra só o nome do arquivo, sem a pasta.</td></tr>
+<tr><td>Código no topo</td><td><code>main "$@"</code></td><td>Estrutura clara; o arquivo é lido inteiro antes de rodar (item 14).</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="relatorio.sh" data-args="textos" data-setup="mkdir textos;;cp Documentos/notas.txt frutas.txt textos/;;printf 'arroz\nfeijão\n' &gt; 'textos/lista de compras.txt'" data-goal="out:lista de compras.txt: 2 linhas,src:main &quot;\$@&quot;">
+<p class="try-task"><strong>Missão:</strong> refatore o script "antes" que está no editor. O mínimo: troque o <code>ls</code> por um curinga, ponha aspas nas variáveis e organize tudo numa função <code>main</code> chamada com <code>main "$@"</code> na última linha. A saída deve conter <code>lista de compras.txt: 2 linhas</code>. Use a versão "depois" acima como guia, mas tente escrever você.</p>
+<pre class="script">#!/bin/bash
+DIR=$1
+cd $DIR
+for ARQ in `ls *.txt`
+do
+  LINHAS=`cat $ARQ | wc -l`
+  echo "$ARQ: $LINHAS linhas" &gt;&gt; /tmp/relatorio.txt
+done
+echo -e "Relatório pronto:\n$(cat /tmp/relatorio.txt)"
+rm /tmp/relatorio.txt
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+# relatorio.sh — conta as linhas dos arquivos .txt de uma pasta
+set -euo pipefail
+
+readonly PROG=${0##*/}
+
+uso() {
+  printf 'Uso: %s PASTA\n' "$PROG"
+  printf 'Mostra quantas linhas tem cada arquivo .txt de PASTA.\n'
+}
+
+erro() {
+  printf '%s: erro: %s\n' "$PROG" "$1" &gt;&amp;2
+  exit "${2:-1}"
+}
+
+main() {
+  if [[ $# -ne 1 ]]; then
+    uso &gt;&amp;2
+    exit 2
+  fi
+  local pasta=$1
+  [[ -d $pasta ]] || erro "'$pasta' não é uma pasta" 66
+
+  local arquivos=("$pasta"/*.txt)
+  [[ -e ${arquivos[0]} ]] || erro "nenhum .txt em '$pasta'" 66
+
+  printf 'Relatório de %s:\n' "$pasta"
+  local arq linhas
+  for arq in "${arquivos[@]}"; do
+    linhas=$(wc -l &lt; "$arq")
+    printf '%s: %s linhas\n' "${arq##*/}" "$linhas"
+  done
+}
+
+main "$@"
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando <strong>não</strong> usar Bash</h2>
+<p>O Bash é ótimo para <strong>colar programas</strong>: rodar comandos, mexer em arquivos, automatizar o que você faria no terminal. Ele fica ruim quando o problema é <strong>processar dados</strong>. Sinais de que é hora de trocar por Python (ou outra linguagem de uso geral):</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sinal</th><th>Por que o Bash sofre</th></tr>
+<tr><td>O script passou de 200–300 linhas</td><td>Sem módulos, tipos ou testes fáceis, fica difícil de manter.</td></tr>
+<tr><td>Contas com números decimais</td><td>O Bash só faz contas com inteiros; você vai depender de <code>bc</code> e <code>awk</code> (<a href="aritmetica.html">Contas</a>).</td></tr>
+<tr><td>Estruturas aninhadas (listas de listas, JSON, objetos)</td><td>Os arrays do Bash são de um nível só. JSON exige o <code>jq</code>.</td></tr>
+<tr><td>Ler formatos de verdade (CSV com aspas, XML, HTML)</td><td><code>cut -d,</code> quebra com <code>"Silva, Ana"</code>. Use uma biblioteca.</td></tr>
+<tr><td>Rede, APIs, banco de dados</td><td>Dá para usar <code>curl</code>, mas tratar respostas e erros vira um quebra-cabeça.</td></tr>
+<tr><td>Desempenho com muitos dados</td><td>Cada comando externo num laço cria um processo novo; milhares de voltas ficam lentas.</td></tr>
+<tr><td>Precisa rodar no Windows sem WSL</td><td>Python roda nativamente.</td></tr>
+</table>
+</div>
+
+<p>Não é tudo ou nada: muitos projetos usam um script Bash pequeno que prepara o ambiente e chama um programa em Python que faz o trabalho pesado.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Funciona no meu teste, quebra com o arquivo do colega</strong>
+<p><strong>O que aconteceu:</strong> quase sempre é falta de aspas ou parsing do <code>ls</code>: o nome do colega tem espaço, acento, <code>*</code> ou começa com <code>-</code>.</p>
+<p><strong>Como confirmar:</strong> crie arquivos de teste "maldosos": <code>touch 'com espaço.txt' -- '-começa-com-traço.txt'</code> e rode o script com <code>bash -x</code>.</p>
+<p><strong>Como resolver:</strong> itens 3, 8, 9 e 12 do checklist; passe no ShellCheck.</p>
+</div>
+
+<div class="cenario">
+<strong>"comando não encontrado" para comandos básicos (<code>ls</code>, <code>cp</code>)</strong>
+<p><strong>O que aconteceu:</strong> o script atribuiu um valor à variável <code>PATH</code> (às vezes num laço como <code>for PATH in …</code>).</p>
+<p><strong>Como resolver:</strong> renomeie a variável para minúsculas (item 7).</p>
+</div>
+
+<div class="cenario">
+<strong>Depois do <code>set -euo pipefail</code>, o script parou de funcionar</strong>
+<p><strong>O que aconteceu:</strong> o modo estrito revelou erros que já existiam (variável vazia) ou parou num comando que devolve 1 normalmente (<code>grep</code>, <code>diff</code>).</p>
+<p><strong>Como resolver:</strong> rode com <code>bash -x</code>, ache a última linha e trate o caso: <code>${var:-}</code>, <code>|| true</code> ou um <code>if</code>. Veja <a href="modo-estrito.html">Modo Estrito</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência: o checklist em uma tabela</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Faça</th><th>Evite</th></tr>
+<tr><td><code>#!/usr/bin/env bash</code></td><td><code>#!/bin/sh</code> num script com bashismos</td></tr>
+<tr><td><code>set -euo pipefail</code> + tratar erros</td><td>Confiar só no <code>set -e</code></td></tr>
+<tr><td><code>"$var"</code>, <code>"$(cmd)"</code>, <code>"$@"</code></td><td><code>$var</code>, <code>$*</code> sem aspas</td></tr>
+<tr><td><code>[[ … ]]</code></td><td><code>[ … ]</code> (no Bash)</td></tr>
+<tr><td><code>$(cmd)</code></td><td><code>`cmd`</code></td></tr>
+<tr><td><code>local</code> nas funções</td><td>Variáveis globais por acidente</td></tr>
+<tr><td><code>pasta_destino</code></td><td><code>PATH</code>, <code>USER</code>, <code>DIR</code> para variáveis suas</td></tr>
+<tr><td><code>for f in *.txt</code></td><td><code>for f in $(ls)</code></td></tr>
+<tr><td><code>find … -print0 | xargs -0</code></td><td><code>find … | xargs</code></td></tr>
+<tr><td><code>mktemp</code> + <code>trap … EXIT</code></td><td><code>/tmp/nome-fixo</code></td></tr>
+<tr><td><code>printf '%s\n' "$x"</code></td><td><code>echo $x</code>, <code>echo -e "$x"</code></td></tr>
+<tr><td><code>rm -- "$f"</code>, <code>./*</code></td><td><code>rm $f</code>, <code>rm *</code></td></tr>
+<tr><td><code>readonly</code>, funções, <code>main "$@"</code></td><td>Tudo solto no topo</td></tr>
+<tr><td>Uso, erros no canal 2, códigos 0/1/2</td><td>Falhar em silêncio, sair com 0</td></tr>
+<tr><td>ShellCheck</td><td>"Na minha máquina funciona"</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Repassar os argumentos</h3>
+<p>Complete para repassar todos os argumentos do script para a função <code>main</code>, sem partir nenhum:</p>
+<div class="ex-code">main <input data-answer="&quot;$@&quot;" aria-label="argumentos"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Fim das opções</h3>
+<p>Complete para apagar o arquivo, mesmo que o nome comece com <code>-</code>:</p>
+<div class="ex-code">rm <input data-answer="--" aria-label="separador"> "$arquivo"</div>
+</div>
+
+<div class="exercise">
+<h3>3. Mostrar um dado</h3>
+<p>Complete para mostrar o conteúdo de <code>$nome</code> exatamente como é, seguido de quebra de linha:</p>
+<div class="ex-code">printf <input data-answer="'%s\n'|&quot;%s\n&quot;" aria-label="formato"> "$nome"</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Por que <code>PATH=~/projeto</code> num script fez o <code>ls</code> deixar de funcionar?</p>
+<label><input type="radio" name="q4"> Porque o <code>~</code> não pode ser usado em scripts.</label>
+<label><input type="radio" name="q4"> Porque falta <code>export</code>.</label>
+<label><input type="radio" name="q4"> Porque <code>PATH</code> é a lista de pastas onde o Bash procura os comandos; a variável do sistema foi sobrescrita.</label>
+<label><input type="radio" name="q4"> Porque <code>ls</code> não aceita caminhos com <code>~</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Qual é a forma segura de percorrer os <code>.jpg</code> de uma pasta?</p>
+<label><input type="radio" name="q5"> <code>for f in ~/Imagens/*.jpg; do …</code></label>
+<label><input type="radio" name="q5"> <code>for f in $(ls ~/Imagens | grep jpg); do …</code></label>
+<label><input type="radio" name="q5"> <code>for f in `ls ~/Imagens/*.jpg`; do …</code></label>
+<label><input type="radio" name="q5"> <code>ls ~/Imagens/*.jpg | while read f; do …</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Qual destes é um bom motivo para trocar o Bash por Python?</p>
+<label><input type="radio" name="q6"> O script precisa copiar arquivos.</label>
+<label><input type="radio" name="q6"> O script precisa rodar outros comandos.</label>
+<label><input type="radio" name="q6"> O script tem 30 linhas.</label>
+<label><input type="radio" name="q6"> O script precisa ler JSON aninhado e fazer contas com decimais.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Shebang <code>#!/usr/bin/env bash</code>, <code>set -euo pipefail</code> com ressalvas, e ShellCheck sempre.</li>
+  <li>Aspas em toda expansão (<code>"$var"</code>, <code>"$@"</code>), <code>[[ ]]</code>, <code>$( )</code>, <code>local</code> e nomes em minúsculas.</li>
+  <li>Arquivos: curingas em vez de <code>ls</code>, <code>-print0</code>/<code>-0</code>/<code>read -d ''</code>, <code>--</code> antes dos nomes, <code>mktemp</code> + <code>trap</code>.</li>
+  <li><code>printf</code> para dados; <code>readonly</code> para constantes; funções e <code>main "$@"</code>; uso, erros no canal 2 e códigos de saída com significado.</li>
+  <li>Quando o problema é processar dados complexos, troque o Bash por Python.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
