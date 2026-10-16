@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Erros Comuns — a mensagem, a causa e a solução | Guia Bash</title>
+<meta name="description" content="As mensagens de erro mais comuns do Bash em português, conferidas no Bash 5.3: comando não encontrado, Permissão negada, interpretador incorreto (^M), erro de sintaxe próximo ao token inesperado, EOF inesperado, número excessivo de argumentos, esperava operador binário, variável não associada, redirecionamento ambíguo e mais, com causa, solução e link para a aula.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Erros Comuns</span></h1>
+
+<p class="intro">A mensagem de erro é a melhor amiga de quem escreve scripts: ela diz <strong>onde</strong> (o arquivo e a linha) e, quase sempre, <strong>o quê</strong>. Esta página reúne as mensagens que mais aparecem, exatamente como o Bash 5.3 as escreve em português, com a causa, como confirmar, a solução e a aula do assunto. Use <kbd>Ctrl</kbd>+<kbd>F</kbd> e cole um pedaço da mensagem que você recebeu.</p>
+
+<div class="note">
+<strong>Como ler uma mensagem de erro do Bash</strong>
+<pre class="term">$ bash conserte.sh
+conserte.sh: linha 4: $arquivo: redirecionamento ambíguo</pre>
+<dl class="anatomy">
+  <dt>conserte.sh:</dt><dd>Quem reclamou: o script. No terminal, aparece <code>bash:</code>; quando é um programa, o nome dele (<code>cp:</code>, <code>mkdir:</code>).</dd>
+  <dt>linha 4:</dt><dd>Onde. Em erros de sintaxe, a linha pode ser a <strong>seguinte</strong> à do erro real (o Bash só percebe o problema depois).</dd>
+  <dt>$arquivo:</dt><dd>O pedaço que causou o problema.</dd>
+  <dt>redirecionamento ambíguo</dt><dd>O quê. Procure esta parte nesta página.</dd>
+</dl>
+<p>Se as suas mensagens saem em inglês, o sistema está em inglês (<code>echo $LANG</code>); a tabela de cada seção mostra também o original. Para depurar, <code>bash -n script.sh</code> confere a sintaxe e <code>bash -x script.sh</code> mostra cada comando antes de rodar. Veja <a href="depuracao.html">Depurar</a>.</p>
+</div>
+
+<p class="indice-letras"><a href="#rodar">Ao rodar o script</a> · <a href="#sintaxe">Erros de sintaxe</a> · <a href="#testes">Testes [ ]</a> · <a href="#variaveis">Variáveis e contas</a> · <a href="#arquivos">Arquivos e redirecionamento</a> · <a href="#silenciosos">Sem mensagem</a> · <a href="#sh">bash × sh</a></p>
+
+<hr>
+
+<h2 id="rodar">Ao rodar um comando ou script</h2>
+
+<div class="cenario">
+<strong><code>bash: xyz: comando não encontrado</code> <small>(command not found)</small></strong>
+<pre class="term">$ sl
+bash: sl: comando não encontrado
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> o Bash não achou nada com esse nome: nem alias, nem função, nem comando interno, nem programa nas pastas do <code>PATH</code>. Código 127. <strong>Causas comuns:</strong> erro de digitação (<code>sl</code> em vez de <code>ls</code>); programa não instalado; programa instalado numa pasta fora do <code>PATH</code>. No Ubuntu, um aviso extra pode sugerir o pacote que tem o comando. <strong>Como confirmar:</strong> <code>type nome</code> e <code>echo $PATH</code>. <strong>Como resolver:</strong> corrija o nome, instale o programa, ou rode-o pelo caminho completo. Veja <a href="path.html">PATH e Onde os Comandos Moram</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>bash: s.sh: comando não encontrado</code>, mas o arquivo está ali</strong>
+<pre class="term">$ ls s.sh
+s.sh
+$ s.sh
+bash: s.sh: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> por segurança, a pasta atual não está no <code>PATH</code>; um nome sem <code>/</code> só é procurado lá. <strong>Como resolver:</strong> <code>./s.sh</code> (o <code>./</code> diz "nesta pasta"), ou instale-o em <code>~/.local/bin</code>. Veja <a href="executar.html">Formas de Executar</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>bash: ./s.sh: Permissão negada</code> <small>(Permission denied)</small></strong>
+<pre class="term">$ ./s.sh
+bash: ./s.sh: Permissão negada
+$ echo $?
+126</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não tem permissão de execução (código 126 = "achei, mas não posso executar"). <strong>Como confirmar:</strong> <code>ls -l s.sh</code> mostra <code>-rw-…</code>, sem <code>x</code>. <strong>Como resolver:</strong> <code>chmod +x s.sh</code>, ou rode com <code>bash s.sh</code> (aí só é preciso permissão de leitura). Se o arquivo está num pendrive ou partição montada com <code>noexec</code>, só o <code>bash s.sh</code> funciona. Veja <a href="script-primeiro.html">Seu Primeiro Script</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>/bin/bash^M: interpretador incorreto: Arquivo ou diretório inexistente</code> <small>(bad interpreter)</small></strong>
+<pre class="term">$ ./crlf.sh
+bash: ./crlf.sh: /bin/bash^M: interpretador incorreto: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o script foi salvo com quebras de linha do Windows (CRLF, <code>\r\n</code>). O <code>\r</code> (que o terminal mostra como <code>^M</code>) grudou no fim do shebang, e o sistema procura um programa chamado <code>bash␍</code>, que não existe. Com <code>#!/usr/bin/env bash</code>, a mensagem é <code>env: ‘bash\r’: Arquivo ou diretório inexistente</code>. <strong>Como confirmar:</strong> <code>file crlf.sh</code> diz "with CRLF line terminators"; <code>cat -A crlf.sh</code> mostra <code>^M$</code> no fim das linhas. <strong>Como resolver:</strong> <code>sed -i 's/\r$//' crlf.sh</code> (ou <code>dos2unix crlf.sh</code>), e configure o editor para salvar com quebras de linha "LF"/"Unix". Veja <a href="script-primeiro.html">Seu Primeiro Script</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>cd: $'/tmp\r': Arquivo ou diretório inexistente</code> e outros <code>$'…\r'</code></strong>
+<pre class="term">$ bash win.sh
+win.sh: linha 1: cd: $'/tmp\r': Arquivo ou diretório inexistente
+Olá, Ana!</pre>
+<p><strong>O que aconteceu:</strong> o mesmo CRLF, num script rodado com <code>bash win.sh</code> (que não usa o shebang). Cada linha termina com um <code>\r</code> invisível, que vira parte do último argumento: <code>cd</code> procura a pasta <code>/tmp␍</code>. Algumas linhas parecem funcionar, mas a saída também carrega o <code>\r</code>. <strong>Como resolver:</strong> como no caso anterior, <code>sed -i 's/\r$//' win.sh</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>/bin/bassh: interpretador incorreto</code></strong>
+<pre class="term">$ ./ruim.sh
+bash: ./ruim.sh: /bin/bassh: interpretador incorreto: Arquivo ou diretório inexistente
+$ echo $?
+126</pre>
+<p><strong>O que aconteceu:</strong> o caminho do shebang está errado (aqui, digitado errado; em outros sistemas, o <code>bash</code> fica em outro lugar, como <code>/usr/local/bin/bash</code> no FreeBSD ou no Homebrew). <strong>Como resolver:</strong> use <code>#!/usr/bin/env bash</code>, que procura o <code>bash</code> no <code>PATH</code>. Veja <a href="script-primeiro.html">Seu Primeiro Script</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="sintaxe">Erros de sintaxe</h2>
+<p>O Bash lê cada comando composto inteiro (o <code>if</code> até o <code>fi</code>, o <code>for</code> até o <code>done</code>) antes de executar. Se a estrutura estiver quebrada, nada daquele bloco roda. <code>bash -n script.sh</code> encontra esses erros sem executar nada.</p>
+
+<div class="cenario">
+<strong><code>erro de sintaxe próximo ao token inesperado `fi'</code> <small>(syntax error near unexpected token)</small></strong>
+<pre class="file" data-file="sint.sh">x=1
+if [ $x = 1 ] then
+  echo um
+fi</pre>
+<pre class="term">$ bash sint.sh
+sint.sh: linha 4: erro de sintaxe próximo ao token inesperado `fi'
+sint.sh: linha 4: `fi'</pre>
+<p><strong>O que aconteceu:</strong> falta o <code>;</code> (ou a quebra de linha) antes do <code>then</code>. Sem ele, <code>then</code> virou mais um argumento do <code>[</code>, o <code>if</code> nunca recebeu seu <code>then</code>, e o Bash só percebeu ao encontrar o <code>fi</code> (por isso a linha 4, e não a 2). A segunda linha da mensagem mostra o trecho onde ele parou. <strong>Como resolver:</strong> <code>if [ $x = 1 ]; then</code>. Veja <a href="if.html">if</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>erro de sintaxe próximo ao token inesperado `echo'</code></strong>
+<pre class="term">$ bash sint2.sh
+sint2.sh: linha 1: erro de sintaxe próximo ao token inesperado `echo'
+sint2.sh: linha 1: `for i in 1 2; echo $i; done'</pre>
+<p><strong>O que aconteceu:</strong> faltou o <code>do</code>: <code>for i in 1 2; do echo $i; done</code>. O "token inesperado" é a primeira palavra que não se encaixa na gramática; o erro de verdade está logo antes dela. Outros casos clássicos: <code>(</code> inesperado (array ou extglob num shell que não entende, veja <a href="#sh">bash × sh</a>), <code>done</code> inesperado (um <code>do</code> a mais ou um <code>while</code> a menos), <code>else</code> inesperado (um <code>fi</code> antes da hora). Veja <a href="for.html">for</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>encontrado EOF inesperado enquanto procurava por `"' correspondente</code> <small>(unexpected EOF while looking for matching)</small></strong>
+<pre class="file" data-file="eof.sh">echo "oi
+echo fim</pre>
+<pre class="term">$ bash eof.sh
+eof.sh: linha 1: encontrado EOF inesperado enquanto procurava por `"' correspondente</pre>
+<p><strong>O que aconteceu:</strong> uma aspa foi aberta e nunca fechada; o Bash leu até o fim do arquivo (EOF, <em>end of file</em>) procurando o par. A linha indicada é a da aspa aberta. No terminal, o mesmo erro aparece como o prompt <code>&gt;</code> esperando você fechar a aspa (aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>). <strong>Como resolver:</strong> feche a aspa; um editor com cores de sintaxe mostra o problema na hora (todo o resto do arquivo fica da cor de texto). Veja <a href="aspas.html">Aspas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>erro de sintaxe: fim inesperado do arquivo do comando `if' na linha 1</code></strong>
+<pre class="term">$ bash eof2.sh
+eof2.sh: linha 3: erro de sintaxe: fim inesperado do arquivo do comando `if' na linha 1</pre>
+<p><strong>O que aconteceu:</strong> um bloco não foi fechado: falta o <code>fi</code> do <code>if</code> que começou na linha 1 (ou o <code>done</code> de um laço, o <code>}</code> de uma função, o <code>esac</code> de um <code>case</code>). <strong>Como resolver:</strong> feche o bloco; indentar o código deixa visível qual bloco ficou aberto. Veja <a href="if.html">if</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>aviso: here-document na linha 1 delimitado pelo fim do arquivo (desejava `FIM')</code></strong>
+<pre class="file" data-file="here.sh">cat &lt;&lt;FIM
+oi
+  FIM
+echo depois</pre>
+<pre class="term">$ bash here.sh
+here.sh: linha 4: aviso: here-document na linha 1 delimitado pelo fim do arquivo (desejava `FIM')
+oi
+  FIM
+echo depois</pre>
+<p><strong>O que aconteceu:</strong> a palavra que fecha o here-doc precisa estar <strong>sozinha</strong> na linha, sem espaços antes ou depois. Com o <code>FIM</code> indentado, ele não foi reconhecido e o resto do arquivo virou texto (repare que <code>echo depois</code> foi impresso, e não executado). <strong>Como resolver:</strong> tire os espaços, ou use <code>&lt;&lt;-FIM</code>, que aceita indentação com TABs (não espaços). Veja <a href="heredoc.html">Here-docs</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>${x y}: substituição incorreta</code> <small>(bad substitution)</small></strong>
+<pre class="term">$ echo ${x y}
+bash: ${x y}: substituição incorreta</pre>
+<p><strong>O que aconteceu:</strong> o que está dentro de <code>${ }</code> não é uma forma válida: espaço no nome, operador errado, ou um recurso que a sua versão não tem (<code>${x,,}</code> no Bash 3.2 do macOS, <code>${x@U}</code> antes do 5.1). Rodando com <code>sh</code>, a mensagem é <code>Bad substitution</code>. <strong>Como resolver:</strong> confira a forma na <a href="ref-expansoes.html">Cola de Expansões</a> e a versão com <code>bash --version</code>. Veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="testes">Testes com <code>[ ]</code></h2>
+<p>O <code>[</code> é um comando como outro qualquer: recebe palavras como argumentos, <strong>depois</strong> que as variáveis foram expandidas e separadas. Quase todos os erros abaixo vêm de uma variável sem aspas. Com <code>[[ ]]</code> (palavra reservada do Bash) eles não acontecem. Veja <a href="testes.html">Testes</a>.</p>
+
+<div class="cenario">
+<strong><code>[: número excessivo de argumentos</code> <small>(too many arguments)</small></strong>
+<pre class="term">$ arq="meu arquivo.txt"
+$ [ $arq = x ]
+bash: [: número excessivo de argumentos</pre>
+<p><strong>O que aconteceu:</strong> sem aspas, <code>$arq</code> virou duas palavras e o <code>[</code> recebeu <code>meu arquivo.txt = x</code>: argumentos demais para um teste. O mesmo acontece com uma variável que contém um curinga que casa vários arquivos. <strong>Como resolver:</strong> <code>[ "$arq" = x ]</code>, ou <code>[[ $arq = x ]]</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>[: meu: esperava operador binário</code> <small>(binary operator expected)</small></strong>
+<pre class="term">$ [ -f $arq ]
+bash: [: meu: esperava operador binário</pre>
+<p><strong>O que aconteceu:</strong> de novo a variável sem aspas: <code>[ -f meu arquivo.txt ]</code> tem três palavras, e com três o <code>[</code> espera "valor operador valor"; <code>meu</code> deveria ser um operador como <code>=</code>. <strong>Como resolver:</strong> <code>[ -f "$arq" ]</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>[: =: esperava operador unário</code> <small>(unary operator expected)</small></strong>
+<pre class="term">$ vazio=
+$ [ $vazio = sim ] &amp;&amp; echo sim
+bash: [: =: esperava operador unário</pre>
+<p><strong>O que aconteceu:</strong> a variável estava <strong>vazia</strong> e, sem aspas, sumiu: <code>[ = sim ]</code>. Com dois argumentos, o <code>[</code> espera "operador valor" (como <code>-f arq</code>), e <code>=</code> não é um deles. <strong>Como resolver:</strong> <code>[ "$vazio" = sim ]</code>. Muito comum com <code>$1</code> quando o script é chamado sem argumentos.</p>
+</div>
+
+<div class="cenario">
+<strong><code>[: abc: esperava número inteiro</code> <small>(integer expression expected)</small></strong>
+<pre class="term">$ [ abc -gt 3 ]
+bash: [: abc: esperava número inteiro
+$ [[ abc -gt 3 ]]; echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> <code>-gt</code>, <code>-lt</code>, <code>-eq</code>… comparam <strong>números</strong>, e o valor não era um (texto, vazio, <code>3,5</code>). Repare que no <code>[[ ]]</code> não há mensagem: <code>abc</code> é tratado como uma variável (vale 0), e o teste simplesmente dá falso, o que pode esconder o problema. <strong>Como resolver:</strong> valide antes com <code>[[ $x =~ ^[0-9]+$ ]]</code>; para comparar textos, use <code>=</code> e <code>!=</code>. Veja <a href="regex.html">Regex</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="variaveis">Variáveis e contas</h2>
+
+<div class="cenario">
+<strong><code>nome: comando não encontrado</code> ao criar uma variável</strong>
+<pre class="term">$ nome = Ana
+bash: nome: comando não encontrado
+$ nome= Ana
+bash: Ana: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> espaço em volta do <code>=</code>. Com espaços, <code>nome</code> virou um comando com os argumentos <code>=</code> e <code>Ana</code>. No segundo caso, <code>nome=</code> (vazio) valeu só para o comando <code>Ana</code>. <strong>Como resolver:</strong> <code>nome=Ana</code>, tudo junto; com espaço no valor, <code>nome="Ana Maria"</code>. Veja <a href="variaveis-intro.html">Variáveis: o Básico</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>export: `2x=1': não é um identificador válido</code> <small>(not a valid identifier)</small></strong>
+<pre class="term">$ export 2x=1
+bash: export: `2x=1': não é um identificador válido</pre>
+<p><strong>O que aconteceu:</strong> nome de variável inválido. Nomes só podem ter letras sem acento, números e <code>_</code>, e não podem começar com número: <code>2x</code>, <code>meu-nome</code> e <code>preço</code> são inválidos. Aparece também em <code>read</code>, <code>declare</code>, <code>local</code> e <code>for</code>. <strong>Como resolver:</strong> <code>x2</code>, <code>meu_nome</code>, <code>preco</code>. Veja <a href="variaveis-intro.html">Variáveis</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>naoexiste: variável não associada</code> <small>(unbound variable)</small></strong>
+<pre class="term">$ set -u; echo $naoexiste; set +u
+bash: naoexiste: variável não associada</pre>
+<p><strong>O que aconteceu:</strong> com <code>set -u</code> (parte do modo estrito), usar uma variável que não existe é erro, e o script para. Em geral é um erro de digitação ou um argumento que não veio (<code>$1</code>). <strong>Como resolver:</strong> corrija o nome, ou dê um padrão quando a ausência for normal: <code>${1:-}</code>, <code>${var:-padrão}</code>. Para arrays associativos, conte com <code>${a[$k]:-0}</code>. Veja <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>PI: a variável permite somente leitura</code> <small>(readonly variable)</small></strong>
+<pre class="term">$ readonly PI=3; PI=4
+bash: PI: a variável permite somente leitura</pre>
+<p><strong>O que aconteceu:</strong> a variável foi marcada com <code>readonly</code> (ou <code>declare -r</code>) e não pode mais mudar nesta sessão. Também aparece ao tentar mudar variáveis do Bash como <code>UID</code>. <strong>Como resolver:</strong> use outro nome, ou abra um novo shell. Veja <a href="variaveis.html">Variáveis</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>08: valor muito grande para esta base de numeração</code> <small>(value too great for base)</small></strong>
+<pre class="term">$ echo $(( 08 + 1 ))
+bash: 08: valor muito grande para esta base de numeração (token de erro é "08")</pre>
+<p><strong>O que aconteceu:</strong> na aritmética do Bash, um número começado com 0 é <strong>octal</strong> (base 8), onde os dígitos 8 e 9 não existem. Acontece muito com horas e datas: <code>$(date +%H)</code> às 8h dá <code>08</code>. <strong>Como resolver:</strong> force a base 10: <code>$(( 10#08 + 1 ))</code>, ou <code>$(( 10#$hora + 1 ))</code>. Veja <a href="aritmetica.html">Contas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>divisão por 0 (token de erro é "0 ")</code></strong>
+<pre class="term">$ echo $(( 5 / 0 ))
+bash: 5 / 0 : divisão por 0 (token de erro é "0 ")</pre>
+<p><strong>O que aconteceu:</strong> o divisor era zero, muitas vezes uma variável vazia ou um total ainda não calculado. <strong>Como resolver:</strong> teste antes: <code>(( total &gt; 0 )) &amp;&amp; echo $(( parte * 100 / total ))</code>. Veja <a href="aritmetica.html">Contas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>local: somente pode ser usado em uma função</code> / <code>return: possível retornar (`return') apenas de uma função…</code></strong>
+<pre class="term">$ local x=1
+bash: local: somente pode ser usado em uma função
+$ return 2
+bash: return: possível retornar (`return') apenas de uma função ou script carregado (com `source')</pre>
+<p><strong>O que aconteceu:</strong> <code>local</code> e <code>return</code> fora de uma função. No corpo principal do script, use uma variável comum e <code>exit</code>. Veja <a href="funcoes-retorno.html">local, return e Saída</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="arquivos">Arquivos e redirecionamentos</h2>
+
+<div class="cenario">
+<strong><code>$arquivo: redirecionamento ambíguo</code> <small>(ambiguous redirect)</small></strong>
+<pre class="term">$ arq="meu arquivo.txt"
+$ echo oi &gt; $arq
+bash: $arq: redirecionamento ambíguo</pre>
+<p><strong>O que aconteceu:</strong> depois do <code>&gt;</code> tem de haver <strong>um</strong> nome de arquivo, e a variável sem aspas virou dois (ou nenhum, se estiver vazia, ou vários, se tiver um curinga). <strong>Como resolver:</strong> <code>echo oi &gt; "$arq"</code>. Veja <a href="redirecionamento.html">Redirecionamento</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>cat: meu: Arquivo ou diretório inexistente</code>, mas o arquivo existe</strong>
+<pre class="term">$ cat $arq
+cat: meu: Arquivo ou diretório inexistente
+cat: arquivo.txt: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o nome tem espaço e a variável está sem aspas: o <code>cat</code> recebeu dois nomes, nenhum dos dois existe. <strong>Como resolver:</strong> <code>cat "$arq"</code>. A regra de ouro: <strong>sempre</strong> aspas duplas em volta de variáveis. Veja <a href="aspas.html">Aspas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>ls: não foi possível acessar '*.xyz': Arquivo ou diretório inexistente</code></strong>
+<pre class="term">$ ls *.xyz
+ls: não foi possível acessar '*.xyz': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> nenhum arquivo casou com o curinga, e o Bash passou o texto <code>*.xyz</code> como está. Num laço <code>for f in *.xyz</code>, o laço roda uma vez com <code>f='*.xyz'</code>. <strong>Como resolver:</strong> confira o padrão; em scripts, <code>shopt -s nullglob</code> faz o curinga sem resultado sumir, ou teste <code>[[ -e $f ]] || continue</code> no laço. Veja <a href="curingas.html">Curingas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>mkdir: cannot create directory ‘a/b/c’: Arquivo ou diretório inexistente</code></strong>
+<pre class="term">$ mkdir a/b/c
+mkdir: cannot create directory ‘a/b/c’: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> as pastas do meio (<code>a</code> e <code>a/b</code>) não existem. (A primeira parte da mensagem sai em inglês mesmo com o sistema em português: a tradução do coreutils não tem essa frase.) Se a mensagem terminar em <code>Permissão negada</code>, você não pode escrever na pasta pai; se for <code>Arquivo existe</code>, o nome já está em uso. <strong>Como resolver:</strong> <code>mkdir -p a/b/c</code> cria todas as que faltam. Veja <a href="criar-copiar.html">Criar, Copiar e Mover</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>cp: -r não especificado; omitindo o diretório</code> / <code>É um diretório</code></strong>
+<pre class="term">$ cp Documentos alvo
+cp: -r não especificado; omitindo o diretório 'Documentos'
+$ rm Documentos
+rm: não foi possível remover 'Documentos': É um diretório
+$ cat Documentos
+cat: Documentos: É um diretório</pre>
+<p><strong>O que aconteceu:</strong> o comando espera um arquivo e recebeu uma pasta. <strong>Como resolver:</strong> <code>cp -r</code> para copiar pastas; <code>rmdir</code> (pasta vazia) ou <code>rm -r</code> (com tudo dentro, cuidado!) para apagar; <code>ls</code> para ver o conteúdo. Veja <a href="criar-copiar.html">Criar, Copiar e Mover</a> e <a href="remover.html">Apagar com Segurança</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>Lista de argumentos muito longa</code> <small>(Argument list too long)</small></strong>
+<pre class="term">$ /bin/true $(seq 1 400000)
+bash: /bin/true: Lista de argumentos muito longa</pre>
+<p><strong>O que aconteceu:</strong> o sistema limita o tamanho total dos argumentos de um programa (cerca de 2 MB no Linux). Acontece com <code>rm *.log</code> numa pasta com centenas de milhares de arquivos. <strong>Como resolver:</strong> não passe tudo de uma vez: <code>find . -name '*.log' -delete</code>, ou <code>printf '%s\0' *.log | xargs -0 rm</code> (o <code>printf</code> é interno, não tem o limite). Veja <a href="pipes.html">Pipes e xargs</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="silenciosos">Problemas sem mensagem de erro</h2>
+
+<div class="cenario">
+<strong>A variável "some" depois do <code>while</code></strong>
+<pre class="term">$ total=0; printf '1\n2\n3\n' | while read -r n; do total=$((total + n)); done; echo "total=$total"
+total=0
+$ total=0; while read -r n; do total=$((total + n)); done &lt; &lt;(printf '1\n2\n3\n'); echo "total=$total"
+total=6</pre>
+<p><strong>O que aconteceu:</strong> cada parte de um pipe roda num <strong>subshell</strong>. O <code>while</code> depois do <code>|</code> somou tudo, mas na cópia; quando o pipe terminou, a cópia morreu com o total. <strong>Como resolver:</strong> dê a entrada ao laço sem pipe: <code>done &lt; arquivo</code> ou <code>done &lt; &lt;(comando)</code> (substituição de processo), ou ligue <code>shopt -s lastpipe</code> num script. Veja <a href="subshell.html">Subshells</a> e <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>cd</code> do script não muda a pasta do terminal</strong>
+<pre class="term">$ cat vai.sh
+cd /tmp
+$ bash vai.sh; pwd
+/home/ana</pre>
+<p><strong>O que aconteceu:</strong> o script roda num processo filho; ele mudou a pasta <strong>dele</strong> e terminou. O mesmo vale para <code>export</code> e variáveis. <strong>Como resolver:</strong> use uma função ou um alias no <code>.bashrc</code>, ou rode o arquivo com <code>source vai.sh</code>. Veja <a href="executar.html">Formas de Executar</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O script parou no meio, sem dizer nada</strong>
+<pre class="term">$ cat sete.sh
+set -e
+echo antes
+grep -q nada frutas.txt
+echo depois
+$ bash sete.sh; echo "código $?"
+antes
+código 1</pre>
+<p><strong>O que aconteceu:</strong> com <code>set -e</code>, qualquer comando que devolve diferente de 0 encerra o script, e o <code>grep</code> que não acha nada devolve 1 sem escrever erro nenhum. O mesmo acontece com <code>(( x++ ))</code> quando <code>x</code> vale 0. <strong>Como confirmar:</strong> <code>bash -x sete.sh</code> mostra o último comando executado. <strong>Como resolver:</strong> para comandos em que "falhar" é normal, use-os num <code>if</code> ou acrescente <code>|| true</code>. Veja <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>read</code> engoliu a barra invertida</strong>
+<pre class="term">$ read x &lt;&lt;&lt; 'a\b'; echo "$x"
+ab
+$ read -r x y z &lt;&lt;&lt; "a\\b c"; echo "$x"
+a\b</pre>
+<p><strong>O que aconteceu:</strong> sem <code>-r</code>, o <code>read</code> trata <code>\</code> como escape e o remove. Caminhos do Windows e expressões regulares saem estragados. <strong>Como resolver:</strong> use <strong>sempre</strong> <code>read -r</code>. Veja <a href="read.html">read</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O alias funciona no terminal, mas no script dá "comando não encontrado"</strong>
+<pre class="term">$ cat al.sh
+alias oi="echo oi"
+oi
+$ bash al.sh
+al.sh: linha 2: oi: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> em scripts (shell não interativo), aliases vêm desligados, e os do seu <code>.bashrc</code> nem são carregados. <strong>Como resolver:</strong> use funções em scripts. Veja <a href="alias.html">alias</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Funciona no terminal, mas não no cron</strong>
+<p><strong>O que aconteceu:</strong> o cron roda o script com um ambiente mínimo: <code>PATH=/usr/bin:/bin</code>, sem o seu <code>.bashrc</code> (nem aliases, nem variáveis que você exportou lá), com <code>sh</code> como shell das linhas do crontab e a pasta pessoal como pasta atual. E a saída, sem redirecionamento, vai para um e-mail local que ninguém lê. Num crontab, o <code>%</code> tem significado especial (vira quebra de linha) e precisa de <code>\%</code>: <code>date +\%F</code>. <strong>Como confirmar:</strong> acrescente <code>&gt;&gt; ~/cron.log 2&gt;&amp;1</code> à linha do crontab e leia o log; <code>env &gt; ~/cron-env.txt</code> numa linha de teste mostra o ambiente que o cron dá. <strong>Como resolver:</strong> caminhos absolutos para arquivos e programas, <code>cd</code> explícito no começo do script, <code>PATH</code> definido no próprio script e saída sempre redirecionada para um log. (Ilustrativo: o cron não roda no laboratório do guia.) Veja <a href="agendar.html">Agendar Scripts</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>bash: !xyz: event not found</code> ao usar <code>!</code> no terminal</strong>
+<p><strong>O que aconteceu:</strong> no terminal interativo, <code>!</code> dentro de aspas duplas chama o histórico (<code>!!</code> repete o comando anterior, <code>!xyz</code> procura um comando começado com <code>xyz</code>). A mensagem sai em inglês. <strong>Como resolver:</strong> aspas simples (<code>echo 'Oba!'</code>) ou <code>set +H</code>. Em scripts, isso não acontece. Veja <a href="historico.html">Histórico</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="sh">Roda no <code>bash</code>, quebra no <code>sh</code></h2>
+<p>No Debian e no Ubuntu, <code>sh</code> é o <strong>dash</strong>, um shell POSIX que não entende os recursos exclusivos do Bash. As mensagens dele são em inglês e trazem o número da linha sem a palavra "linha". Acontece quando você roda <code>sh script.sh</code>, ou o shebang é <code>#!/bin/sh</code>. Veja <a href="portabilidade.html">POSIX sh e Bashismos</a>.</p>
+<pre class="term">$ sh bashismo.sh
+bashismo.sh: 3: [[: not found
+bashismo.sh: 4: Syntax error: "(" unexpected
+$ sh b2.sh
+b2.sh: 2: source: not found
+b2.sh: 3: Syntax error: "}" unexpected</pre>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Mensagem do <code>sh</code></th><th>Recurso do Bash usado</th><th>Saída</th></tr>
+<tr><td><code>[[: not found</code></td><td><code>[[ … ]]</code></td><td>rode com <code>bash</code> ou use <code>[ … ]</code></td></tr>
+<tr><td><code>Syntax error: "(" unexpected</code></td><td>array <code>arr=(a b)</code>, <code>function</code>, extglob</td><td><code>bash</code></td></tr>
+<tr><td><code>source: not found</code></td><td><code>source</code></td><td><code>.</code> (ponto), que é o nome POSIX</td></tr>
+<tr><td><code>Bad substitution</code></td><td><code>${x,,}</code>, <code>${x/a/b}</code>, <code>${x:0:3}</code></td><td><code>bash</code>, ou <code>tr</code>/<code>sed</code>/<code>cut</code></td></tr>
+<tr><td><code>Syntax error: "}" unexpected</code></td><td><code>function f { … }</code></td><td><code>f() { … }</code></td></tr>
+</table>
+</div>
+<p><strong>A solução quase sempre é a mesma:</strong> shebang <code>#!/usr/bin/env bash</code> e rodar com <code>./script.sh</code> ou <code>bash script.sh</code>, nunca <code>sh script.sh</code>.</p>
+
+<hr>
+
+<h2>Experimente: conserte o script</h2>
+<div class="tryscript" data-file="conserte.sh" data-goal="out:Olá\, Ana! O arquivo existe.,file:~/lista de compras.txt">
+<p class="try-task"><strong>Missão:</strong> este script tem três erros clássicos desta página. Rode, leia as três mensagens e conserte-os até ele mostrar <code>Olá, Ana! O arquivo existe.</code></p>
+<pre class="script">#!/usr/bin/env bash
+nome = Ana
+arquivo="lista de compras.txt"
+echo "café" &gt; $arquivo
+if [ -f $arquivo ]; then
+  echo "Olá, $nome! O arquivo existe."
+fi
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+nome=Ana
+arquivo="lista de compras.txt"
+echo "café" &gt; "$arquivo"
+if [ -f "$arquivo" ]; then
+  echo "Olá, $nome! O arquivo existe."
+fi
+</pre>
+</div>
+<p>As mensagens que ele dá, no Bash real:</p>
+<pre class="term">$ bash conserte.sh
+conserte.sh: linha 2: nome: comando não encontrado
+conserte.sh: linha 4: $arquivo: redirecionamento ambíguo
+conserte.sh: linha 5: [: número excessivo de argumentos</pre>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
