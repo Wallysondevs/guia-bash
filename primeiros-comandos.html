@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Primeiros Comandos — echo, date, whoami, pwd, ls, history, exit | Guia Bash</title>
+<meta name="description" content="Seus primeiros comandos no Bash: echo, date, whoami, hostname, pwd, ls, clear, history e exit. O que cada um faz, o que devolve, os erros mais comuns e missões no terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Primeiros Comandos</span></h1>
+
+<p class="intro">Chegou a hora de digitar. Nesta aula você vai usar nove comandos simples que respondem perguntas do dia a dia: "o que eu escrevi?", "que horas são?", "quem sou eu?", "onde estou?", "o que tem aqui?". São comandos inofensivos: nenhum deles apaga ou muda nada.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A usar <code>echo</code>, <code>date</code>, <code>whoami</code>, <code>hostname</code>, <code>pwd</code> e <code>ls</code>, e o que cada um devolve.</li>
+  <li>A limpar a tela com <code>clear</code>, rever comandos com <code>history</code> e sair com <code>exit</code>.</li>
+  <li>Que "silêncio" no terminal costuma ser sucesso, e como conferir com <code>echo $?</code>.</li>
+  <li>O que fazer com "comando não encontrado" e "operando extra".</li>
+</ul>
+</div>
+
+<p>Abra o terminal do seu computador (ou use as caixas "Experimente" desta página). Todos os exemplos acontecem na máquina <strong>notebook</strong>, com a usuária <strong>ana</strong>, na pasta pessoal dela. No seu computador, nomes, datas e arquivos serão outros.</p>
+
+<hr>
+
+<h2>Como digitar um comando</h2>
+<ol class="passo">
+  <li>Espere o prompt (<code>ana@notebook:~$</code>). Ele quer dizer "pode digitar". A aula <a href="prompt.html">Lendo o Prompt</a> explica cada pedaço.</li>
+  <li>Digite o comando. Letras maiúsculas e minúsculas são diferentes: <code>pwd</code> funciona, <code>Pwd</code> não.</li>
+  <li>Aperte <kbd>Enter</kbd>. O Bash executa e mostra a resposta logo abaixo.</li>
+  <li>Quando o comando termina, um prompt novo aparece.</li>
+</ol>
+
+<hr>
+
+<h2>echo: repetir um texto</h2>
+<p><code>echo</code> significa "eco": ele repete na tela o que você escreveu depois dele. Parece inútil, mas é o comando mais usado em scripts, para mostrar mensagens e valores de variáveis.</p>
+
+<dl class="anatomy">
+  <dt>echo</dt><dd>O comando: mostra os argumentos na tela, separados por um espaço, e pula de linha no fim.</dd>
+  <dt>Olá, mundo</dt><dd>Dois argumentos (<code>Olá,</code> e <code>mundo</code>), separados pelo espaço.</dd>
+</dl>
+
+<pre class="term">$ echo Olá, mundo
+Olá, mundo</pre>
+
+<h3>Os espaços extras somem</h3>
+<p>O Bash separa a linha em palavras usando os espaços, e tanto faz se há um espaço ou dez. O <code>echo</code> recebe as palavras e as junta com <strong>um</strong> espaço só. Para manter os espaços, coloque o texto entre aspas: aí ele vira uma palavra só, com os espaços dentro.</p>
+
+<pre class="term">$ echo   muitos     espaços
+muitos espaços                     « o echo recebeu 2 palavras e juntou com 1 espaço
+$ echo "muitos     espaços"
+muitos     espaços                 « com aspas: 1 palavra, espaços preservados</pre>
+
+<h3>echo sem nada: uma linha em branco</h3>
+<pre class="term">$ echo
+                                   « uma linha vazia
+$ echo $?
+0                                  « mesmo assim, deu certo</pre>
+
+<p>O <code>echo $?</code> mostra o <strong>código de saída</strong> do comando anterior: <code>0</code> quer dizer "deu certo"; outro número quer dizer que algo falhou. Você vai usá-lo muitas vezes nesta aula para conferir comandos que "não mostram nada". A explicação completa está em <a href="codigo-saida.html">Código de Saída</a>.</p>
+
+<div class="try" data-goal="out:Estou aprendendo Bash" data-solucao="echo Estou aprendendo Bash">
+<p class="try-task"><strong>Missão:</strong> use o <code>echo</code> para mostrar a frase <code>Estou aprendendo Bash</code>. Depois experimente com muitos espaços entre as palavras, com e sem aspas.</p>
+</div>
+
+<hr>
+
+<h2>date: data e hora</h2>
+<p><code>date</code> ("data") mostra a data e a hora do computador.</p>
+
+<pre class="term">$ date
+qui 15 out 2026 10:30:00 -03</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pedaço</th><th>Significado</th></tr>
+<tr><td><code>qui</code></td><td>Dia da semana (quinta-feira), abreviado.</td></tr>
+<tr><td><code>15 out 2026</code></td><td>Dia, mês e ano.</td></tr>
+<tr><td><code>10:30:00</code></td><td>Hora, minuto e segundo.</td></tr>
+<tr><td><code>-03</code></td><td>Fuso horário: 3 horas a menos que o horário universal (horário de Brasília).</td></tr>
+</table>
+</div>
+
+<p>A língua dos nomes vem da configuração do sistema: num sistema em inglês, sairia <code>Thu Oct 15 10:30:00 -03 2026</code>. Para escolher o formato, passe um <code>+</code> seguido de códigos que começam com <code>%</code>:</p>
+
+<dl class="anatomy">
+  <dt>date</dt><dd>O comando.</dd>
+  <dt>+%d/%m/%Y</dt><dd>O formato: <code>%d</code> = dia, <code>%m</code> = mês, <code>%Y</code> = ano com 4 dígitos. As barras saem como estão.</dd>
+</dl>
+
+<pre class="term">$ date +%d/%m/%Y
+15/10/2026
+$ date +%H:%M
+10:30                              « %H = hora (00–23), %M = minuto
+$ date +%A
+quinta                             « %A = nome do dia da semana</pre>
+
+<p>O <code>date</code> tem muito mais: datas no passado e no futuro, segundos desde 1970 para nomes de arquivos de backup. Você vai usá-lo em scripts a partir de <a href="substituicao-comando.html">Substituição de Comando</a>.</p>
+
+<hr>
+
+<h2>whoami e hostname: quem e onde</h2>
+<p><code>whoami</code> é a frase em inglês <em>who am I?</em>, "quem sou eu?". Ele mostra o nome do usuário que está usando o terminal. <code>hostname</code> ("nome do hospedeiro") mostra o nome da máquina.</p>
+
+<pre class="term">$ whoami
+ana
+$ hostname
+notebook</pre>
+
+<p>As duas respostas também estão no prompt, <code>ana@notebook</code>. Então para que servem? Em scripts, para saber quem está rodando; e para conferir depois de virar administrador ou de entrar em outra máquina por SSH, quando o prompt pode enganar.</p>
+
+<hr>
+
+<h2>pwd: onde eu estou?</h2>
+<p><code>pwd</code> vem de <em>print working directory</em>, "mostre o diretório de trabalho". Diretório é o nome técnico de pasta, e "de trabalho" é a pasta onde você está agora. Os comandos procuram arquivos a partir dela.</p>
+
+<pre class="term">$ pwd
+/home/ana                          « a pasta pessoal da Ana</pre>
+
+<p>O caminho começa na raiz <code>/</code>, entra em <code>home</code> (onde ficam as pastas dos usuários) e depois em <code>ana</code>. Se você mudar de pasta com <code>cd</code> ("change directory", "mudar de diretório"), o <code>pwd</code> acompanha:</p>
+
+<pre class="term">$ cd Documentos
+$ pwd
+/home/ana/Documentos
+$ cd                               « cd sozinho volta para a pasta pessoal
+$ pwd
+/home/ana</pre>
+
+<p>Repare que o <code>cd</code> não mostra nada quando dá certo. O prompt também mudou de <code>~</code> para <code>~/Documentos</code>. Navegar entre pastas é o assunto de <a href="navegar.html">Navegar (pwd, cd)</a>.</p>
+
+<hr>
+
+<h2>ls: o que tem aqui?</h2>
+<p><code>ls</code> vem de <em>list</em>, "listar". Sem argumentos, mostra o que há na pasta atual:</p>
+
+<pre class="term">$ ls
+'Área de trabalho'   Downloads    Imagens   Música    Vídeos
+ Documentos          frutas.txt   Modelos   Público</pre>
+
+<p>Leia a saída assim:</p>
+<ul>
+  <li>Os nomes estão em ordem alfabética, em colunas de cima para baixo. A ordem ignora acentos e maiúsculas, por isso <code>Área</code> vem primeiro, como se fosse "Area".</li>
+  <li><code>'Área de trabalho'</code> está entre aspas porque tem espaços: o <code>ls</code> avisa que é <strong>um</strong> nome só. O espaço antes de <code>Documentos</code> só alinha a coluna.</li>
+  <li>No seu terminal, as pastas aparecem em azul e os arquivos comuns sem cor.</li>
+</ul>
+
+<p>Com um argumento, o <code>ls</code> mostra o conteúdo de outra pasta, sem você precisar entrar nela:</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O comando.</dd>
+  <dt>Documentos</dt><dd>O argumento: a pasta a listar.</dd>
+</dl>
+
+<pre class="term">$ ls Documentos
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt</pre>
+
+<p>O <code>ls</code> tem dezenas de opções, como <code>-l</code> (detalhes) e <code>-a</code> (arquivos escondidos). Elas ficam para a aula <a href="ls.html">Listar (ls)</a>.</p>
+
+<h3>Quando o ls não mostra nada</h3>
+<pre class="term">$ mkdir vazia                      « cria uma pasta nova (vazia)
+$ ls vazia
+$ echo $?
+0                                  « deu certo: a pasta só não tem nada dentro</pre>
+
+<p>Silêncio, aqui, é a resposta: "não há nada para listar". O código <code>0</code> confirma que não houve erro.</p>
+
+<div class="try" data-goal="cwd:~/Documentos,ran:^\s*pwd" data-solucao="pwd;;cd Documentos;;pwd;;ls">
+<p class="try-task"><strong>Missão:</strong> descubra onde você está com <code>pwd</code>, veja o que existe com <code>ls</code>, entre na pasta <code>Documentos</code> com <code>cd Documentos</code> e confira com <code>pwd</code> e <code>ls</code> de novo.</p>
+</div>
+
+<hr>
+
+<h2>clear: limpar a tela</h2>
+<p><code>clear</code> ("limpar") apaga o que está na janela e deixa o prompt no alto. Nada é desfeito: os comandos já rodaram, e o histórico continua guardado. É só faxina visual.</p>
+
+<pre class="term">$ clear</pre>
+
+<p>O atalho <kbd>Ctrl</kbd>+<kbd>L</kbd> faz o mesmo e tem uma vantagem: funciona até no meio de um comando que você está digitando, sem perdê-lo. Mais atalhos em <a href="editar-linha.html">Editar a Linha</a>.</p>
+
+<hr>
+
+<h2>history: o que eu já digitei?</h2>
+<p><code>history</code> ("histórico") lista os comandos que você digitou, numerados:</p>
+
+<pre class="term">$ history
+    1  echo Olá, mundo
+    2  echo   muitos     espaços
+    3  echo "muitos     espaços"
+    4  echo
+…                                  « encurtado: a lista tem tudo o que você digitou
+   17  ls
+   18  ls Documentos
+   19  clear
+   20  history</pre>
+
+<p>O número da esquerda é a posição do comando no histórico. O próprio <code>history</code> aparece no fim, porque também é um comando. Para não precisar redigitar, use a seta <kbd>↑</kbd>: ela traz de volta o comando anterior. A aula <a href="historico.html">Histórico</a> mostra como reaproveitar, buscar e esconder comandos.</p>
+
+<div class="try" data-goal="ran:^\s*history" data-solucao="whoami;;date;;history">
+<p class="try-task"><strong>Missão:</strong> rode <code>whoami</code> e <code>date</code>, depois use <code>history</code> para ver a lista do que você digitou. Experimente também a seta <kbd>↑</kbd> para repetir um comando.</p>
+</div>
+
+<hr>
+
+<h2>exit: sair</h2>
+<p><code>exit</code> ("saída") encerra o shell. Se for o único shell da janela, a janela fecha. O atalho <kbd>Ctrl</kbd>+<kbd>D</kbd>, numa linha vazia, faz o mesmo: avisa ao Bash que não há mais nada para ler.</p>
+
+<pre class="term">$ exit
+exit                               « o Bash se despede e a janela fecha</pre>
+
+<p>Em scripts, <code>exit</code> também termina o script, e pode receber um número: o código de saída que o script vai devolver (<code>exit 0</code> para sucesso, <code>exit 1</code> para erro). Isso aparece em <a href="codigo-saida.html">Código de Saída</a>.</p>
+
+<hr>
+
+<h2>Vários comandos numa linha</h2>
+<p>O ponto e vírgula separa comandos: o Bash roda um, depois o outro.</p>
+<pre class="term">$ echo Olá; echo Tchau
+Olá
+Tchau
+$ whoami; pwd; date +%H:%M
+ana
+/home/ana
+10:30</pre>
+<p>Existem outros separadores, como <code>&amp;&amp;</code> ("só se o anterior deu certo"). Eles são o assunto de <a href="operadores.html">; &amp;&amp; ||</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"comando não encontrado"</strong>
+<pre class="term">$ Pwd
+bash: Pwd: comando não encontrado
+$ echo $?
+127                                « 127 = o Bash não achou esse comando</pre>
+<p><strong>O que aconteceu:</strong> o Bash diferencia maiúsculas de minúsculas. <code>Pwd</code> e <code>pwd</code> são nomes diferentes, e não existe nenhum comando chamado <code>Pwd</code>. O mesmo acontece com erros de digitação (<code>pdw</code>, <code>sl</code>).</p>
+<p><strong>Como resolver:</strong> confira a grafia e use letras minúsculas: quase todos os comandos são em minúsculas. Em alguns sistemas (como o Ubuntu), em vez dessa mensagem curta aparece uma sugestão do tipo "você quis dizer…".</p>
+</div>
+
+<div class="cenario">
+<strong>"operando extra"</strong>
+<pre class="term">$ whoami ana
+whoami: operando extra ‘ana’
+Tente "whoami --help" para mais informações.
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o <code>whoami</code> não aceita argumentos, e você deu um (<code>ana</code>). "Operando" é outro nome para argumento. O código <code>1</code> indica erro.</p>
+<p><strong>Como resolver:</strong> rode só <code>whoami</code>. A dica da segunda linha vale para qualquer programa: <code>--help</code> mostra o que ele aceita (veja <a href="ajuda.html">Obtendo Ajuda</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente" no ls</strong>
+<pre class="term">$ ls naoexiste
+ls: não foi possível acessar 'naoexiste': Arquivo ou diretório inexistente
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> não há nada com esse nome na pasta atual. Pode ser erro de digitação, ou você está em outra pasta.</p>
+<p><strong>Como resolver:</strong> confira onde está com <code>pwd</code> e o que existe com <code>ls</code>. Use <kbd>Tab</kbd> para completar nomes sem errar (<a href="completar.html">Completar com Tab</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu um <code>&gt;</code> e nada acontece</strong>
+<pre class="term">$ echo "Olá
+&gt;</pre>
+<p><strong>O que aconteceu:</strong> você abriu uma aspa e não fechou. O Bash acha que o comando continua na próxima linha e mostra o prompt de continuação <code>&gt;</code>.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para cancelar e digite de novo, fechando as aspas. Detalhes em <a href="prompt.html">Lendo o Prompt</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Origem do nome</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>echo</code></td><td>eco</td><td>Mostra os argumentos na tela</td><td><code>echo Olá</code></td></tr>
+<tr><td><code>date</code></td><td>data</td><td>Mostra data e hora; <code>+FORMATO</code> escolhe o formato</td><td><code>date +%d/%m/%Y</code></td></tr>
+<tr><td><code>whoami</code></td><td><em>who am I?</em></td><td>Mostra o nome do usuário</td><td><code>whoami</code></td></tr>
+<tr><td><code>hostname</code></td><td>nome do hospedeiro</td><td>Mostra o nome da máquina</td><td><code>hostname</code></td></tr>
+<tr><td><code>pwd</code></td><td><em>print working directory</em></td><td>Mostra a pasta atual</td><td><code>pwd</code></td></tr>
+<tr><td><code>ls</code></td><td><em>list</em></td><td>Lista o conteúdo de uma pasta</td><td><code>ls Documentos</code></td></tr>
+<tr><td><code>clear</code></td><td>limpar</td><td>Limpa a tela (atalho: <kbd>Ctrl</kbd>+<kbd>L</kbd>)</td><td><code>clear</code></td></tr>
+<tr><td><code>history</code></td><td>histórico</td><td>Lista os comandos digitados</td><td><code>history</code></td></tr>
+<tr><td><code>exit</code></td><td>saída</td><td>Encerra o shell (atalho: <kbd>Ctrl</kbd>+<kbd>D</kbd>)</td><td><code>exit</code></td></tr>
+<tr><td><code>echo $?</code></td><td>—</td><td>Mostra o código de saída do último comando</td><td><code>echo $?</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Onde estou?</h3>
+<p>Complete com o comando que mostra a pasta atual:</p>
+<div class="ex-code"><input data-answer="pwd" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Espaços preservados</h3>
+<p>Complete para o <code>echo</code> mostrar <code>A    B</code> com os quatro espaços:</p>
+<div class="ex-code">echo <input data-answer="&quot;A    B&quot;|'A    B'" aria-label="argumento"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Só a hora</h3>
+<p>Complete para o <code>date</code> mostrar só hora e minuto, como <code>10:30</code>:</p>
+<div class="ex-code">date <input data-answer="+%H:%M|&quot;+%H:%M&quot;|'+%H:%M'" aria-label="formato"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. A Ana digitou <code>ls vazia</code> e nada apareceu. <code>echo $?</code> mostrou <code>0</code>. O que isso quer dizer?</p>
+<label><input type="radio" name="q4"> O comando falhou em silêncio.</label>
+<label><input type="radio" name="q4"> Deu certo: a pasta existe e está vazia.</label>
+<label><input type="radio" name="q4"> A pasta não existe.</label>
+<label><input type="radio" name="q4"> O <code>ls</code> não está instalado.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Qual destes comandos dá "comando não encontrado"?</p>
+<label><input type="radio" name="q5"> <code>whoami</code></label>
+<label><input type="radio" name="q5"> <code>date</code></label>
+<label><input type="radio" name="q5"> <code>history</code></label>
+<label><input type="radio" name="q5"> <code>Echo Olá</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>echo</code> mostra texto; aspas preservam os espaços.</li>
+  <li><code>date</code>, <code>whoami</code>, <code>hostname</code> e <code>pwd</code> respondem quando, quem, em que máquina e onde.</li>
+  <li><code>ls</code> lista a pasta atual ou a pasta que você indicar.</li>
+  <li><code>clear</code> (<kbd>Ctrl</kbd>+<kbd>L</kbd>) limpa a tela, <code>history</code> mostra o que você digitou, <code>exit</code> (<kbd>Ctrl</kbd>+<kbd>D</kbd>) sai.</li>
+  <li>Silêncio costuma ser sucesso: confira com <code>echo $?</code> (<code>0</code> = deu certo).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
