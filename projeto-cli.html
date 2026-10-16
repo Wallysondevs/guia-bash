@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto Uma Ferramenta de Verdade — o comando tarefas | Guia Bash</title>
+<meta name="description" content="Projeto passo a passo: o comando tarefas, uma lista de tarefas em arquivo texto com subcomandos add, list, done e rm, getopts, ajuda, códigos de saída, funções, main &quot;$@&quot;, ShellCheck limpo, instalação em ~/.local/bin e completar com Tab.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Uma Ferramenta de Verdade</span></h1>
+
+<p class="intro">Até aqui, nossos scripts eram "<code>./algo.sh</code> e pronto". Agora vamos escrever um <strong>comando</strong> no sentido completo: você digita <code>tarefas add Comprar café</code> de qualquer pasta, ele tem ajuda (<code>-h</code>), versão (<code>-V</code>), subcomandos, mensagens de erro claras, códigos de saída documentados, passa no ShellCheck e completa com <kbd>Tab</kbd>. É a mesma estrutura de ferramentas como <code>git</code> e <code>apt</code>, em umas 120 linhas de Bash.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>O comando <code>tarefas</code>, com <code>add</code>, <code>list</code>, <code>done</code> e <code>rm</code>, guardando tudo em <code>~/.local/share/tarefas/tarefas.txt</code>.</li>
+  <li>Opções globais com <code>getopts</code> (<code>-f ARQUIVO</code>, <code>-h</code>, <code>-V</code>) e uma opção de subcomando (<code>list -a</code>).</li>
+  <li>Códigos de saída: 0 = ok, 1 = erro, 2 = uso errado.</li>
+  <li>O script instalado em <code>~/.local/bin</code> e um arquivo de completar para o <kbd>Tab</kbd>.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>1h30</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="funcoes.html">Funções</a>, <a href="funcoes-retorno.html">local, return e Saída</a>, <a href="case.html">case</a>, <a href="getopts.html">Opções com getopts</a>, <a href="heredoc.html">Here-docs</a>, <a href="path.html">PATH</a>. Ajudam: <a href="shellcheck.html">ShellCheck</a>, <a href="boas-praticas.html">Boas Práticas</a> e <a href="complete.html">Completar Programável</a>.</td></tr>
+<tr><td>Onde roda</td><td>As etapas 1 a 4 nas caixas "Experimente" (o simulador roda o script como <code>bash tarefas.sh …</code>; escreva os argumentos no campo). ShellCheck e instalação, no seu computador.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Antes de programar: o desenho da ferramenta</h2>
+<p>Ferramenta boa começa pela <strong>interface</strong>: como a pessoa vai usar. Escrevemos o uso antes do código:</p>
+<pre class="term">$ tarefas add Comprar café          « acrescenta
+$ tarefas list                      « mostra as pendentes, numeradas
+$ tarefas done 2                    « marca a 2 como feita
+$ tarefas rm 1                      « apaga a 1
+$ tarefas -f compras.txt list       « outra lista
+$ tarefas -h                        « ajuda</pre>
+
+<p>E o <strong>formato do arquivo</strong>: texto puro, uma tarefa por linha, com <code>[ ]</code> (pendente) ou <code>[x]</code> (feita) na frente. O número da tarefa é o número da linha. Texto puro tem vantagens enormes: dá para abrir no editor, versionar com git, sincronizar, e ler com <code>grep</code> e <code>sed</code>.</p>
+<pre class="file" data-file="~/.local/share/tarefas/tarefas.txt">[ ] Comprar café
+[x] Estudar getopts
+[ ] Ligar para o João</pre>
+<p>A pasta <code>~/.local/share</code> é o lugar padrão (a especificação XDG) para dados de programas do usuário. Se a variável <code>XDG_DATA_HOME</code> existir, ela manda.</p>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Etapa 1 — O esqueleto: <code>main "$@"</code>, ajuda e despacho dos subcomandos</h3>
+<p><strong>O que vamos fazer e por quê:</strong> antes de qualquer funcionalidade, a estrutura. Cada subcomando vira uma função <code>cmd_…</code> (por enquanto, de mentira); uma função <code>main</code> decide qual chamar; a última linha do arquivo chama <code>main "$@"</code>.</p>
+
+<pre class="file" data-file="tarefas">#!/usr/bin/env bash
+# tarefas — uma lista de tarefas guardada num arquivo de texto.
+# Licença: domínio público. Requer bash 4.0+.
+set -euo pipefail
+
+readonly PROG=${0##*/}
+arquivo=${TAREFAS_ARQUIVO:-${XDG_DATA_HOME:-$HOME/.local/share}/tarefas/tarefas.txt}
+
+uso() {
+  cat &lt;&lt;FIM
+Uso: $PROG [-f ARQUIVO] COMANDO [ARGUMENTOS]
+
+Comandos:
+  add TEXTO...   acrescenta uma tarefa
+  list [-a]      mostra as tarefas pendentes (-a: todas)
+  done N         marca a tarefa N como feita
+  rm N           apaga a tarefa N
+
+Opções:
+  -f ARQUIVO     usa outro arquivo (padrão: $arquivo)
+  -h             mostra esta ajuda
+  -V             mostra a versão
+
+Códigos de saída: 0 = ok, 1 = erro, 2 = uso errado.
+FIM
+}
+
+erro()       { printf '%s: %s\n' "$PROG" "$*" &gt;&amp;2; }
+falhar()     { erro "$*"; exit 1; }
+uso_errado() { erro "$*"; echo "Tente '$PROG -h'." &gt;&amp;2; exit 2; }
+
+cmd_add()  { echo "(add: ainda não fiz)"; }
+cmd_list() { echo "(list: ainda não fiz)"; }
+cmd_done() { echo "(done: ainda não fiz)"; }
+cmd_rm()   { echo "(rm: ainda não fiz)"; }
+
+main() {
+  (( $# &gt; 0 )) || { uso &gt;&amp;2; exit 2; }
+  local comando=$1
+  shift
+  case $comando in
+    add)       cmd_add "$@" ;;
+    list|ls)   cmd_list "$@" ;;
+    done)      cmd_done "$@" ;;
+    rm)        cmd_rm "$@" ;;
+    help)      uso ;;
+    *)         uso_errado "comando desconhecido: '$comando'" ;;
+  esac
+}
+
+main "$@"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>Por quê</th></tr>
+<tr><td>sem <code>.sh</code> no nome</td><td>É um comando: ninguém digita <code>git.sh</code>. O shebang diz qual interpretador usar. Veja <a href="executar.html">Formas de Executar</a>.</td></tr>
+<tr><td><code>set -euo pipefail</code></td><td>O modo estrito: para no primeiro erro. Veja <a href="modo-estrito.html">set -euo pipefail</a>.</td></tr>
+<tr><td><code>readonly PROG=${0##*/}</code></td><td>O nome com que o comando foi chamado, sem a pasta, para as mensagens. <code>readonly</code> impede de mudar por engano.</td></tr>
+<tr><td><code>arquivo=${TAREFAS_ARQUIVO:-${XDG_DATA_HOME:-$HOME/.local/share}/tarefas/tarefas.txt}</code></td><td>Um padrão dentro de outro: use <code>$TAREFAS_ARQUIVO</code>; se não existir, <code>$XDG_DATA_HOME/tarefas/tarefas.txt</code>; se nem essa existir, <code>~/.local/share/tarefas/tarefas.txt</code>. Veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</td></tr>
+<tr><td><code>uso() { cat &lt;&lt;FIM … FIM }</code></td><td>A ajuda num <a href="heredoc.html">here-doc</a>: o texto fica legível no código, e <code>$PROG</code> e <code>$arquivo</code> são trocados pelos valores.</td></tr>
+<tr><td><code>erro</code>, <code>falhar</code>, <code>uso_errado</code></td><td>Três funções pequenas que padronizam as mensagens: todas começam com <code>tarefas:</code>, vão para a saída de erro e saem com o código certo.</td></tr>
+<tr><td><code>local comando=$1; shift</code></td><td>Tira o subcomando da lista; o que sobra em <code>"$@"</code> são os argumentos dele.</td></tr>
+<tr><td><code>list|ls)</code></td><td>Dois nomes para o mesmo comando (um "apelido").</td></tr>
+<tr><td><code>main "$@"</code></td><td>Repassa todos os argumentos, cada um intacto. Com tudo dentro de funções, o Bash lê o arquivo inteiro antes de executar qualquer coisa: uma edição no arquivo durante a execução não causa efeitos estranhos.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ chmod +x tarefas
+$ ./tarefas list
+(list: ainda não fiz)
+$ ./tarefas apagar 3
+tarefas: comando desconhecido: 'apagar'
+Tente 'tarefas -h'.
+$ echo $?
+2                                       « 2 = uso errado
+$ ./tarefas &gt; /dev/null                  « sem comando: a ajuda vai para a saída de ERRO
+Uso: tarefas [-f ARQUIVO] COMANDO [ARGUMENTOS]
+
+Comandos:
+  add TEXTO...   acrescenta uma tarefa
+  list [-a]      mostra as tarefas pendentes (-a: todas)
+  done N         marca a tarefa N como feita
+  rm N           apaga a tarefa N
+
+Opções:
+  -f ARQUIVO     usa outro arquivo (padrão: /home/ana/.local/share/tarefas/tarefas.txt)
+  -h             mostra esta ajuda
+  -V             mostra a versão
+
+Códigos de saída: 0 = ok, 1 = erro, 2 = uso errado.
+$ echo $?
+2
+$ ./tarefas help | head -3               « pedida: a ajuda vai para a saída padrão
+Uso: tarefas [-f ARQUIVO] COMANDO [ARGUMENTOS]
+
+Comandos:
+$ echo $?
+0</pre>
+<p>Repare na diferença sutil: quando a ajuda aparece porque <strong>faltou</strong> o comando, ela é uma mensagem de erro (stderr, código 2) e o <code>&gt; /dev/null</code> não a esconde; quando é <strong>pedida</strong> (<code>help</code>), é o resultado (stdout, código 0) e dá para passar num pipe. É a convenção dos comandos do sistema. As opções <code>-f</code>, <code>-h</code> e <code>-V</code> da ajuda chegam na etapa 4.</p>
+
+<div class="tryscript" data-file="tarefas.sh" data-args="lista" data-goal="out:listando">
+<p class="try-task"><strong>Missão:</strong> a Ana vive digitando <code>lista</code> em vez de <code>list</code>. Faça <code>lista</code> funcionar como mais um apelido de <code>list</code> (o campo de argumentos já tem <code>lista</code>).</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+readonly PROG=${0##*/}
+
+uso_errado() { echo "$PROG: $*" &gt;&amp;2; exit 2; }
+cmd_list()   { echo "listando as tarefas…"; }
+
+main() {
+  (( $# &gt; 0 )) || uso_errado "falta o comando"
+  local comando=$1
+  shift
+  case $comando in
+    list|ls) cmd_list "$@" ;;
+    *)       uso_errado "comando desconhecido: '$comando'" ;;
+  esac
+}
+
+main "$@"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+readonly PROG=${0##*/}
+
+uso_errado() { echo "$PROG: $*" &gt;&amp;2; exit 2; }
+cmd_list()   { echo "listando as tarefas…"; }
+
+main() {
+  (( $# &gt; 0 )) || uso_errado "falta o comando"
+  local comando=$1
+  shift
+  case $comando in
+    list|ls|lista) cmd_list "$@" ;;
+    *)       uso_errado "comando desconhecido: '$comando'" ;;
+  esac
+}
+
+main "$@"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 2 — <code>add</code> e <code>list</code></h3>
+<p><strong>O que vamos fazer e por quê:</strong> as duas funções que dão vida ao comando. Antes do <code>case</code>, o <code>main</code> passa a garantir que a pasta e o arquivo existem.</p>
+
+<pre class="file" data-file="tarefas (trechos novos da versão 2)">cmd_add() {
+  (( $# &gt; 0 )) || uso_errado "add: falta o texto da tarefa"
+  printf '[ ] %s\n' "$*" &gt;&gt; "$arquivo"
+  echo "Tarefa $(wc -l &lt; "$arquivo") adicionada: $*"
+}
+
+cmd_list() {
+  local n=0 pendentes=0 linha
+  while IFS= read -r linha; do
+    n=$(( n + 1 ))
+    if [[ $linha == '[ ] '* ]]; then
+      pendentes=$(( pendentes + 1 ))
+      printf '%3d  [ ] %s\n' "$n" "${linha#'[ ] '}"
+    fi
+  done &lt; "$arquivo"
+  if (( pendentes == 0 )); then
+    echo "Nenhuma tarefa pendente."
+  fi
+}
+
+# no main, antes do case:
+  mkdir -p -- "$(dirname -- "$arquivo")"
+  touch -- "$arquivo"</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>(( $# &gt; 0 )) || uso_errado …</code></td><td><code>add</code> sem texto é uso errado (código 2).</td></tr>
+<tr><td><code>printf '[ ] %s\n' "$*" &gt;&gt; "$arquivo"</code></td><td><code>"$*"</code> junta todos os argumentos com espaço: <code>add Comprar café</code> e <code>add "Comprar café"</code> dão o mesmo resultado. <code>printf</code> em vez de <code>echo</code> porque uma tarefa chamada <code>-n</code> confundiria o <code>echo</code>. Veja <a href="printf.html">printf e echo</a>.</td></tr>
+<tr><td><code>$(wc -l &lt; "$arquivo")</code></td><td>Quantas linhas o arquivo tem, que é o número da tarefa recém-criada. Com <code>&lt;</code>, o <code>wc</code> escreve só o número (sem o nome do arquivo).</td></tr>
+<tr><td><code>while IFS= read -r linha</code></td><td>Lê cada linha inteira, sem cortar espaços (<code>IFS=</code>) nem interpretar <code>\</code> (<code>-r</code>). Veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</td></tr>
+<tr><td><code>[[ $linha == '[ ] '* ]]</code></td><td>"A linha começa com <code>[ ] </code>?" Os colchetes estão entre aspas para serem texto, não um curinga de lista.</td></tr>
+<tr><td><code>${linha#'[ ] '}</code></td><td>Tira o <code>[ ] </code> do começo.</td></tr>
+<tr><td><code>mkdir -p -- "$(dirname -- "$arquivo")"</code> e <code>touch</code></td><td>Na primeira vez, cria <code>~/.local/share/tarefas/</code> e um arquivo vazio. Nas outras, não fazem nada.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./tarefas list
+Nenhuma tarefa pendente.
+$ ./tarefas add Comprar café
+Tarefa 1 adicionada: Comprar café
+$ ./tarefas add "Estudar getopts"
+Tarefa 2 adicionada: Estudar getopts
+$ ./tarefas add Ligar para o João
+Tarefa 3 adicionada: Ligar para o João
+$ ./tarefas list
+  1  [ ] Comprar café
+  2  [ ] Estudar getopts
+  3  [ ] Ligar para o João
+$ cat ~/.local/share/tarefas/tarefas.txt
+[ ] Comprar café
+[ ] Estudar getopts
+[ ] Ligar para o João
+$ ./tarefas add
+tarefas: add: falta o texto da tarefa
+Tente 'tarefas -h'.
+$ echo $?
+2</pre>
+
+<div class="tryscript" data-file="tarefas.sh" data-args="add Comprar pão" data-goal="out:Tarefa 1 adicionada: Comprar pão,contains:~/tarefas.txt=[ ] Comprar pão">
+<p class="try-task"><strong>Missão:</strong> escreva o corpo da função <code>cmd_add</code>: acrescentar <code>[ ] TEXTO</code> no fim do arquivo e mostrar <code>Tarefa N adicionada: TEXTO</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+arquivo=~/tarefas.txt
+
+cmd_add() {
+  :   # escreva aqui
+}
+
+touch "$arquivo"
+comando=$1
+shift
+case $comando in
+  add) cmd_add "$@" ;;
+esac
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+arquivo=~/tarefas.txt
+
+cmd_add() {
+  printf '[ ] %s\n' "$*" &gt;&gt; "$arquivo"
+  echo "Tarefa $(wc -l &lt; "$arquivo") adicionada: $*"
+}
+
+touch "$arquivo"
+comando=$1
+shift
+case $comando in
+  add) cmd_add "$@" ;;
+esac
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 3 — <code>done</code> e <code>rm</code>, com o número validado</h3>
+<p><strong>O que vamos fazer e por quê:</strong> estes dois comandos recebem um <strong>número</strong>, e números vindos do usuário precisam ser conferidos (lembre do <a href="projeto-jogo.html">jogo da adivinhação</a>). Uma função faz a checagem para os dois. Para mudar uma linha do arquivo no lugar, usamos o <code>sed -i</code>. Veja <a href="ferramentas-texto.html">grep, sed, awk e cia.</a></p>
+
+<pre class="file" data-file="tarefas (trechos novos da versão 3)"># confere que $1 é o número de uma tarefa que existe
+validar_numero() {
+  local n=$1 total
+  [[ $n =~ ^[1-9][0-9]*$ ]] || uso_errado "número de tarefa inválido: '$n'"
+  total=$(wc -l &lt; "$arquivo")
+  (( n &lt;= total )) || falhar "não existe a tarefa $n (a lista tem $total)"
+}
+
+cmd_done() {
+  (( $# == 1 )) || uso_errado "done: informe um número (ex.: $PROG done 2)"
+  validar_numero "$1"
+  local linha
+  linha=$(sed -n "${1}p" "$arquivo")
+  [[ $linha == '[ ] '* ]] || falhar "a tarefa $1 já estava feita"
+  sed -i "${1}s/^\[ \]/[x]/" "$arquivo"
+  echo "Feito: ${linha#'[ ] '}"
+}
+
+cmd_rm() {
+  (( $# == 1 )) || uso_errado "rm: informe um número (ex.: $PROG rm 2)"
+  validar_numero "$1"
+  local linha
+  linha=$(sed -n "${1}p" "$arquivo")
+  sed -i "${1}d" "$arquivo"
+  echo "Apagada: ${linha:4}"
+}
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>^[1-9][0-9]*$</code></td><td>Um inteiro positivo sem zero na frente (<code>0</code>, <code>02</code> e <code>dois</code> são recusados). Veja <a href="regex.html">Regex</a>.</td></tr>
+<tr><td><code>(( n &lt;= total )) || falhar …</code></td><td>Número válido, mas a tarefa não existe: isso é um erro de execução (código 1), não de uso.</td></tr>
+<tr><td><code>sed -n "${1}p"</code></td><td><code>-n</code> = não imprima nada sozinho; <code>2p</code> = imprima a linha 2. As chaves em <code>${1}p</code> separam o número do <code>p</code>.</td></tr>
+<tr><td><code>sed -i "${1}s/^\[ \]/[x]/"</code></td><td>Na linha N, troque o <code>[ ]</code> do começo por <code>[x]</code>, no próprio arquivo (<code>-i</code>). No padrão, os colchetes têm <code>\</code> porque em regex <code>[ ]</code> seria "um espaço".</td></tr>
+<tr><td><code>sed -i "${1}d"</code></td><td>Apaga a linha N. As tarefas seguintes "sobem" um número.</td></tr>
+<tr><td><code>${linha:4}</code></td><td>O texto a partir do 5º caractere: pula <code>[ ] </code> ou <code>[x] </code>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./tarefas done 2
+Feito: Estudar getopts
+$ ./tarefas list
+  1  [ ] Comprar café
+  3  [ ] Ligar para o João              « a 2 sumiu da lista de pendentes
+$ cat ~/.local/share/tarefas/tarefas.txt
+[ ] Comprar café
+[x] Estudar getopts
+[ ] Ligar para o João
+$ ./tarefas rm 1
+Apagada: Comprar café
+$ ./tarefas list
+  2  [ ] Ligar para o João              « o João era a 3 e agora é a 2
+$ ./tarefas done 1
+tarefas: a tarefa 1 já estava feita
+$ ./tarefas done 9
+tarefas: não existe a tarefa 9 (a lista tem 2)
+$ echo $?
+1
+$ ./tarefas done dois
+tarefas: número de tarefa inválido: 'dois'
+Tente 'tarefas -h'.
+$ echo $?
+2
+$ ./tarefas done
+tarefas: done: informe um número (ex.: tarefas done 2)
+Tente 'tarefas -h'.</pre>
+
+<div class="tryscript" data-file="tarefas.sh" data-args="undo 1" data-setup="printf '[x] Comprar café\n[ ] Estudar Bash\n' &gt; tarefas.txt" data-goal="contains:~/tarefas.txt=[ ] Comprar café">
+<p class="try-task"><strong>Missão:</strong> a Ana marcou "Comprar café" como feita por engano. Crie o subcomando <code>undo N</code>, que troca o <code>[x]</code> da linha N de volta por <code>[ ]</code>, e acrescente-o ao <code>case</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+arquivo=~/tarefas.txt
+
+cmd_done() {
+  sed -i "${1}s/^\[ \]/[x]/" "$arquivo"
+  echo "Feito: $(sed -n "${1}p" "$arquivo")"
+}
+
+comando=$1
+shift
+case $comando in
+  done) cmd_done "$@" ;;
+  *)    echo "comando desconhecido: $comando" &gt;&amp;2; exit 2 ;;
+esac
+cat "$arquivo"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+arquivo=~/tarefas.txt
+
+cmd_done() {
+  sed -i "${1}s/^\[ \]/[x]/" "$arquivo"
+  echo "Feito: $(sed -n "${1}p" "$arquivo")"
+}
+
+cmd_undo() {
+  sed -i "${1}s/^\[x\]/[ ]/" "$arquivo"
+  echo "Desfeito: $(sed -n "${1}p" "$arquivo")"
+}
+
+comando=$1
+shift
+case $comando in
+  done) cmd_done "$@" ;;
+  undo) cmd_undo "$@" ;;
+  *)    echo "comando desconhecido: $comando" &gt;&amp;2; exit 2 ;;
+esac
+cat "$arquivo"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 4 — Opções com <code>getopts</code>: <code>-f</code>, <code>-h</code>, <code>-V</code> e <code>list -a</code></h3>
+<p><strong>O que vamos fazer e por quê:</strong> opções que valem para qualquer comando (<code>-f ARQUIVO</code>) vêm <strong>antes</strong> do subcomando, como em <code>git -C pasta status</code>. Opções de um subcomando vêm depois dele (<code>list -a</code>). O <code>getopts</code> cuida das duas: uma vez no <code>main</code> e outra dentro do <code>cmd_list</code>. Veja <a href="getopts.html">Opções com getopts</a>.</p>
+
+<pre class="file" data-file="tarefas (versão 4: main e cmd_list)">readonly VERSAO=1.0          # no começo do arquivo
+
+main() {
+  local opt
+  while getopts ':f:hV' opt; do
+    case $opt in
+      f)  arquivo=$OPTARG ;;
+      h)  uso; exit 0 ;;
+      V)  echo "$PROG $VERSAO"; exit 0 ;;
+      :)  uso_errado "a opção -$OPTARG precisa de um valor" ;;
+      \?) uso_errado "opção inválida: -$OPTARG" ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+  (( $# &gt; 0 )) || { uso &gt;&amp;2; exit 2; }
+
+  mkdir -p -- "$(dirname -- "$arquivo")"
+  touch -- "$arquivo"
+
+  local comando=$1
+  shift
+  case $comando in
+    add)       cmd_add "$@" ;;
+    list|ls)   cmd_list "$@" ;;
+    done)      cmd_done "$@" ;;
+    rm)        cmd_rm "$@" ;;
+    help)      uso ;;
+    *)         uso_errado "comando desconhecido: '$comando'" ;;
+  esac
+}
+
+cmd_list() {
+  local todas=0 opt OPTIND=1
+  while getopts ':a' opt; do
+    case $opt in
+      a) todas=1 ;;
+      *) uso_errado "list: opção inválida: -$OPTARG" ;;
+    esac
+  done
+  local n=0 pendentes=0 linha
+  while IFS= read -r linha; do
+    n=$(( n + 1 ))
+    if [[ $linha == '[ ] '* ]]; then
+      pendentes=$(( pendentes + 1 ))
+      printf '%3d  [ ] %s\n' "$n" "${linha#'[ ] '}"
+    elif (( todas )); then
+      printf '%3d  %s\n' "$n" "$linha"
+    fi
+  done &lt; "$arquivo"
+  if (( pendentes == 0 &amp;&amp; ! todas )); then
+    echo "Nenhuma tarefa pendente."
+  fi
+}
+</pre>
+
+<dl class="anatomy">
+  <dt>getopts ':f:hV' opt</dt><dd>Aceita <code>-f</code> com valor (o <code>:</code> depois do <code>f</code>), <code>-h</code> e <code>-V</code>. O <code>:</code> do começo é o "modo silencioso": o <code>getopts</code> não escreve mensagens próprias e nos avisa dos problemas pelo próprio <code>opt</code>.</dd>
+  <dt>:)</dt><dd>No modo silencioso, <code>opt</code> vale <code>:</code> quando faltou o valor de uma opção (<code>tarefas -f</code>) e <code>OPTARG</code> diz qual.</dd>
+  <dt>\?)</dt><dd>E vale <code>?</code> para uma opção desconhecida. A barra impede o <code>?</code> de ser um curinga no <code>case</code>.</dd>
+  <dt>shift $(( OPTIND - 1 ))</dt><dd><code>OPTIND</code> é o índice do próximo argumento a ler. Descartar os <code>OPTIND - 1</code> primeiros deixa o subcomando em <code>$1</code>. O <code>getopts</code> para no primeiro argumento que não começa com <code>-</code>, então o <code>-a</code> de <code>list -a</code> fica para o subcomando.</dd>
+  <dt>local … OPTIND=1</dt><dd>No <code>cmd_list</code>, um <code>OPTIND</code> local e zerado: sem isso, o segundo <code>getopts</code> continuaria de onde o primeiro parou.</dd>
+</dl>
+
+<pre class="term">$ ./tarefas list -a
+  1  [x] Estudar getopts
+  2  [ ] Ligar para o João
+$ ./tarefas -f compras.txt add Pão         « outra lista, na pasta atual
+Tarefa 1 adicionada: Pão
+$ ./tarefas -f compras.txt list
+  1  [ ] Pão
+$ ./tarefas -V
+tarefas 1.0
+$ ./tarefas -x list
+tarefas: opção inválida: -x
+Tente 'tarefas -h'.
+$ ./tarefas -f
+tarefas: a opção -f precisa de um valor
+Tente 'tarefas -h'.
+$ ./tarefas list -z
+tarefas: list: opção inválida: -z
+Tente 'tarefas -h'.</pre>
+
+<div class="note">
+<strong>E as opções longas (<code>--help</code>)?</strong>
+<p>O <code>getopts</code> só entende opções de uma letra. Para aceitar <code>--help</code> e <code>--version</code>, o jeito simples é tratá-las antes, num <code>case "$1" in --help) …</code>. O programa externo <code>getopt</code> (sem "s") do util-linux entende opções longas, mas não existe igual no macOS. A comparação completa está em <a href="getopts.html">Opções com getopts</a>.</p>
+</div>
+
+<div class="tryscript" data-file="tarefas.sh" data-args="-V" data-goal="out:1.0,exit:0">
+<p class="try-task"><strong>Missão:</strong> acrescente a opção <code>-V</code>, que mostra <code>NOME 1.0</code> (o nome do script e a versão) e sai com código 0. Lembre de colocá-la na lista do <code>getopts</code> e no <code>case</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+readonly VERSAO=1.0
+readonly PROG=${0##*/}
+arquivo=~/tarefas.txt
+
+main() {
+  local opt
+  while getopts ':f:' opt; do
+    case $opt in
+      f)  arquivo=$OPTARG ;;
+      :)  echo "$PROG: a opção -$OPTARG precisa de um valor" &gt;&amp;2; exit 2 ;;
+      \?) echo "$PROG: opção inválida: -$OPTARG" &gt;&amp;2; exit 2 ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+  echo "arquivo: $arquivo; comando: ${1:-nenhum}"
+}
+
+main "$@"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+readonly VERSAO=1.0
+readonly PROG=${0##*/}
+arquivo=~/tarefas.txt
+
+main() {
+  local opt
+  while getopts ':f:V' opt; do
+    case $opt in
+      f)  arquivo=$OPTARG ;;
+      V)  echo "$PROG $VERSAO"; exit 0 ;;
+      :)  echo "$PROG: a opção -$OPTARG precisa de um valor" &gt;&amp;2; exit 2 ;;
+      \?) echo "$PROG: opção inválida: -$OPTARG" &gt;&amp;2; exit 2 ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+  echo "arquivo: $arquivo; comando: ${1:-nenhum}"
+}
+
+main "$@"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 5 — Passar no ShellCheck</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o <a href="shellcheck.html">ShellCheck</a> lê o script e aponta erros que o Bash aceita calado. Para ver o que ele pega, este é o <strong>rascunho</strong> do <code>tarefas</code>, escrito às pressas antes deste projeto:</p>
+
+<pre class="file" data-file="rascunho.sh">#!/bin/bash
+# tarefas — rascunho, escrito às pressas
+arquivo=~/tarefas.txt
+comando=$1
+shift
+
+if [ $comando == add ]; then
+  echo "[ ] $*" &gt;&gt; $arquivo
+elif [ $comando == list ]; then
+  n=0
+  for linha in $(cat $arquivo); do
+    n=$((n+1))
+    echo "$n $linha"
+  done
+elif [ $comando == done ]; then
+  read -p "Tem certeza? " resp
+  sed -i "$1s/^\[ \]/[x]/" $arquivo
+fi
+</pre>
+
+<pre class="term">$ shellcheck rascunho.sh
+
+In rascunho.sh line 7:
+if [ $comando == add ]; then
+     ^------^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean:
+if [ "$comando" == add ]; then
+
+
+In rascunho.sh line 9:
+elif [ $comando == list ]; then
+       ^------^ SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean:
+elif [ "$comando" == list ]; then
+
+
+In rascunho.sh line 11:
+  for linha in $(cat $arquivo); do
+               ^-------------^ SC2013 (info): To read lines rather than words, pipe/redirect to a 'while read' loop.
+
+
+In rascunho.sh line 15:
+elif [ $comando == done ]; then
+       ^------^ SC2086 (info): Double quote to prevent globbing and word splitting.
+                   ^-- SC1010 (warning): Use semicolon or linefeed before 'done' (or quote to make it literal).
+
+Did you mean:
+elif [ "$comando" == done ]; then
+
+
+In rascunho.sh line 16:
+  read -p "Tem certeza? " resp
+  ^--^ SC2162 (info): read without -r will mangle backslashes.
+                          ^--^ SC2034 (warning): resp appears unused. Verify use (or export if used externally).
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1010 -- Use semicolon or linefeed before ...
+  https://www.shellcheck.net/wiki/SC2034 -- resp appears unused. Verify use (...
+  https://www.shellcheck.net/wiki/SC2013 -- To read lines rather than words, ...
+$ echo $?
+1</pre>
+<p>O ShellCheck escreve em inglês. Cada aviso tem um código (<code>SC2086</code>) com uma página explicativa no site, a linha, uma setinha <code>^--^</code> embaixo do trecho e, às vezes, a sugestão de correção ("Did you mean"). O código de saída 1 diz "achei problemas". Traduzindo:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>O que diz</th><th>O que acontece de verdade</th></tr>
+<tr><td>SC2086</td><td>"Coloque aspas para evitar curingas e separação de palavras."</td><td>Sem argumento, <code>[ $comando == add ]</code> vira <code>[ == add ]</code>: erro <code>esperava operador unário</code> (veja abaixo).</td></tr>
+<tr><td>SC2013</td><td>"Para ler linhas e não palavras, use <code>while read</code>."</td><td><code>for linha in $(cat …)</code> separa nos espaços: cada palavra vira uma "tarefa".</td></tr>
+<tr><td>SC1010</td><td>"Use ponto e vírgula antes de <code>done</code> (ou aspas)."</td><td><code>done</code> é palavra reservada do Bash. Aqui funciona por estar no meio do <code>[ ]</code>, mas confunde quem lê; <code>"done"</code> resolve.</td></tr>
+<tr><td>SC2162</td><td>"<code>read</code> sem <code>-r</code> estraga barras invertidas."</td><td>Uma resposta <code>a\b</code> viraria <code>ab</code>.</td></tr>
+<tr><td>SC2034</td><td>"<code>resp</code> parece não ser usada."</td><td>É verdade: a pergunta "Tem certeza?" é ignorada! Um defeito de lógica que só o ShellCheck viu.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash rascunho.sh add Comprar café
+$ bash rascunho.sh list
+1 [
+2 ]
+3 Comprar
+4 café                                  « o SC2013 na prática
+$ bash rascunho.sh
+rascunho.sh: linha 7: [: ==: esperava operador unário        « o SC2086 na prática
+rascunho.sh: linha 9: [: ==: esperava operador unário
+rascunho.sh: linha 15: [: ==: esperava operador unário</pre>
+
+<p>A versão do projeto já nasceu com essas lições, e o resultado é o melhor que o ShellCheck pode dar: <strong>nada</strong>.</p>
+<pre class="term">$ shellcheck tarefas
+$ echo $?
+0</pre>
+
+<div class="tip">
+<strong>Quando o aviso não se aplica</strong>
+<p>Às vezes você sabe o que está fazendo (por exemplo, quer mesmo a separação de palavras). Desligue o aviso <strong>só naquela linha</strong>, com um comentário logo acima: <code># shellcheck disable=SC2086</code>, e de preferência explique o porquê. Nunca desligue no arquivo todo. Veja <a href="shellcheck.html">ShellCheck</a>.</p>
+</div>
+
+<div class="tryscript" data-file="listar.sh" data-setup="printf '[ ] Comprar café\n[x] Estudar Bash\n' &gt; tarefas.txt" data-goal="out:1 [ ] Comprar café,src:while">
+<p class="try-task"><strong>Missão:</strong> corrija o aviso SC2013 deste trecho do rascunho: troque o <code>for … $(cat …)</code> por um <code>while IFS= read -r linha</code>, para cada <strong>linha</strong> ser uma tarefa.</p>
+<pre class="script">#!/usr/bin/env bash
+arquivo=~/tarefas.txt
+n=0
+for linha in $(cat $arquivo); do
+  n=$((n+1))
+  echo "$n $linha"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+arquivo=~/tarefas.txt
+n=0
+while IFS= read -r linha; do
+  n=$((n+1))
+  echo "$n $linha"
+done &lt; "$arquivo"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 6 — Instalar em <code>~/.local/bin</code> e completar com <kbd>Tab</kbd></h3>
+<p><strong>O que vamos fazer e por quê:</strong> um comando de verdade é chamado pelo nome, de qualquer pasta. Para isso ele precisa estar numa pasta do <code>PATH</code>. A pasta pessoal padrão para isso é <code>~/.local/bin</code>: não precisa de <code>sudo</code> e o <code>~/.profile</code> do Ubuntu e do Debian já a coloca no PATH, <strong>se ela existir</strong> quando você entra no sistema. Veja <a href="path.html">PATH e Onde os Comandos Moram</a>.</p>
+
+<pre class="term">$ mkdir -p ~/.local/bin
+$ cp tarefas ~/.local/bin/
+$ ls -l ~/.local/bin/tarefas
+-rwxrwxr-x 1 ana ana 3133 out 15 10:42 /home/ana/.local/bin/tarefas      « o x veio junto no cp
+$ type tarefas
+bash: type: tarefas: não encontrado         « a pasta acabou de ser criada: o PATH ainda não sabe
+$ source ~/.profile                          « (ou saia e entre de novo no sistema)
+$ type tarefas
+tarefas é /home/ana/.local/bin/tarefas
+$ tarefas add Comprar café
+Tarefa 1 adicionada: Comprar café</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Onde instalar</th><th>Para quem</th><th>Precisa de</th></tr>
+<tr><td><code>~/.local/bin</code></td><td>Só você</td><td>Nada. O padrão moderno (XDG).</td></tr>
+<tr><td><code>~/bin</code></td><td>Só você</td><td>Nada. O jeito antigo; o <code>.profile</code> do Ubuntu também o põe no PATH.</td></tr>
+<tr><td><code>/usr/local/bin</code></td><td>Todos os usuários</td><td><code>sudo</code>. Nunca use <code>/usr/bin</code>: é do gerenciador de pacotes.</td></tr>
+</table>
+</div>
+
+<h4>Completar com Tab</h4>
+<p>O Bash deixa você ensinar a ele o que completar depois de um comando: uma função recebe a linha já quebrada em palavras e devolve as sugestões. Os detalhes estão em <a href="complete.html">Completar Programável</a>. O nosso arquivo:</p>
+
+<pre class="file" data-file="tarefas-completar.bash"># completar para o comando tarefas — carregue com: source tarefas-completar.bash
+_tarefas() {
+  local atual=${COMP_WORDS[COMP_CWORD]}
+  case $COMP_CWORD in
+    1)
+      mapfile -t COMPREPLY &lt; &lt;(compgen -W 'add list done rm help' -- "$atual")
+      ;;
+    2)
+      case ${COMP_WORDS[1]} in
+        done|rm) mapfile -t COMPREPLY &lt; &lt;(compgen -W "$(tarefas list | awk '{print $1}')" -- "$atual") ;;
+        list)    mapfile -t COMPREPLY &lt; &lt;(compgen -W '-a' -- "$atual") ;;
+      esac
+      ;;
+  esac
+}
+complete -F _tarefas tarefas
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>COMP_WORDS</code>, <code>COMP_CWORD</code></td><td>O Bash preenche antes de chamar a função: as palavras da linha e o índice da palavra que está sendo completada. Em <code>tarefas do▮</code>, <code>COMP_WORDS=(tarefas do)</code> e <code>COMP_CWORD=1</code>.</td></tr>
+<tr><td><code>compgen -W 'add list done rm help' -- "$atual"</code></td><td>Das palavras da lista, mostra as que começam com o que já foi digitado.</td></tr>
+<tr><td><code>COMPREPLY</code></td><td>O array que a função preenche com as sugestões. O <code>mapfile -t</code> o preenche linha a linha (o ShellCheck reclama da forma <code>COMPREPLY=($(…))</code>).</td></tr>
+<tr><td><code>"$(tarefas list | awk '{print $1}')"</code></td><td>Depois de <code>done</code> ou <code>rm</code>, sugere os números das tarefas pendentes, pedindo ao próprio comando.</td></tr>
+<tr><td><code>complete -F _tarefas tarefas</code></td><td>"Para completar o comando <code>tarefas</code>, chame a função <code>_tarefas</code>."</td></tr>
+</table>
+</div>
+
+<p>Dá para testar a função sem apertar <kbd>Tab</kbd>, preenchendo as variáveis à mão como o Bash faria:</p>
+<pre class="term">$ source tarefas-completar.bash
+$ complete -p tarefas
+complete -F _tarefas tarefas
+$ COMP_WORDS=(tarefas d); COMP_CWORD=1; _tarefas; declare -p COMPREPLY
+declare -a COMPREPLY=([0]="done")
+$ COMP_WORDS=(tarefas done ''); COMP_CWORD=2; _tarefas; declare -p COMPREPLY
+declare -a COMPREPLY=([0]="1" [1]="2" [2]="3")
+$ shellcheck -s bash tarefas-completar.bash
+$ echo $?
+0</pre>
+<p>(Nesta sessão, a lista tinha três tarefas pendentes.) No terminal, o efeito é: <code>tarefas d</code> + <kbd>Tab</kbd> vira <code>tarefas done </code>; e <code>tarefas done </code> + <kbd>Tab</kbd> <kbd>Tab</kbd> mostra <code>1  2  3</code>. Para carregar a completação sempre, copie o arquivo para <code>~/.local/share/bash-completion/completions/tarefas</code> (o pacote <code>bash-completion</code> carrega dali na primeira vez que você aperta <kbd>Tab</kbd> depois de <code>tarefas</code>) ou acrescente a linha <code>source ~/caminho/tarefas-completar.bash</code> ao seu <code>~/.bashrc</code>.</p>
+
+<div class="try" data-goal="func:_tarefas,ran:complete +-F +_tarefas +tarefas" data-solucao="_tarefas() { mapfile -t COMPREPLY &lt; &lt;(compgen -W 'add list done rm' -- &quot;${COMP_WORDS[COMP_CWORD]}&quot;); };;complete -F _tarefas tarefas;;complete -p tarefas">
+<p class="try-task"><strong>Missão:</strong> no terminal, crie uma função <code>_tarefas</code> que sugira <code>add list done rm</code> (com <code>compgen -W</code>) e registre-a com <code>complete -F</code> para o comando <code>tarefas</code>. Confira com <code>complete -p tarefas</code>.</p>
+</div>
+</li>
+
+</ol>
+
+<hr>
+
+<h2>O comando completo</h2>
+<p>Todas as etapas juntas, ShellCheck limpo:</p>
+
+<pre class="file" data-file="~/.local/bin/tarefas">#!/usr/bin/env bash
+# tarefas — uma lista de tarefas guardada num arquivo de texto.
+# Licença: domínio público. Requer bash 4.0+.
+set -euo pipefail
+
+readonly VERSAO=1.0
+readonly PROG=${0##*/}
+arquivo=${TAREFAS_ARQUIVO:-${XDG_DATA_HOME:-$HOME/.local/share}/tarefas/tarefas.txt}
+
+uso() {
+  cat &lt;&lt;FIM
+Uso: $PROG [-f ARQUIVO] COMANDO [ARGUMENTOS]
+
+Comandos:
+  add TEXTO...   acrescenta uma tarefa
+  list [-a]      mostra as tarefas pendentes (-a: todas)
+  done N         marca a tarefa N como feita
+  rm N           apaga a tarefa N
+
+Opções:
+  -f ARQUIVO     usa outro arquivo (padrão: $arquivo)
+  -h             mostra esta ajuda
+  -V             mostra a versão
+
+Códigos de saída: 0 = ok, 1 = erro, 2 = uso errado.
+FIM
+}
+
+erro()       { printf '%s: %s\n' "$PROG" "$*" &gt;&amp;2; }
+falhar()     { erro "$*"; exit 1; }
+uso_errado() { erro "$*"; echo "Tente '$PROG -h'." &gt;&amp;2; exit 2; }
+
+# confere que $1 é o número de uma tarefa que existe
+validar_numero() {
+  local n=$1 total
+  [[ $n =~ ^[1-9][0-9]*$ ]] || uso_errado "número de tarefa inválido: '$n'"
+  total=$(wc -l &lt; "$arquivo")
+  (( n &lt;= total )) || falhar "não existe a tarefa $n (a lista tem $total)"
+}
+
+cmd_add() {
+  (( $# &gt; 0 )) || uso_errado "add: falta o texto da tarefa"
+  printf '[ ] %s\n' "$*" &gt;&gt; "$arquivo"
+  echo "Tarefa $(wc -l &lt; "$arquivo") adicionada: $*"
+}
+
+cmd_list() {
+  local todas=0 opt OPTIND=1
+  while getopts ':a' opt; do
+    case $opt in
+      a) todas=1 ;;
+      *) uso_errado "list: opção inválida: -$OPTARG" ;;
+    esac
+  done
+  local n=0 pendentes=0 linha
+  while IFS= read -r linha; do
+    n=$(( n + 1 ))
+    if [[ $linha == '[ ] '* ]]; then
+      pendentes=$(( pendentes + 1 ))
+      printf '%3d  [ ] %s\n' "$n" "${linha#'[ ] '}"
+    elif (( todas )); then
+      printf '%3d  %s\n' "$n" "$linha"
+    fi
+  done &lt; "$arquivo"
+  if (( pendentes == 0 &amp;&amp; ! todas )); then
+    echo "Nenhuma tarefa pendente."
+  fi
+}
+
+cmd_done() {
+  (( $# == 1 )) || uso_errado "done: informe um número (ex.: $PROG done 2)"
+  validar_numero "$1"
+  local linha
+  linha=$(sed -n "${1}p" "$arquivo")
+  [[ $linha == '[ ] '* ]] || falhar "a tarefa $1 já estava feita"
+  sed -i "${1}s/^\[ \]/[x]/" "$arquivo"
+  echo "Feito: ${linha#'[ ] '}"
+}
+
+cmd_rm() {
+  (( $# == 1 )) || uso_errado "rm: informe um número (ex.: $PROG rm 2)"
+  validar_numero "$1"
+  local linha
+  linha=$(sed -n "${1}p" "$arquivo")
+  sed -i "${1}d" "$arquivo"
+  echo "Apagada: ${linha:4}"
+}
+
+main() {
+  local opt
+  while getopts ':f:hV' opt; do
+    case $opt in
+      f)  arquivo=$OPTARG ;;
+      h)  uso; exit 0 ;;
+      V)  echo "$PROG $VERSAO"; exit 0 ;;
+      :)  uso_errado "a opção -$OPTARG precisa de um valor" ;;
+      \?) uso_errado "opção inválida: -$OPTARG" ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+  (( $# &gt; 0 )) || { uso &gt;&amp;2; exit 2; }
+
+  mkdir -p -- "$(dirname -- "$arquivo")"
+  touch -- "$arquivo"
+
+  local comando=$1
+  shift
+  case $comando in
+    add)       cmd_add "$@" ;;
+    list|ls)   cmd_list "$@" ;;
+    done)      cmd_done "$@" ;;
+    rm)        cmd_rm "$@" ;;
+    help)      uso ;;
+    *)         uso_errado "comando desconhecido: '$comando'" ;;
+  esac
+}
+
+main "$@"
+</pre>
+
+<div class="tryscript" data-file="tarefas.sh" data-args="add Comprar café" data-setup="mkdir -p .local/share/tarefas;;printf '[ ] Estudar Bash\n[x] Ligar para o João\n' &gt; .local/share/tarefas/tarefas.txt">
+<p class="try-task"><strong>Brinque à vontade:</strong> o comando completo, com uma lista que já tem duas tarefas. Mude os argumentos: <code>list</code>, <code>list -a</code>, <code>done 1</code>, <code>rm 2</code>, <code>-h</code>, <code>done abc</code>…</p>
+<pre class="script">#!/usr/bin/env bash
+# tarefas — uma lista de tarefas guardada num arquivo de texto.
+# Licença: domínio público. Requer bash 4.0+.
+set -euo pipefail
+
+readonly VERSAO=1.0
+readonly PROG=${0##*/}
+arquivo=${TAREFAS_ARQUIVO:-${XDG_DATA_HOME:-$HOME/.local/share}/tarefas/tarefas.txt}
+
+uso() {
+  cat &lt;&lt;FIM
+Uso: $PROG [-f ARQUIVO] COMANDO [ARGUMENTOS]
+
+Comandos:
+  add TEXTO...   acrescenta uma tarefa
+  list [-a]      mostra as tarefas pendentes (-a: todas)
+  done N         marca a tarefa N como feita
+  rm N           apaga a tarefa N
+
+Opções:
+  -f ARQUIVO     usa outro arquivo (padrão: $arquivo)
+  -h             mostra esta ajuda
+  -V             mostra a versão
+
+Códigos de saída: 0 = ok, 1 = erro, 2 = uso errado.
+FIM
+}
+
+erro()       { printf '%s: %s\n' "$PROG" "$*" &gt;&amp;2; }
+falhar()     { erro "$*"; exit 1; }
+uso_errado() { erro "$*"; echo "Tente '$PROG -h'." &gt;&amp;2; exit 2; }
+
+# confere que $1 é o número de uma tarefa que existe
+validar_numero() {
+  local n=$1 total
+  [[ $n =~ ^[1-9][0-9]*$ ]] || uso_errado "número de tarefa inválido: '$n'"
+  total=$(wc -l &lt; "$arquivo")
+  (( n &lt;= total )) || falhar "não existe a tarefa $n (a lista tem $total)"
+}
+
+cmd_add() {
+  (( $# &gt; 0 )) || uso_errado "add: falta o texto da tarefa"
+  printf '[ ] %s\n' "$*" &gt;&gt; "$arquivo"
+  echo "Tarefa $(wc -l &lt; "$arquivo") adicionada: $*"
+}
+
+cmd_list() {
+  local todas=0 opt OPTIND=1
+  while getopts ':a' opt; do
+    case $opt in
+      a) todas=1 ;;
+      *) uso_errado "list: opção inválida: -$OPTARG" ;;
+    esac
+  done
+  local n=0 pendentes=0 linha
+  while IFS= read -r linha; do
+    n=$(( n + 1 ))
+    if [[ $linha == '[ ] '* ]]; then
+      pendentes=$(( pendentes + 1 ))
+      printf '%3d  [ ] %s\n' "$n" "${linha#'[ ] '}"
+    elif (( todas )); then
+      printf '%3d  %s\n' "$n" "$linha"
+    fi
+  done &lt; "$arquivo"
+  if (( pendentes == 0 &amp;&amp; ! todas )); then
+    echo "Nenhuma tarefa pendente."
+  fi
+}
+
+cmd_done() {
+  (( $# == 1 )) || uso_errado "done: informe um número (ex.: $PROG done 2)"
+  validar_numero "$1"
+  local linha
+  linha=$(sed -n "${1}p" "$arquivo")
+  [[ $linha == '[ ] '* ]] || falhar "a tarefa $1 já estava feita"
+  sed -i "${1}s/^\[ \]/[x]/" "$arquivo"
+  echo "Feito: ${linha#'[ ] '}"
+}
+
+cmd_rm() {
+  (( $# == 1 )) || uso_errado "rm: informe um número (ex.: $PROG rm 2)"
+  validar_numero "$1"
+  local linha
+  linha=$(sed -n "${1}p" "$arquivo")
+  sed -i "${1}d" "$arquivo"
+  echo "Apagada: ${linha:4}"
+}
+
+main() {
+  local opt
+  while getopts ':f:hV' opt; do
+    case $opt in
+      f)  arquivo=$OPTARG ;;
+      h)  uso; exit 0 ;;
+      V)  echo "$PROG $VERSAO"; exit 0 ;;
+      :)  uso_errado "a opção -$OPTARG precisa de um valor" ;;
+      \?) uso_errado "opção inválida: -$OPTARG" ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+  (( $# &gt; 0 )) || { uso &gt;&amp;2; exit 2; }
+
+  mkdir -p -- "$(dirname -- "$arquivo")"
+  touch -- "$arquivo"
+
+  local comando=$1
+  shift
+  case $comando in
+    add)       cmd_add "$@" ;;
+    list|ls)   cmd_list "$@" ;;
+    done)      cmd_done "$@" ;;
+    rm)        cmd_rm "$@" ;;
+    help)      uso ;;
+    *)         uso_errado "comando desconhecido: '$comando'" ;;
+  esac
+}
+
+main "$@"
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong><code>tarefas: comando não encontrado</code> depois de instalar</strong>
+<p><strong>O que aconteceu:</strong> o <code>~/.local/bin</code> não está no PATH (a pasta foi criada depois do login, ou sua distribuição não a inclui). <strong>Como confirmar:</strong> <code>echo "$PATH" | tr ':' '\n' | grep local</code>. <strong>Como resolver:</strong> saia e entre de novo; se não resolver, acrescente <code>PATH="$HOME/.local/bin:$PATH"</code> ao <code>~/.bashrc</code>. Veja <a href="path.html">PATH</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>bash: /home/ana/.local/bin/tarefas: Permissão negada</code></strong>
+<p><strong>O que aconteceu:</strong> o arquivo foi copiado sem permissão de execução. <strong>Como resolver:</strong> <code>chmod +x ~/.local/bin/tarefas</code>. Veja <a href="executar.html">Formas de Executar</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>env: ‘bash\r’: Arquivo ou diretório inexistente</code></strong>
+<pre class="term">$ ./tarefas
+env: ‘bash\r’: Arquivo ou diretório inexistente
+env: usa -[v]S para passar opções em linhas shebang</pre>
+<p><strong>O que aconteceu:</strong> o arquivo foi salvo com finais de linha do Windows (CRLF), e o <code>\r</code> grudou no nome do interpretador. <strong>Como resolver:</strong> <code>sed -i 's/\r$//' tarefas</code> (ou <code>dos2unix tarefas</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>list -a</code> é ignorado ou dá "opção inválida"</strong>
+<p><strong>O que aconteceu:</strong> faltou o <code>local OPTIND=1</code> no <code>cmd_list</code>, e o segundo <code>getopts</code> começou a ler de onde o primeiro parou. <strong>Como confirmar:</strong> <code>bash -x tarefas list -a</code>. Veja <a href="depuracao.html">Depurar</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <kbd>Tab</kbd> não completa nada</strong>
+<p><strong>O que aconteceu:</strong> o arquivo de completar não foi carregado neste terminal. <strong>Como confirmar:</strong> <code>complete -p tarefas</code> responde <code>bash: complete: tarefas: nenhuma especificação de completação</code> (código 1). <strong>Como resolver:</strong> <code>source tarefas-completar.bash</code>, e coloque-o no lugar certo para os próximos terminais.</p>
+</div>
+
+<hr>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li><strong><code>edit N TEXTO</code>:</strong> troque o texto de uma tarefa. Cuidado: o texto pode ter <code>/</code> e <code>&amp;</code>, que quebram o <code>sed s///</code>; prefira ler o arquivo para um array com <code>mapfile</code>, mudar o item e regravar.</li>
+  <li><strong>Prioridade e data:</strong> <code>add -p alta …</code>, guardando <code>[ ] (A) 2026-10-15 texto</code> (é quase o formato <em>todo.txt</em>, usado por vários aplicativos).</li>
+  <li><strong>Gravação segura:</strong> o <code>sed -i</code> já grava num temporário e renomeia; faça o mesmo no <code>edit</code> com <code>mktemp</code> e <code>mv</code>.</li>
+  <li><strong>Opções longas:</strong> aceite <code>--help</code> e <code>--version</code>.</li>
+  <li><strong>Testes automáticos:</strong> um script <code>testar.sh</code> que roda o comando com <code>-f /tmp/teste.txt</code> e confere saídas e códigos de saída com <code>[[ ]]</code>.</li>
+  <li><strong>Página de manual:</strong> pesquise o formato <code>man 7 man-pages</code> e escreva <code>tarefas.1</code>.</li>
+</ul>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Repassar os argumentos</h3>
+<p>Complete a última linha do script para chamar <code>main</code> com todos os argumentos, cada um intacto:</p>
+<div class="ex-code">main <input data-answer="&quot;$@&quot;" aria-label="argumentos"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. A Ana digitou <code>tarefas</code> sem nada. Pela convenção usada no projeto, o que deve acontecer?</p>
+<label><input type="radio" name="q2"> Mostrar a ajuda na saída padrão e sair com 0.</label>
+<label><input type="radio" name="q2"> Mostrar a ajuda na saída de erro e sair com 2 (uso errado).</label>
+<label><input type="radio" name="q2"> Listar as tarefas.</label>
+<label><input type="radio" name="q2"> Não mostrar nada e sair com 1.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Opções do getopts</h3>
+<p>Complete a lista de opções para aceitar <code>-f</code> com valor, <code>-h</code> e <code>-V</code>, no modo silencioso:</p>
+<div class="ex-code">while getopts '<input data-answer=":f:hV|:f:Vh|:hVf:|:Vhf:|:hf:V|:Vf:h" aria-label="opções">' opt; do</div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Por que o <code>cmd_list</code> declara <code>local OPTIND=1</code>?</p>
+<label><input type="radio" name="q4"> Porque <code>OPTIND</code> é somente leitura.</label>
+<label><input type="radio" name="q4"> Para numerar as tarefas a partir de 1.</label>
+<label><input type="radio" name="q4"> Porque o <code>getopts</code> só funciona dentro de funções.</label>
+<label><input type="radio" name="q4"> Porque o <code>getopts</code> do <code>main</code> já avançou o <code>OPTIND</code>, e o segundo <code>getopts</code> precisa começar do início dos argumentos do subcomando.</label>
+</div>
+
+<div class="exercise">
+<h3>5. Registrar a completação</h3>
+<p>Complete para o Bash usar a função <code>_tarefas</code> ao completar o comando <code>tarefas</code>:</p>
+<div class="ex-code">complete <input data-answer="-F _tarefas" aria-label="opção e função"> tarefas</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. O ShellCheck terminou sem escrever nada e com código 0. Isso quer dizer:</p>
+<label><input type="radio" name="q6"> Ele não encontrou nenhum problema no script.</label>
+<label><input type="radio" name="q6"> O script não foi analisado.</label>
+<label><input type="radio" name="q6"> O script está garantidamente correto.</label>
+<label><input type="radio" name="q6"> Falta a opção <code>-v</code> para ver os avisos.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Um comando de verdade: sem <code>.sh</code>, shebang, tudo em funções e <code>main "$@"</code> na última linha.</li>
+  <li>Subcomandos com <code>case</code>; cada um numa função <code>cmd_…</code>.</li>
+  <li>Ajuda num here-doc; erros com o nome do programa, na saída de erro; códigos 0/1/2 documentados.</li>
+  <li><code>getopts</code> para opções globais e, com <code>local OPTIND=1</code>, para as de cada subcomando.</li>
+  <li>Dados do usuário em <code>~/.local/share</code>, o comando em <code>~/.local/bin</code>.</li>
+  <li>ShellCheck sem avisos e completação com <code>complete -F</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
