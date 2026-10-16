@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Subshells e Grupos — ( … ) × { …; }, $BASHPID e a pegadinha do pipe | Guia Bash</title>
+<meta name="description" content="Entenda subshells no Bash: a diferença entre ( … ) e { …; }, por que o cd e as variáveis não voltam, quem cria subshell, a pegadinha do cmd | while read, lastpipe, $$ × $BASHPID, BASH_SUBSHELL e export.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Subshells e Grupos</span></h1>
+
+<p class="intro">Um <strong>subshell</strong> é uma cópia do shell que roda um pedaço do seu código e depois some, levando junto tudo o que mudou lá dentro. Entender quando o Bash cria essa cópia explica uma das dúvidas mais comuns de quem escreve scripts: "por que minha variável voltou a zero depois do <code>while</code>?".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre agrupar com <code>( … )</code> (subshell) e com <code>{ …; }</code> (grupo no mesmo shell).</li>
+  <li>Quem cria subshells sem você pedir: pipes, <code>$( )</code> e <code>&amp;</code>.</li>
+  <li>A pegadinha <code>cmd | while read …</code> e as três saídas: <code>&lt; &lt;( )</code>, <code>&lt; arquivo</code> e <code>shopt -s lastpipe</code>.</li>
+  <li><code>$$</code> × <code>$BASHPID</code>, <code>BASH_SUBSHELL</code> e o <code>exit</code> dentro de <code>( )</code>.</li>
+  <li>Subshell × <code>export</code>: o que um processo filho herda, e o custo de subshells dentro de laços.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A cópia que some</h2>
+<p>Imagine que você entrega a um colega uma <strong>fotocópia</strong> do seu caderno. Ele risca, anota, arranca páginas da cópia… e no fim joga a cópia fora. O seu caderno continua igual. Um subshell é isso: o Bash faz uma cópia de si mesmo, com as mesmas variáveis, funções e a mesma pasta atual. O que acontece na cópia <strong>não volta</strong> para o original.</p>
+
+<p>Isso pode ser exatamente o que você quer (mexer "num rascunho" sem bagunçar o shell) ou uma armadilha (você queria guardar um resultado e ele sumiu com a cópia).</p>
+
+<hr>
+
+<h2><code>( … )</code> × <code>{ …; }</code></h2>
+<p>O Bash tem duas formas de juntar vários comandos num bloco:</p>
+
+<dl class="anatomy">
+  <dt>( cd Documentos; nome=Bruno )</dt><dd><strong>Parênteses</strong>: os comandos rodam num <strong>subshell</strong>, a cópia. As mudanças ficam lá dentro.</dd>
+  <dt>{ cd Documentos; nome=Bruno; }</dt><dd><strong>Chaves</strong>: os comandos rodam <strong>no shell atual</strong>. É só um agrupamento; as mudanças ficam valendo.</dd>
+</dl>
+
+<p>Veja a diferença com a mesma sequência de comandos. Primeiro com parênteses:</p>
+
+<pre class="term">$ nome=Ana
+$ ( cd Documentos; nome=Bruno; pwd; echo "dentro: $nome" )
+/home/ana/Documentos
+dentro: Bruno
+$ pwd; echo "fora: $nome"
+/home/ana                          « o cd não voltou do subshell
+fora: Ana                          « a variável também não</pre>
+
+<p>Agora com chaves:</p>
+
+<pre class="term">$ { cd Documentos; nome=Bruno; pwd; echo "dentro: $nome"; }
+/home/ana/Documentos
+dentro: Bruno
+$ pwd; echo "fora: $nome"
+/home/ana/Documentos               « o cd valeu: o prompt mudou de pasta
+fora: Bruno                        « e a variável foi trocada de verdade</pre>
+
+<p>Dentro do bloco, as duas formas se comportam igual. A diferença aparece <strong>depois</strong>: o <code>( )</code> joga fora o <code>cd</code> e a variável; o <code>{ }</code> mantém.</p>
+
+<h3>A sintaxe das chaves é mais exigente</h3>
+<p>O <code>(</code> e o <code>)</code> são operadores do shell: podem ficar colados nos comandos. Já <code>{</code> e <code>}</code> são <strong>palavras reservadas</strong>, como <code>if</code> e <code>fi</code>. Por isso:</p>
+<ul>
+  <li>precisa de <strong>espaço</strong> depois do <code>{</code>;</li>
+  <li>o último comando precisa terminar com <code>;</code> (ou quebra de linha) antes do <code>}</code>.</li>
+</ul>
+
+<pre class="term">$ {echo oi; }
+bash: {echo: comando não encontrado   « sem espaço, o Bash procura um comando chamado "{echo"</pre>
+
+<pre class="term">$ { echo oi }
+&gt;                                  « sem o ;, o } virou argumento do echo e o Bash espera o fechamento</pre>
+
+<p>No segundo caso, o Bash mostra o prompt de continuação <code>&gt;</code> porque o grupo ainda não fechou. Aperte <code>Ctrl+C</code> e escreva <code>{ echo oi; }</code>.</p>
+
+<h3>Para que serve cada um</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer…</th><th>Use</th><th>Exemplo</th></tr>
+<tr><td>Rodar algo em outra pasta sem sair da atual</td><td><code>( )</code></td><td><code>(cd Documentos &amp;&amp; ls)</code></td></tr>
+<tr><td>Mudar uma opção ou variável só por um trecho</td><td><code>( )</code></td><td><code>(set -x; ./teste.sh)</code></td></tr>
+<tr><td>Mandar a saída de vários comandos para um arquivo</td><td><code>{ }</code></td><td><code>{ date +%F; ls Documentos; } &gt; relatorio.txt</code></td></tr>
+<tr><td>Fazer várias coisas depois de um <code>||</code> ou <code>&amp;&amp;</code></td><td><code>{ }</code></td><td><code>ls nada || { echo "falhou"; exit 1; }</code></td></tr>
+<tr><td>Que a mudança continue valendo depois</td><td><code>{ }</code></td><td><code>{ cd Documentos; ls; }</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ (cd Documentos &amp;&amp; ls)
+acesso.log
+alunos.csv
+notas.txt
+projetos
+relatorio.odt
+$ pwd
+/home/ana                          « continuamos em casa
+$ { date +%F; ls Documentos; } &gt; relatorio.txt
+$ wc -l relatorio.txt
+6 relatorio.txt                    « 1 linha da data + 5 do ls, num arquivo só
+$ ls nada || { echo "falhou"; echo "segue"; }
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+falhou
+segue</pre>
+
+<p>Os dois blocos devolvem como código de saída o do <strong>último</strong> comando de dentro.</p>
+
+<div class="try" data-goal="ran:^\s*\(\s*cd +Documentos,out:alunos.csv,cwd:~" data-solucao="(cd Documentos &amp;&amp; ls)">
+<p class="try-task"><strong>Missão:</strong> liste o conteúdo da pasta <code>Documentos</code> entrando nela com <code>cd</code>, mas <strong>sem sair</strong> da pasta pessoal: o <code>cd</code> tem que ficar dentro de um subshell. Depois, confira com <code>pwd</code> que você continua em <code>~</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quem cria subshells</h2>
+<p>Os parênteses são a forma <strong>explícita</strong>. Mas o Bash também cria subshells sozinho, em lugares que nem sempre parecem:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Construção</th><th>O que roda num subshell</th></tr>
+<tr><td><code>( comandos )</code></td><td>Tudo o que está dentro dos parênteses</td></tr>
+<tr><td><code>$( comandos )</code> e crases</td><td>O que está dentro da <a href="substituicao-comando.html">substituição de comando</a></td></tr>
+<tr><td><code>cmd1 | cmd2 | cmd3</code></td><td><strong>Cada parte</strong> do <a href="pipes.html">pipe</a>, inclusive a última (a não ser com <code>lastpipe</code>, abaixo)</td></tr>
+<tr><td><code>comando &amp;</code></td><td>O comando em segundo plano (<a href="jobs.html">jobs</a>)</td></tr>
+<tr><td><code>&lt;( comandos )</code> / <code>&gt;( comandos )</code></td><td>O que está dentro da <a href="substituicao-processo.html">substituição de processo</a></td></tr>
+</table>
+</div>
+
+<p>Não criam subshell: <code>{ …; }</code>, <code>if</code>, <code>for</code>, <code>while</code>, <code>case</code>, funções chamadas normalmente, <code>(( ))</code> e <code>[[ ]]</code>.</p>
+
+<pre class="term">$ x=1; echo "$(x=2; echo $x)"; echo $x
+2                                  « dentro do $( ), x valia 2…
+1                                  « …mas aqui fora continua 1</pre>
+
+<hr>
+
+<h2>A pegadinha: <code>cmd | while read</code></h2>
+<p>Esta é a armadilha clássica. A Ana quer somar números que vêm de um comando:</p>
+
+<pre class="term">$ total=0
+$ printf "%s\n" 10 20 30 | while read n; do total=$((total + n)); done
+$ echo "total: $total"
+total: 0                           « ué? cadê o 60?</pre>
+
+<p><strong>O que aconteceu:</strong> o <code>while</code> está depois de um <code>|</code>, então rodou num subshell. Lá dentro, <code>total</code> chegou a 60. Quando o pipe acabou, o subshell sumiu, e com ele o 60. O <code>echo</code> lá fora vê o <code>total</code> original, que é 0. Não há mensagem de erro: o código de saída é 0 e o resultado está simplesmente errado.</p>
+
+<pre class="syntax">  shell principal (total=0)
+     │
+     ├── subshell 1: printf "%s\n" 10 20 30 ──┐
+     │                                        │ pipe
+     └── subshell 2: while read … total=60 ◄──┘   ← some no fim do pipe
+     │
+  echo "total: $total"  →  0</pre>
+
+<h3>Saída 1: <code>done &lt; &lt;( comando )</code></h3>
+<p>Em vez de colocar o comando <strong>antes</strong> do <code>while</code> com um pipe, coloque-o <strong>depois</strong> do <code>done</code>, com uma substituição de processo. Assim o <code>while</code> roda no shell principal; quem vai para o subshell é o <code>printf</code>, que não guarda nada:</p>
+
+<dl class="anatomy">
+  <dt>while read n; do …; done</dt><dd>O laço, agora no shell atual.</dd>
+  <dt>&lt;</dt><dd>"A entrada do laço vem de…" (redirecionamento comum).</dd>
+  <dt>&lt;(printf "%s\n" 10 20 30)</dt><dd>…a saída deste comando. É a <a href="substituicao-processo.html">substituição de processo</a>. Repare no espaço entre os dois <code>&lt;</code>.</dd>
+</dl>
+
+<pre class="term">$ total=0
+$ while read n; do total=$((total + n)); done &lt; &lt;(printf "%s\n" 10 20 30)
+$ echo "total: $total"
+total: 60</pre>
+
+<h3>Saída 2: <code>done &lt; arquivo</code></h3>
+<p>Se os dados estão num arquivo, nem precisa de comando: <code>while read -r linha; do …; done &lt; frutas.txt</code>. Essa é a forma da aula <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+
+<h3>Saída 3: <code>shopt -s lastpipe</code> <span class="versao">bash 4.2+</span></h3>
+<p>A opção <code>lastpipe</code> ("último do pipe") faz a <strong>última</strong> parte de um pipe rodar no shell atual. Ela só tem efeito quando o controle de jobs está desligado, ou seja, <strong>em scripts</strong>:</p>
+
+<pre class="file" data-file="soma.sh">#!/usr/bin/env bash
+shopt -s lastpipe
+total=0
+printf "%s\n" 10 20 30 | while read -r n; do
+  total=$((total + n))
+done
+echo "total: $total"
+</pre>
+
+<pre class="term">$ bash soma.sh
+total: 60</pre>
+
+<p>No terminal interativo, a mesma opção não faz nada, porque lá o controle de jobs está ligado (o <code>m</code> em <code>$-</code>):</p>
+
+<pre class="term">$ shopt -s lastpipe
+$ total=0
+$ printf "%s\n" 10 20 30 | while read n; do total=$((total + n)); done
+$ echo "total: $total"
+total: 0                           « no terminal, o lastpipe é ignorado
+$ echo $-
+himBHs                             « o m = controle de jobs ligado</pre>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Prós</th><th>Contras</th></tr>
+<tr><td><code>done &lt; &lt;(cmd)</code></td><td>Funciona no terminal e em scripts; é a mais usada</td><td>Só no Bash (não existe no <code>sh</code>)</td></tr>
+<tr><td><code>done &lt; arquivo</code></td><td>Simples, POSIX</td><td>Só quando os dados já estão num arquivo</td></tr>
+<tr><td><code>shopt -s lastpipe</code></td><td>Deixa o pipe na ordem natural de leitura</td><td>Só em scripts (sem controle de jobs); Bash 4.2+</td></tr>
+<tr><td><code>cmd | { while …; done; echo "$total"; }</code></td><td>Funciona em qualquer shell</td><td>O resultado só existe dentro das chaves</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="contar.sh" data-goal="out:5 alunos">
+<p class="try-task"><strong>Missão:</strong> o script deveria contar os alunos de <code>Documentos/alunos.csv</code> (sem o cabeçalho), mas diz <code>0 alunos</code>. Corrija para mostrar <code>5 alunos</code>, sem mudar a conta.</p>
+<pre class="script">#!/usr/bin/env bash
+total=0
+tail -n +2 Documentos/alunos.csv | while IFS=, read -r nome idade cidade nota; do
+  total=$((total + 1))
+done
+echo "$total alunos"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+total=0
+while IFS=, read -r nome idade cidade nota; do
+  total=$((total + 1))
+done &lt; &lt;(tail -n +2 Documentos/alunos.csv)
+echo "$total alunos"
+</pre>
+</div>
+
+<hr>
+
+<h2>Em que shell eu estou? <code>$$</code>, <code>$BASHPID</code> e <code>BASH_SUBSHELL</code></h2>
+<p>Duas variáveis parecem iguais, mas não são:</p>
+<ul>
+  <li><code>$$</code>: o PID do shell <strong>principal</strong>. Num subshell, ela <strong>continua</strong> mostrando o PID do principal (é herdada na cópia).</li>
+  <li><code>$BASHPID</code>: o PID do processo Bash <strong>atual</strong>, de verdade. Num subshell, muda.</li>
+</ul>
+
+<pre class="term">$ echo "$$ $BASHPID"
+48767 48767                        « no shell principal, os dois são iguais
+$ ( echo "$$ $BASHPID" )
+48767 48770                        « no subshell, $$ não muda; $BASHPID mostra a cópia</pre>
+
+<p>E <code>BASH_SUBSHELL</code> conta <strong>quantos níveis</strong> de subshell há entre você e o shell principal:</p>
+
+<pre class="term">$ echo "$BASH_SUBSHELL"
+0
+$ ( echo "$BASH_SUBSHELL"; ( echo "$BASH_SUBSHELL" ) )
+1
+2                                  « um subshell dentro de outro
+$ echo "$(echo $BASH_SUBSHELL)"
+1                                  « o $( ) também é subshell
+$ echo x | { read v; echo "nível $BASH_SUBSHELL, pid $BASHPID"; }
+nível 1, pid 48775                 « o { } depois de um pipe também</pre>
+
+<p>Repare no último: as chaves sozinhas não criam subshell, mas aqui elas estão depois de um <code>|</code>, e é o pipe que cria.</p>
+
+<p>Use <code>$$</code> para nomes de arquivos temporários do script (<code>/tmp/relatorio.$$</code>) e <code>$BASHPID</code> quando precisar saber em que processo um trecho está rodando, por exemplo para depurar.</p>
+
+<hr>
+
+<h2><code>exit</code> dentro de <code>( )</code></h2>
+<p>Um <code>exit</code> dentro de um subshell encerra <strong>só o subshell</strong>. O script continua, e o código do <code>exit</code> vira o <code>$?</code> do bloco. Dentro de chaves, o <code>exit</code> encerra o script inteiro.</p>
+
+<pre class="file" data-file="sair.sh">#!/usr/bin/env bash
+( echo "dentro do subshell"; exit 3 )
+echo "o script continua; o subshell saiu com $?"
+{ echo "dentro do grupo"; exit 4; }
+echo "esta linha nunca aparece"
+</pre>
+
+<pre class="term">$ bash sair.sh
+dentro do subshell
+o script continua; o subshell saiu com 3
+dentro do grupo
+$ echo $?
+4                                  « o exit 4 do grupo encerrou o script</pre>
+
+<p>Isso pega muita gente de surpresa com o <code>set -e</code> e com funções de erro: um <code>morrer() { echo "$1" &gt;&amp;2; exit 1; }</code> chamado dentro de <code>$( )</code> ou de um pipe só encerra aquele subshell. Veja <a href="erros.html">Tratar Erros</a>.</p>
+
+<hr>
+
+<h2>Subshell × <code>export</code>: o que é herdado</h2>
+<p>Um subshell é uma <strong>cópia</strong>: ele vê <strong>todas</strong> as variáveis, inclusive as que não foram exportadas, e todas as funções. Já um <strong>programa novo</strong> (outro <code>bash</code>, um script rodado com <code>./script.sh</code> ou <code>bash script.sh</code>, um <code>python</code>…) só recebe as variáveis <strong>exportadas</strong> (o "ambiente").</p>
+
+<pre class="term">$ cor=azul
+$ ( echo "subshell: $cor" )
+subshell: azul                     « a cópia vê tudo
+$ bash -c 'echo "outro bash: $cor"'
+outro bash:                        « um programa novo não vê variáveis comuns
+$ export cor
+$ bash -c 'echo "outro bash: $cor"'
+outro bash: azul                   « exportada, passa para os filhos</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Subshell <code>( )</code>, <code>$( )</code>, pipe, <code>&amp;</code></th><th>Programa novo (<code>bash -c</code>, <code>./script.sh</code>)</th></tr>
+<tr><td>Variáveis comuns</td><td>Vê (cópia)</td><td>Não vê</td></tr>
+<tr><td>Variáveis exportadas</td><td>Vê</td><td>Vê</td></tr>
+<tr><td>Funções</td><td>Vê</td><td>Só com <code>export -f</code></td></tr>
+<tr><td>Aliases, opções (<code>set</code>, <code>shopt</code>)</td><td>Vê</td><td>Não (começa do zero)</td></tr>
+<tr><td>Mudanças voltam para quem chamou?</td><td>Não</td><td>Não</td></tr>
+</table>
+</div>
+
+<p>A última linha é a regra de ouro: <strong>nenhum filho muda o pai</strong>. Nem o <code>export</code> faz uma variável "voltar"; ele só faz a variável <strong>ir</strong> para os filhos. Mais sobre isso em <a href="variaveis.html">Variáveis, Escopo e export</a>. É também por isso que um script com <code>cd</code> não muda a pasta do seu terminal (a menos que você o rode com <code>source</code>, veja <a href="executar.html">Formas de Executar</a>).</p>
+
+<hr>
+
+<h2>O custo dos subshells em laços</h2>
+<p>Criar um subshell é rápido, mas não é de graça: o sistema precisa copiar o processo. Uma vez, não se nota. Mil vezes num laço, já aparece:</p>
+
+<pre class="file" data-file="custo.sh">#!/usr/bin/env bash
+TIMEFORMAT="%R s"
+echo "1000 vezes com \$( ):"
+time for i in {1..1000}; do x=$(echo "$i"); done
+echo "1000 vezes sem subshell:"
+time for i in {1..1000}; do x=$i; done
+echo "1000 vezes com printf -v:"
+time for i in {1..1000}; do printf -v x "%s" "$i"; done
+</pre>
+
+<pre class="term">$ bash custo.sh
+1000 vezes com $( ):
+0,638 s                            « um subshell por volta
+1000 vezes sem subshell:
+0,002 s
+1000 vezes com printf -v:
+0,007 s</pre>
+
+<p>A mesma tarefa ficou umas 300 vezes mais lenta só por causa do <code>$( )</code>. Em laços grandes, prefira o que roda no próprio shell:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Em vez de (cria subshell/processo)</th><th>Prefira (no próprio shell)</th></tr>
+<tr><td><code>x=$(echo "$i")</code></td><td><code>x=$i</code></td></tr>
+<tr><td><code>x=$(printf '%03d' "$i")</code></td><td><code>printf -v x '%03d' "$i"</code> (veja <a href="printf.html">printf</a>)</td></tr>
+<tr><td><code>n=$(expr $n + 1)</code></td><td><code>(( n++ ))</code></td></tr>
+<tr><td><code>base=$(basename "$f")</code></td><td><code>base=${f##*/}</code> (<a href="expansao-parametros.html">expansão de parâmetros</a>)</td></tr>
+<tr><td><code>cat arquivo | while read …</code></td><td><code>while read …; done &lt; arquivo</code></td></tr>
+</table>
+</div>
+
+<p>Fora de laços, não se preocupe: clareza vale mais do que milissegundos.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>A variável "voltou" ao valor antigo depois do laço (não apareceu erro nenhum)</strong>
+<pre class="term">$ printf "%s\n" 10 20 30 | while read n; do total=$((total + n)); done
+$ echo "total: $total"
+total: 0</pre>
+<p><strong>O que aconteceu:</strong> o laço estava depois de um <code>|</code> e rodou num subshell.</p>
+<p><strong>Como confirmar:</strong> coloque <code>echo "$BASH_SUBSHELL"</code> dentro do laço: se mostrar 1 ou mais, é subshell.</p>
+<p><strong>Como resolver:</strong> <code>done &lt; &lt;(comando)</code>, <code>done &lt; arquivo</code> ou, em script, <code>shopt -s lastpipe</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"{echo: comando não encontrado"</strong>
+<pre class="term">$ {echo oi; }
+bash: {echo: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> faltou o espaço depois de <code>{</code>. <strong>Como resolver:</strong> <code>{ echo oi; }</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O Bash mostra <code>&gt;</code> e fica esperando</strong>
+<pre class="term">$ { echo oi }
+&gt;</pre>
+<p><strong>O que aconteceu:</strong> faltou o <code>;</code> antes do <code>}</code>; o <code>}</code> virou argumento do <code>echo</code> e o grupo não fechou. <strong>Como resolver:</strong> <code>Ctrl+C</code> e <code>{ echo oi; }</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O script fez <code>cd</code>, mas o terminal continua na mesma pasta</strong>
+<p><strong>O que aconteceu:</strong> o script roda num processo filho, e nenhum filho muda o pai. O mesmo vale para variáveis que o script cria.</p>
+<p><strong>Como resolver:</strong> se a ideia é mudar o terminal atual, rode com <code>source script.sh</code> (ou <code>. script.sh</code>), ou transforme o trecho numa <a href="funcoes.html">função</a> no seu <code>~/.bashrc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>exit</code> não encerrou o script</strong>
+<p><strong>O que aconteceu:</strong> o <code>exit</code> estava dentro de <code>( )</code>, de <code>$( )</code> ou de um pipe, e encerrou só o subshell.</p>
+<p><strong>Como resolver:</strong> confira o código depois do bloco: <code>( … ) || exit 1</code>, ou troque os parênteses por chaves quando não precisar isolar nada.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>( cmd1; cmd2 )</code></td><td>Roda num subshell; mudanças não voltam</td></tr>
+<tr><td><code>{ cmd1; cmd2; }</code></td><td>Agrupa no shell atual; espaço depois de <code>{</code> e <code>;</code> antes de <code>}</code></td></tr>
+<tr><td><code>$$</code></td><td>PID do shell principal (igual nos subshells)</td></tr>
+<tr><td><code>$BASHPID</code></td><td>PID do processo Bash atual (muda nos subshells)</td></tr>
+<tr><td><code>$BASH_SUBSHELL</code></td><td>Nível de subshell (0 = principal)</td></tr>
+<tr><td><code>done &lt; &lt;(cmd)</code></td><td>Laço no shell atual lendo a saída de um comando</td></tr>
+<tr><td><code>shopt -s lastpipe</code></td><td>Última parte do pipe no shell atual (só sem controle de jobs)</td></tr>
+<tr><td><code>export var</code> / <code>export -f func</code></td><td>Passa a variável / a função para programas filhos</td></tr>
+<tr><td><code>printf -v var …</code></td><td>Guarda o resultado sem <code>$( )</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Sem sair daqui</h3>
+<p>Complete para listar <code>/etc</code> entrando nela, mas sem mudar a pasta do seu terminal:</p>
+<div class="ex-code"><input data-answer="(" aria-label="abre" style="width:2em">cd /etc &amp;&amp; ls<input data-answer=")" aria-label="fecha" style="width:2em"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Grupo correto</h3>
+<p>Complete o grupo de chaves que manda as duas saídas para o mesmo arquivo:</p>
+<div class="ex-code">{ date; uptime<input data-answer=";" aria-label="pontuação" style="width:2em"> } &gt; status.txt</div>
+</div>
+
+<div class="exercise">
+<h3>3. O PID de verdade</h3>
+<p>Qual variável mostra o PID do processo Bash atual, mesmo dentro de um subshell?</p>
+<div class="ex-code"><input data-answer="$BASHPID|BASHPID|${BASHPID}" aria-label="variável"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Depois de <code>n=0; seq 5 | while read x; do n=$x; done; echo $n</code> no terminal, o que aparece?</p>
+<label><input type="radio" name="q4"> 5</label>
+<label><input type="radio" name="q4"> 15</label>
+<label><input type="radio" name="q4"> 0</label>
+<label><input type="radio" name="q4"> Uma mensagem de erro.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Qual destes <strong>não</strong> cria um subshell?</p>
+<label><input type="radio" name="q5"> <code>x=$(date)</code></label>
+<label><input type="radio" name="q5"> <code>{ cd /tmp; ls; }</code></label>
+<label><input type="radio" name="q5"> <code>ls | wc -l</code></label>
+<label><input type="radio" name="q5"> <code>sleep 10 &amp;</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. A variável <code>cor=azul</code> não foi exportada. Onde ela aparece?</p>
+<label><input type="radio" name="q6"> Só em <code>bash -c 'echo $cor'</code>.</label>
+<label><input type="radio" name="q6"> Em nenhum lugar fora do shell atual.</label>
+<label><input type="radio" name="q6"> Em <code>( echo $cor )</code> e em <code>bash -c 'echo $cor'</code>.</label>
+<label><input type="radio" name="q6"> Em <code>( echo $cor )</code>, mas não em <code>bash -c 'echo $cor'</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>( )</code> roda numa cópia do shell: <code>cd</code>, variáveis e <code>exit</code> ficam lá dentro. <code>{ ; }</code> agrupa no shell atual.</li>
+  <li>Pipes, <code>$( )</code>, <code>&amp;</code> e <code>&lt;( )</code> também criam subshells.</li>
+  <li><code>cmd | while read</code> perde as variáveis; use <code>done &lt; &lt;(cmd)</code>, <code>done &lt; arquivo</code> ou <code>lastpipe</code> em scripts.</li>
+  <li><code>$$</code> é o shell principal; <code>$BASHPID</code> é o processo atual; <code>BASH_SUBSHELL</code> conta os níveis.</li>
+  <li>Subshells veem tudo; programas novos só o que foi exportado. Nenhum filho muda o pai.</li>
+  <li>Em laços grandes, evite <code>$( )</code>: <code>printf -v</code>, <code>(( ))</code> e <code>${ }</code> rodam no próprio shell.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
