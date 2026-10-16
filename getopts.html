@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash getopts — opções -v -o arquivo -h no seu script | Guia Bash</title>
+<meta name="description" content="Aprenda a aceitar opções como -v, -o arquivo e -h em scripts Bash com getopts: OPTARG, OPTIND, shift $((OPTIND-1)), modo silencioso, mensagem de uso, opções combinadas, opções longas com while/case e o getopt do GNU.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">getopts</span></h1>
+
+<p class="intro">Os comandos de verdade aceitam <strong>opções</strong>: <code>ls -l</code>, <code>grep -i -n</code>, <code>sort -o saida.txt</code>. O comando interno <code>getopts</code> (<em>get options</em>, "pegar as opções") faz o seu script entender opções do mesmo jeito, inclusive as combinadas (<code>-vo arquivo</code>), com mensagens de erro prontas. Nesta aula, o script <code>contar.sh</code> da Ana vai ganhar <code>-v</code>, <code>-o ARQUIVO</code> e <code>-h</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A ler opções com <code>while getopts "vo:h" opcao</code> e <code>case</code>.</li>
+  <li>O que são <code>OPTARG</code> e <code>OPTIND</code>, e por que todo script faz <code>shift $((OPTIND - 1))</code>.</li>
+  <li>A tratar erros você mesmo com o <code>:</code> no começo (modo silencioso).</li>
+  <li>A aceitar opções longas (<code>--verbose</code>) com <code>while</code>/<code>case</code> manual ou com o <code>getopt</code> do GNU.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Opções e argumentos</h2>
+<p>Em <a href="argumentos.html">Argumentos</a>, você viu <code>$1</code>, <code>$2</code>, <code>$@</code>. Opções são argumentos especiais, que começam com <code>-</code> e mudam o comportamento do comando. Repare nos três tipos, num só comando:</p>
+
+<pre class="syntax">contar.sh  -v  -o total.txt  frutas.txt notas.txt
+           ──  ────────────  ────────────────────
+           │   │             └ operandos: os arquivos a processar
+           │   └ opção COM valor: -o precisa de um nome de arquivo
+           └ opção SEM valor: só liga algo (um "interruptor")</pre>
+
+<p>A convenção (do padrão POSIX) é: as opções vêm primeiro, cada uma é uma letra depois de <code>-</code>, as que não têm valor podem ser juntadas (<code>-vn</code> = <code>-v -n</code>) e <code>--</code> marca o fim das opções. Fazer tudo isso à mão, com <code>$1</code> e <code>shift</code>, dá trabalho. O <code>getopts</code> faz por você.</p>
+
+<hr>
+
+<h2>A forma básica: <code>while getopts</code></h2>
+<pre class="syntax">while getopts "LETRAS" variavel; do
+  case $variavel in
+    …
+  esac
+done</pre>
+
+<p>Cada vez que roda, o <code>getopts</code> lê <strong>uma</strong> opção, guarda a letra na variável e devolve 0. Quando acabam as opções, devolve 1 e o <code>while</code> termina. Para entender o que acontece por dentro, a Ana fez um script que só mostra o que o <code>getopts</code> encontrou em cada volta:</p>
+
+<pre class="file" data-file="mostra.sh">#!/usr/bin/env bash
+while getopts "vo:h" opcao; do
+  echo "opcao=[$opcao]  OPTARG=[${OPTARG:-}]  OPTIND=$OPTIND"
+done
+echo "fim do laço: OPTIND=$OPTIND"
+shift $((OPTIND - 1))
+echo "sobrou: $*"
+</pre>
+
+<dl class="anatomy">
+  <dt>getopts</dt><dd>Comando interno do Bash (e do POSIX). Não confundir com <code>getopt</code>, sem "s", um programa externo que você verá no fim.</dd>
+  <dt>"vo:h"</dt><dd>A lista de opções aceitas: <code>v</code>, <code>o</code> e <code>h</code>. Os <strong>dois-pontos depois de uma letra</strong> dizem que ela precisa de um valor: <code>o:</code> quer dizer "<code>-o</code> vem com um argumento".</dd>
+  <dt>opcao</dt><dd>A variável que recebe a letra encontrada (sem o <code>-</code>), ou <code>?</code> se houve erro.</dd>
+  <dt>OPTARG</dt><dd>O valor da opção, quando ela tem um (o <code>total.txt</code> de <code>-o total.txt</code>).</dd>
+  <dt>OPTIND</dt><dd>O índice (<em>option index</em>) do <strong>próximo</strong> argumento a ser lido. Começa em 1.</dd>
+</dl>
+
+<pre class="term">$ bash mostra.sh -v -o total.txt frutas.txt Documentos/notas.txt
+opcao=[v]  OPTARG=[]  OPTIND=2                 « leu $1 (-v); o próximo é o $2
+opcao=[o]  OPTARG=[total.txt]  OPTIND=4        « leu -o e o valor dele ($2 e $3); o próximo é o $4
+fim do laço: OPTIND=4                          « $4 (frutas.txt) não começa com -: acabaram as opções
+sobrou: frutas.txt Documentos/notas.txt        « depois do shift, só os arquivos</pre>
+
+<p>Leia volta por volta. Na primeira, o <code>getopts</code> achou <code>-v</code>. Na segunda, achou <code>-o</code> e, como a lista diz <code>o:</code>, pegou também a palavra seguinte como valor, em <code>OPTARG</code>. Na terceira, encontrou <code>frutas.txt</code>, que não começa com <code>-</code>, e parou.</p>
+
+<h3>O <code>shift $((OPTIND - 1))</code></h3>
+<p>Depois do laço, os argumentos ainda estão todos lá: <code>$1</code> continua sendo <code>-v</code>. O <code>OPTIND</code> diz onde começam os operandos (no exemplo, no 4º). O <a href="argumentos.html"><code>shift</code></a> descarta os <code>OPTIND - 1</code> primeiros (3), e então <code>$1</code> passa a ser <code>frutas.txt</code> e <code>"$@"</code> tem só os arquivos.</p>
+
+<dl class="anatomy">
+  <dt>$((OPTIND - 1))</dt><dd><a href="aritmetica.html">Conta</a>: quantos argumentos eram opções (4 − 1 = 3).</dd>
+  <dt>shift N</dt><dd>Remove os N primeiros argumentos e "puxa" os outros para a frente.</dd>
+</dl>
+
+<hr>
+
+<h2>O script completo: <code>contar.sh</code></h2>
+<pre class="file" data-file="contar.sh">#!/usr/bin/env bash
+# contar.sh — conta as linhas de arquivos
+verbose=0
+saida=""
+
+uso() {
+  echo "Uso: ${0##*/} [-v] [-o ARQUIVO] [-h] ARQUIVO..."
+}
+
+while getopts "vo:h" opcao; do
+  case $opcao in
+    v) verbose=1 ;;
+    o) saida=$OPTARG ;;
+    h) uso; exit 0 ;;
+    *) uso &gt;&amp;2; exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+if (( verbose )); then
+  echo "verbose ligado; saída: ${saida:-tela}; arquivos: $*" &gt;&amp;2
+fi
+if [[ -n $saida ]]; then
+  wc -l -- "$@" &gt; "$saida"
+else
+  wc -l -- "$@"
+fi
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>verbose=0</code>, <code>saida=""</code></td><td>Os valores padrão, para quando a opção não vier.</td></tr>
+<tr><td><code>uso()</code></td><td>A mensagem de uso. Por convenção: <code>[ ]</code> = opcional, <code>MAIÚSCULAS</code> = um valor seu, <code>...</code> = pode repetir.</td></tr>
+<tr><td><code>v) verbose=1 ;;</code></td><td>Opção sem valor: liga o "interruptor".</td></tr>
+<tr><td><code>o) saida=$OPTARG ;;</code></td><td>Opção com valor: guarda o que veio em <code>OPTARG</code>.</td></tr>
+<tr><td><code>h) uso; exit 0 ;;</code></td><td>Ajuda pedida de propósito: mostra na saída normal e sai com sucesso.</td></tr>
+<tr><td><code>*) uso &gt;&amp;2; exit 2 ;;</code></td><td>Qualquer erro (<code>opcao</code> vale <code>?</code>): uso na saída de erro e código 2, "uso errado" (<a href="erros.html">Tratar Erros</a>).</td></tr>
+<tr><td><code>shift $((OPTIND - 1))</code></td><td>Deixa em <code>"$@"</code> só os arquivos.</td></tr>
+<tr><td><code>wc -l -- "$@"</code></td><td>O <code>--</code> garante que um arquivo chamado <code>-x</code> não vire opção do <code>wc</code>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash contar.sh frutas.txt Documentos/notas.txt
+  7 frutas.txt
+  4 Documentos/notas.txt
+ 11 total
+$ bash contar.sh -v -o total.txt frutas.txt Documentos/notas.txt
+verbose ligado; saída: total.txt; arquivos: frutas.txt Documentos/notas.txt
+$ cat total.txt
+  7 frutas.txt
+  4 Documentos/notas.txt
+ 11 total
+$ bash contar.sh -h
+Uso: contar.sh [-v] [-o ARQUIVO] [-h] ARQUIVO...
+$ echo $?
+0</pre>
+
+<p>Sem opções, o resultado vai para a tela. Com <code>-v -o total.txt</code>, o script avisa (na saída de erro) e grava no arquivo. Com <code>-h</code>, mostra o uso e devolve 0.</p>
+
+<h3>Os erros que o <code>getopts</code> já trata</h3>
+<pre class="term">$ bash contar.sh -x frutas.txt
+contar.sh: opção ilegal -- x                   « mensagem do próprio getopts
+Uso: contar.sh [-v] [-o ARQUIVO] [-h] ARQUIVO...
+$ echo $?
+2
+$ bash contar.sh -o
+contar.sh: a opção requer um argumento: -- o   « -o sem o nome do arquivo
+Uso: contar.sh [-v] [-o ARQUIVO] [-h] ARQUIVO...
+$ echo $?
+2</pre>
+
+<p>Nos dois casos, o <code>getopts</code> mostrou uma mensagem (em português, porque o sistema está em <code>pt_BR</code>), pôs <code>?</code> em <code>opcao</code>, e o nosso <code>*)</code> mostrou o uso e saiu com 2.</p>
+
+<hr>
+
+<h2>Opções juntas e valores grudados</h2>
+<p>Como nos comandos do sistema, o usuário pode juntar opções e grudar o valor na letra. O <code>getopts</code> entende tudo isso sem você escrever nada a mais:</p>
+
+<pre class="term">$ bash mostra.sh -vo total.txt frutas.txt
+opcao=[v]  OPTARG=[]  OPTIND=1                 « ainda no $1: falta ler o "o" de "-vo"
+opcao=[o]  OPTARG=[total.txt]  OPTIND=3
+fim do laço: OPTIND=3
+sobrou: frutas.txt
+$ bash mostra.sh -vototal.txt frutas.txt
+opcao=[v]  OPTARG=[]  OPTIND=1
+opcao=[o]  OPTARG=[total.txt]  OPTIND=2        « o resto da palavra virou o valor de -o
+fim do laço: OPTIND=2
+sobrou: frutas.txt</pre>
+
+<p>Repare no <code>OPTIND=1</code> depois do <code>v</code>: o <code>getopts</code> ainda não terminou a palavra <code>-vo</code>. No segundo caso, tudo o que vem depois de <code>o</code> na mesma palavra (<code>total.txt</code>) é o valor. Uma opção com valor precisa ser a <strong>última</strong> de um grupo: em <code>-ov total.txt</code>, o valor de <code>-o</code> seria <code>v</code>.</p>
+
+<h3>Onde o <code>getopts</code> para</h3>
+<pre class="term">$ bash mostra.sh frutas.txt -v
+fim do laço: OPTIND=1                          « o primeiro argumento já não é opção
+sobrou: frutas.txt -v                          « o -v depois do arquivo NÃO foi lido
+$ bash mostra.sh -v -- -arquivo-estranho.txt
+opcao=[v]  OPTARG=[]  OPTIND=2
+fim do laço: OPTIND=3                          « o -- foi consumido
+sobrou: -arquivo-estranho.txt                  « e o que vem depois é operando, mesmo com -</pre>
+
+<p>O <code>getopts</code> segue o padrão POSIX: ele para no primeiro argumento que não é opção. Opções depois dos arquivos ficam como operandos. Se você quer aceitar opções em qualquer posição, use a forma manual ou o <code>getopt</code>, mais abaixo.</p>
+
+<div class="tryscript" data-file="saudar.sh" data-args="-m -n Bruno" data-goal="src:getopts &quot;[a-z:]*n:,out:Bom dia\, BRUNO!">
+<p class="try-task"><strong>Missão:</strong> o script já entende <code>-m</code> (maiúsculas) e <code>-h</code>. Rode e veja o erro com <code>-n</code>. Acrescente a opção <code>-n NOME</code>, que troca o nome da saudação: mude a lista do <code>getopts</code> e crie o caso <code>n)</code> com <code>$OPTARG</code>. Com os argumentos <code>-m -n Bruno</code>, a saída deve ser <code>Bom dia, BRUNO!</code>. Depois teste <code>-mnBruno</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+nome=mundo
+maiusculas=0
+while getopts "mh" opcao; do
+  case $opcao in
+    m) maiusculas=1 ;;
+    h) echo "Uso: ${0##*/} [-m] [-n NOME]"; exit 0 ;;
+    *) exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
+if (( maiusculas )); then
+  nome=${nome^^}
+fi
+echo "Bom dia, $nome!"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+nome=mundo
+maiusculas=0
+while getopts "mn:h" opcao; do
+  case $opcao in
+    m) maiusculas=1 ;;
+    n) nome=$OPTARG ;;
+    h) echo "Uso: ${0##*/} [-m] [-n NOME]"; exit 0 ;;
+    *) exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
+if (( maiusculas )); then
+  nome=${nome^^}
+fi
+echo "Bom dia, $nome!"
+</pre>
+</div>
+
+<hr>
+
+<h2>Modo silencioso: o <code>:</code> no começo</h2>
+<p>As mensagens prontas do <code>getopts</code> são boas, mas são dele. Se a lista de opções <strong>começar com <code>:</code></strong>, ele fica calado e informa o erro pela variável, para você escrever a mensagem que quiser:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Modo normal (<code>"vo:h"</code>)</th><th>Modo silencioso (<code>":vo:h"</code>)</th></tr>
+<tr><td>Opção desconhecida (<code>-x</code>)</td><td>Mostra "opção ilegal"; <code>opcao=?</code></td><td>Calado; <code>opcao=?</code> e <code>OPTARG=x</code></td></tr>
+<tr><td>Falta o valor (<code>-o</code> no fim)</td><td>Mostra "requer um argumento"; <code>opcao=?</code></td><td>Calado; <code>opcao=:</code> e <code>OPTARG=o</code></td></tr>
+</table>
+</div>
+
+<pre class="file" data-file="silencioso.sh">#!/usr/bin/env bash
+while getopts ":vo:h" opcao; do
+  case $opcao in
+    v) echo "verbose" ;;
+    o) echo "saída: $OPTARG" ;;
+    h) echo "ajuda" ;;
+    :) echo "${0##*/}: a opção -$OPTARG precisa de um valor" &gt;&amp;2; exit 2 ;;
+    \?) echo "${0##*/}: opção desconhecida: -$OPTARG" &gt;&amp;2; exit 2 ;;
+  esac
+done
+</pre>
+
+<dl class="anatomy">
+  <dt>":vo:h"</dt><dd>O <code>:</code> inicial liga o modo silencioso. O resto é igual.</dd>
+  <dt>:)</dt><dd>Caso "faltou o valor". <code>OPTARG</code> tem a letra da opção.</dd>
+  <dt>\?)</dt><dd>Caso "opção desconhecida". A barra é necessária: no <code>case</code>, <code>?</code> sozinho é um curinga que casa com <strong>qualquer</strong> caractere. Também vale <code>'?')</code>.</dd>
+</dl>
+
+<pre class="term">$ bash silencioso.sh -x
+silencioso.sh: opção desconhecida: -x
+$ bash silencioso.sh -o
+silencioso.sh: a opção -o precisa de um valor
+$ bash silencioso.sh -v -o a.txt
+verbose
+saída: a.txt</pre>
+
+<hr>
+
+<h2>Opções longas (<code>--verbose</code>): à mão com <code>while</code>/<code>case</code></h2>
+<p>O <code>getopts</code> só entende opções de <strong>uma letra</strong>. Para <code>--verbose</code> e <code>--output=arquivo</code>, a forma mais comum (e portável) é ler os argumentos você mesmo, um por um:</p>
+
+<pre class="file" data-file="contar2.sh">#!/usr/bin/env bash
+# contar2.sh — opções curtas e longas, à mão
+verbose=0
+saida=""
+arquivos=()
+
+uso() {
+  echo "Uso: ${0##*/} [-v|--verbose] [-o|--output ARQUIVO] [-h|--help] ARQUIVO..."
+}
+
+while (( $# &gt; 0 )); do
+  case $1 in
+    -v|--verbose) verbose=1; shift ;;
+    -o|--output)
+      if [[ $# -lt 2 ]]; then
+        echo "${0##*/}: $1 precisa de um valor" &gt;&amp;2; exit 2
+      fi
+      saida=$2; shift 2 ;;
+    --output=*) saida=${1#*=}; shift ;;
+    -h|--help) uso; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "${0##*/}: opção desconhecida: $1" &gt;&amp;2; uso &gt;&amp;2; exit 2 ;;
+    *) arquivos+=("$1"); shift ;;
+  esac
+done
+arquivos+=("$@")
+
+echo "verbose=$verbose saida=[${saida}] arquivos=${arquivos[*]}"
+</pre>
+
+<dl class="anatomy">
+  <dt>while (( $# &gt; 0 ))</dt><dd>Enquanto houver argumentos.</dd>
+  <dt>-v|--verbose)</dt><dd>O <code>|</code> no <a href="case.html"><code>case</code></a> aceita as duas grafias.</dd>
+  <dt>saida=$2; shift 2</dt><dd>O valor é o argumento seguinte; descartamos os dois.</dd>
+  <dt>--output=*)</dt><dd>A forma com <code>=</code>. <code>${1#*=}</code> apaga tudo até o primeiro <code>=</code> e sobra o valor.</dd>
+  <dt>--)</dt><dd>Fim das opções: o resto vai inteiro para os arquivos.</dd>
+  <dt>-*)</dt><dd>Qualquer outra coisa com <code>-</code> é erro. Fica <strong>depois</strong> dos casos conhecidos, porque o <code>case</code> usa o primeiro que casar.</dd>
+  <dt>*) arquivos+=("$1")</dt><dd>Não é opção: guarda num <a href="arrays.html">array</a>. Assim, opções e arquivos podem vir em qualquer ordem.</dd>
+</dl>
+
+<pre class="term">$ bash contar2.sh --verbose --output total.txt frutas.txt
+verbose=1 saida=[total.txt] arquivos=frutas.txt
+$ bash contar2.sh frutas.txt --output=total.txt -v
+verbose=1 saida=[total.txt] arquivos=frutas.txt      « opções depois do arquivo também valem
+$ bash contar2.sh --output
+contar2.sh: --output precisa de um valor
+$ bash contar2.sh -vo total.txt frutas.txt
+contar2.sh: opção desconhecida: -vo                   « a forma manual não separa opções juntas
+Uso: contar2.sh [-v|--verbose] [-o|--output ARQUIVO] [-h|--help] ARQUIVO...</pre>
+
+<p>O preço da forma manual aparece na última sessão: <code>-vo</code> não é entendido. Dá para tratar, mas complica. Se você precisa de opções longas <strong>e</strong> combinadas, use o <code>getopt</code>.</p>
+
+<hr>
+
+<h2>O <code>getopt</code> do GNU (externo)</h2>
+<p><code>getopt</code>, sem "s", é um <strong>programa</strong> (do pacote <code>util-linux</code>, presente em praticamente todo Linux). Ele não lê as opções para você: ele <strong>reorganiza</strong> os argumentos numa forma padrão, fácil de ler com <code>while</code>/<code>case</code>. Veja o que ele faz com uma linha bagunçada:</p>
+
+<pre class="term">$ getopt -o vo:h --long verbose,output:,help -- -vo total.txt frutas.txt --verb
+ -v -o 'total.txt' --verbose -- 'frutas.txt'</pre>
+
+<p>Ele separou <code>-vo</code> em <code>-v -o</code>, pôs aspas no valor, completou a abreviação <code>--verb</code> para <code>--verbose</code> e moveu os arquivos para depois de um <code>--</code>. O script então só precisa ler essa forma organizada:</p>
+
+<pre class="file" data-file="contar3.sh">#!/usr/bin/env bash
+# contar3.sh — opções com o getopt (GNU, util-linux)
+verbose=0
+saida=""
+args=$(getopt -o vo:h --long verbose,output:,help -n "${0##*/}" -- "$@") || exit 2
+eval set -- "$args"
+while true; do
+  case $1 in
+    -v|--verbose) verbose=1; shift ;;
+    -o|--output) saida=$2; shift 2 ;;
+    -h|--help) echo "ajuda"; exit 0 ;;
+    --) shift; break ;;
+  esac
+done
+echo "verbose=$verbose saida=[${saida}] arquivos=$*"
+</pre>
+
+<dl class="anatomy">
+  <dt>-o vo:h</dt><dd>As opções curtas, como no <code>getopts</code>.</dd>
+  <dt>--long verbose,output:,help</dt><dd>As longas, separadas por vírgula; <code>:</code> = precisa de valor.</dd>
+  <dt>-n "${0##*/}"</dt><dd>O nome a usar nas mensagens de erro.</dd>
+  <dt>-- "$@"</dt><dd>Os argumentos do script, para reorganizar.</dd>
+  <dt>|| exit 2</dt><dd>Se houver opção inválida, o <code>getopt</code> já mostrou o erro: só saímos.</dd>
+  <dt>eval set -- "$args"</dt><dd>Troca os argumentos do script pela versão organizada. O <a href="eval-indirecao.html"><code>eval</code></a> é necessário para as aspas que o <code>getopt</code> pôs serem respeitadas.</dd>
+</dl>
+
+<pre class="term">$ bash contar3.sh -vo total.txt frutas.txt
+verbose=1 saida=[total.txt] arquivos=frutas.txt
+$ bash contar3.sh frutas.txt --output=total.txt --verb
+verbose=1 saida=[total.txt] arquivos=frutas.txt
+$ bash contar3.sh --cores
+contar3.sh: opção não reconhecida “--cores”
+$ echo $?
+2</pre>
+
+<div class="warning">
+<strong>No macOS, o <code>getopt</code> é outro</strong>
+<p>O <code>getopt</code> do macOS (e dos BSDs) é a versão antiga, que não entende <code>--long</code> e quebra com espaços nos argumentos. No Linux, confira com <code>getopt --version</code> (aqui: <code>getopt de util-linux 2.41.3</code>). Se o script precisa rodar em qualquer sistema, prefira <code>getopts</code> ou a forma manual.</p>
+</div>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>getopts</code></th><th>Manual (<code>while</code>/<code>case</code>)</th><th><code>getopt</code> (GNU)</th></tr>
+<tr><td>O que é</td><td>Comando interno do Bash/POSIX</td><td>Seu próprio código</td><td>Programa externo (util-linux)</td></tr>
+<tr><td>Opções curtas (<code>-v</code>)</td><td>Sim</td><td>Sim</td><td>Sim</td></tr>
+<tr><td>Juntas (<code>-vo x</code>, <code>-ox</code>)</td><td>Sim</td><td>Não (sem código extra)</td><td>Sim</td></tr>
+<tr><td>Longas (<code>--verbose</code>, <code>--output=x</code>)</td><td>Não</td><td>Sim</td><td>Sim, até abreviadas</td></tr>
+<tr><td>Opções depois dos arquivos</td><td>Não</td><td>Sim</td><td>Sim</td></tr>
+<tr><td>Mensagens de erro prontas</td><td>Sim (ou silencioso)</td><td>Você escreve</td><td>Sim</td></tr>
+<tr><td>Funciona em todo lugar</td><td>Sim (inclusive <code>sh</code> e macOS)</td><td>Sim</td><td>Só com o <code>getopt</code> do GNU</td></tr>
+<tr><td><strong>Use quando</strong></td><td>Opções de uma letra bastam. <strong>O padrão.</strong></td><td>Precisa de opções longas e portabilidade.</td><td>Quer o comportamento completo dos comandos GNU, só no Linux.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>As opções foram lidas, mas <code>$1</code> ainda é <code>-v</code></strong>
+<p><strong>O que aconteceu:</strong> faltou o <code>shift $((OPTIND - 1))</code> depois do laço. O <code>getopts</code> não remove nada de <code>$@</code>.</p>
+<p><strong>Como resolver:</strong> acrescente a linha logo depois do <code>done</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Toda opção cai no caso de erro</strong>
+<p><strong>O que aconteceu:</strong> no <code>case</code>, um <code>?)</code> sem barra (curinga de um caractere) veio antes dos outros casos e "engoliu" todas as letras.</p>
+<p><strong>Como resolver:</strong> escreva <code>\?)</code> ou <code>'?')</code>, e deixe-o (e o <code>*)</code>) por último.</p>
+</div>
+
+<div class="cenario">
+<strong>"opção ilegal" para uma opção que existe</strong>
+<p><strong>O que aconteceu:</strong> a letra não está na lista do <code>getopts</code>, ou está escrita diferente (<code>-V</code> maiúsculo ≠ <code>-v</code>).</p>
+<p><strong>Como resolver:</strong> confira a lista entre aspas: cada letra aceita precisa estar lá, com <code>:</code> se tiver valor.</p>
+</div>
+
+<div class="cenario">
+<strong>O valor da opção veio errado (era o nome do arquivo)</strong>
+<p><strong>O que aconteceu:</strong> esqueceu o <code>:</code> depois da letra: com <code>"vo"</code>, o <code>-o</code> é uma opção sem valor, e <code>total.txt</code> vira operando. Ou o contrário: com <code>o:</code>, <code>-o -v</code> faz <code>-v</code> virar o valor de <code>-o</code>.</p>
+<p><strong>Como resolver:</strong> confira os <code>:</code> da lista e teste com o <code>mostra.sh</code> desta aula, que exibe cada volta.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>getopts</code> não leu nada numa função (ou na segunda vez)</strong>
+<p><strong>O que aconteceu:</strong> <code>OPTIND</code> é global e continua com o valor da última leitura.</p>
+<p><strong>Como resolver:</strong> antes de um novo laço, zere com <code>OPTIND=1</code>; dentro de funções, use <code>local OPTIND</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>while getopts "ab:c" op; do … done</code></td><td>Lê <code>-a</code>, <code>-b VALOR</code> e <code>-c</code>, uma por volta.</td></tr>
+<tr><td><code>"b:"</code></td><td>A opção <code>b</code> precisa de um valor.</td></tr>
+<tr><td><code>":ab:c"</code></td><td>Modo silencioso: <code>?</code> = desconhecida, <code>:</code> = faltou valor.</td></tr>
+<tr><td><code>$OPTARG</code></td><td>O valor da opção (ou a letra com erro, no modo silencioso).</td></tr>
+<tr><td><code>$OPTIND</code></td><td>Índice do próximo argumento a ler.</td></tr>
+<tr><td><code>shift $((OPTIND - 1))</code></td><td>Remove as opções de <code>$@</code>.</td></tr>
+<tr><td><code>--</code></td><td>Fim das opções.</td></tr>
+<tr><td><code>getopt -o … --long … -- "$@"</code></td><td>(GNU) Reorganiza curtas e longas; use com <code>eval set --</code>.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A lista de opções</h3>
+<p>O script aceita <code>-q</code> (sem valor), <code>-d PASTA</code> (com valor) e <code>-h</code>. Complete a lista:</p>
+<div class="ex-code">while getopts "<input data-answer="qd:h|qhd:|d:qh|d:hq|hqd:|hd:q" aria-label="lista">" op; do</div>
+</div>
+
+<div class="exercise">
+<h3>2. Depois do laço</h3>
+<p>Complete a linha que deixa em <code>"$@"</code> só os operandos:</p>
+<div class="ex-code">shift <input data-answer="$((OPTIND - 1))|$((OPTIND-1))|$(( OPTIND - 1 ))" aria-label="quantidade"></div>
+</div>
+
+<div class="exercise">
+<h3>3. O valor da opção</h3>
+<p>Complete o caso que guarda o valor de <code>-d</code> na variável <code>pasta</code>:</p>
+<div class="ex-code">d) pasta=<input data-answer="$OPTARG|&quot;$OPTARG&quot;|${OPTARG}" aria-label="variável"> ;;</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Com <code>getopts ":vo:h"</code>, o usuário digitou <code>-o</code> sem valor. O que a variável da opção recebe?</p>
+<label><input type="radio" name="q4"> <code>o</code></label>
+<label><input type="radio" name="q4"> <code>:</code></label>
+<label><input type="radio" name="q4"> <code>?</code></label>
+<label><input type="radio" name="q4"> Nada; o script para.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Qual das formas entende <code>--verbose</code>?</p>
+<label><input type="radio" name="q5"> Só o <code>getopts</code>.</label>
+<label><input type="radio" name="q5"> <code>getopts</code> com <code>"-verbose"</code> na lista.</label>
+<label><input type="radio" name="q5"> Nenhuma: o Bash não aceita opções longas.</label>
+<label><input type="radio" name="q5"> A forma manual com <code>while</code>/<code>case</code> e o <code>getopt</code> do GNU.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. <code>bash mostra.sh frutas.txt -v</code>: o que acontece com o <code>-v</code>?</p>
+<label><input type="radio" name="q6"> Não é lido como opção: o <code>getopts</code> para em <code>frutas.txt</code> e <code>-v</code> fica como operando.</label>
+<label><input type="radio" name="q6"> É lido normalmente.</label>
+<label><input type="radio" name="q6"> Dá "opção ilegal".</label>
+<label><input type="radio" name="q6"> É lido e <code>frutas.txt</code> vira o valor dele.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>while getopts "vo:h" op; do case $op in … esac; done</code> lê uma opção por volta; <code>:</code> depois da letra = opção com valor, em <code>$OPTARG</code>.</li>
+  <li>Depois do laço, <code>shift $((OPTIND - 1))</code> deixa só os operandos em <code>"$@"</code>.</li>
+  <li><code>getopts</code> entende <code>-vo x</code> e <code>-ox</code>, para no primeiro operando e respeita <code>--</code>.</li>
+  <li>Com <code>:</code> no começo da lista, ele fica calado: <code>\?)</code> = opção desconhecida, <code>:)</code> = faltou o valor.</li>
+  <li>Opções longas: <code>while</code>/<code>case</code> manual (portável) ou <code>getopt</code> do GNU (completo, só Linux).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
