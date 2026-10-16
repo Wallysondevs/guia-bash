@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash PATH — onde os comandos moram, type, which, hash e ~/bin | Guia Bash</title>
+<meta name="description" content="Como o Bash encontra um comando (alias, palavra-chave, função, comando interno, PATH), a variável PATH pasta por pasta, type, which, command -v, hash -r, como colocar ~/bin no PATH para sempre e os erros 'comando não encontrado' e 'interpretador incorreto'.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">PATH e Onde os Comandos Moram</span></h1>
+
+<p class="intro">Quando você digita <code>ls</code>, o Bash precisa descobrir <strong>o que</strong> é <code>ls</code> e <strong>onde</strong> ele está. A resposta passa por uma lista de pastas guardada na variável <code>PATH</code> (em inglês, "caminho"). Entender essa busca explica o "comando não encontrado", permite rodar seus próprios scripts pelo nome, de qualquer pasta, e resolve o mistério do comando que "sumiu" depois de mudar de lugar.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A ordem em que o Bash procura um nome: alias, palavra-chave, função, comando interno e, por fim, o <code>PATH</code>.</li>
+  <li>Ler o <code>PATH</code> pasta por pasta, e descobrir onde um comando está (<code>type</code>, <code>which</code>, <code>command -v</code>).</li>
+  <li>O que é a tabela <code>hash</code> e quando usar <code>hash -r</code>.</li>
+  <li>Colocar <code>~/bin</code> ou <code>~/.local/bin</code> no <code>PATH</code>, no começo ou no fim, e deixar isso permanente.</li>
+  <li>Os erros "comando não encontrado", "interpretador incorreto" e "Permissão negada".</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A pergunta que o Bash faz a cada comando</h2>
+<p>Pegue a primeira palavra de um comando, como <code>ls</code> em <code>ls -l</code>. O Bash procura esse nome em vários lugares, sempre na mesma ordem, e usa <strong>o primeiro que encontrar</strong>:</p>
+
+<pre class="syntax">  1. é um ALIAS?               alias ll='ls -alF'          (veja alias.html)
+  2. é uma PALAVRA-CHAVE?      if, for, while, [[ …        (parte da linguagem)
+  3. é uma FUNÇÃO?             saudar() { … }              (veja funcoes.html)
+  4. é um COMANDO INTERNO?     cd, echo, type, read…       (builtin: vem dentro do Bash)
+  5. está na tabela HASH?      lembrança de buscas anteriores
+  6. está numa pasta do PATH?  /usr/local/bin, /usr/bin, …  (programas: arquivos no disco)
+  ─────────────────────────────────────────────────────────────
+  nada disso → "bash: nome: comando não encontrado"   (código 127)</pre>
+
+<p>Os quatro primeiros vivem <strong>dentro</strong> do Bash, na memória. Só o último passo vai ao disco procurar um arquivo. Por isso <code>cd</code> e <code>echo</code> respondem mesmo se o disco estiver com problemas, e por isso uma função chamada <code>ls</code> passaria na frente do programa <code>ls</code>.</p>
+
+<p>Se o nome tiver uma barra (<code>./backup.sh</code>, <code>/usr/bin/ls</code>, <code>~/bin/oi</code>), não há busca nenhuma: o Bash roda exatamente aquele arquivo.</p>
+
+<h3>Perguntando ao Bash: <code>type</code></h3>
+<p>O comando interno <code>type</code> diz em qual dos passos um nome cai, com uma frase para cada caso:</p>
+
+<pre class="term">$ type ls
+ls está apelidada para `ls --color=auto'      « 1. alias
+$ type if
+if é uma palavra-chave do shell                « 2. palavra-chave
+$ saudar() { echo "Olá, $1"; }
+$ type saudar
+saudar é uma função                            « 3. função (e mostra o corpo)
+saudar ()
+{
+    echo "Olá, $1"
+}
+$ type cd
+cd é um comando interno do shell               « 4. builtin
+$ type cp
+cp é /usr/bin/cp                               « 6. um arquivo numa pasta do PATH
+$ type nada
+bash: type: nada: não encontrado
+$ echo $?
+1</pre>
+
+<p>Com <code>-t</code> (de <em>type</em>, tipo), a resposta vem numa palavra só, em inglês, ótima para scripts:</p>
+
+<pre class="term">$ type -t ls cd if saudar cp
+alias
+builtin
+keyword
+function
+file</pre>
+
+<h3>Todos os candidatos: <code>type -a</code></h3>
+<p>Um mesmo nome pode existir em vários passos. O <code>-a</code> (<em>all</em>, todos) lista todos, na ordem da busca. O primeiro é o que roda:</p>
+
+<pre class="term">$ type -a echo
+echo é um comando interno do shell     « este é o que roda
+echo é /usr/bin/echo                   « existe também como programa
+echo é /bin/echo
+$ type -a ls
+ls está apelidada para `ls --color=auto'
+ls é /usr/bin/ls
+ls é /bin/ls</pre>
+
+<p>Por que <code>/usr/bin/ls</code> e <code>/bin/ls</code>? Nos sistemas atuais, <code>/bin</code> é só um atalho (link) para <code>/usr/bin</code>; é o mesmo arquivo, encontrado por duas pastas do <code>PATH</code>.</p>
+
+<p>A ordem vale até para nomes "sagrados". Um alias passa na frente da palavra-chave, e uma função passa na frente do comando interno:</p>
+
+<pre class="term">$ alias if='echo apelido'
+$ type -a if
+if está apelidada para `echo apelido'
+if é uma palavra-chave do shell
+$ unalias if                            « nunca faça isso de verdade :)</pre>
+
+<hr>
+
+<h2>A variável <code>PATH</code>, pasta por pasta</h2>
+<p>O <code>PATH</code> é uma variável comum, com uma lista de pastas separadas por dois-pontos:</p>
+
+<pre class="term">$ echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</pre>
+
+<p>Fica mais fácil de ler com uma pasta por linha. O <code>tr</code> troca cada <code>:</code> por uma quebra de linha:</p>
+
+<pre class="term">$ echo "$PATH" | tr ':' '\n'
+/usr/local/sbin
+/usr/local/bin
+/usr/sbin
+/usr/bin
+/sbin
+/bin</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pasta</th><th>O que mora lá</th></tr>
+<tr><td><code>/usr/local/sbin</code>, <code>/usr/local/bin</code></td><td>Programas instalados à mão pelo administrador (fora do gerenciador de pacotes). Vêm primeiro para poder substituir os do sistema.</td></tr>
+<tr><td><code>/usr/sbin</code>, <code>/sbin</code></td><td>Programas de administração (<em>system binaries</em>), como <code>useradd</code> e <code>fdisk</code>.</td></tr>
+<tr><td><code>/usr/bin</code>, <code>/bin</code></td><td>A maioria dos programas: <code>ls</code>, <code>cp</code>, <code>grep</code>, <code>python3</code>… Hoje, <code>/bin</code> e <code>/sbin</code> são atalhos para as pastas de <code>/usr</code>.</td></tr>
+<tr><td><code>~/bin</code>, <code>~/.local/bin</code></td><td>Seus próprios scripts e programas instalados só para você (por exemplo, com <code>pip install --user</code>). Entram no <code>PATH</code> quando você coloca (veja abaixo).</td></tr>
+<tr><td><code>/snap/bin</code>, <code>/usr/games</code>, <code>/opt/…/bin</code></td><td>Aparecem em algumas distros, conforme o que está instalado.</td></tr>
+</table>
+</div>
+
+<p>A busca vai da <strong>esquerda para a direita</strong> e para no primeiro arquivo executável com aquele nome. Se dois programas têm o mesmo nome, ganha o da pasta que aparece antes. Guarde isso: é o segredo de "no começo × no fim".</p>
+
+<h3>Onde está o programa? <code>which</code>, <code>command -v</code>, <code>type -P</code></h3>
+<p>Três comandos respondem "onde está", cada um com um jeito:</p>
+
+<pre class="term">$ which ls
+/usr/bin/ls                      « só olha o PATH: ignora o alias
+$ command -v ls
+alias ls='ls --color=auto'       « diz o que vai rodar de fato
+$ command -v cp
+/usr/bin/cp
+$ command -v cd
+cd                               « comando interno: só o nome
+$ type -P ls
+/usr/bin/ls                      « -P: só o PATH, como o which
+$ type -P cd
+$ echo $?
+1                                « cd não é um arquivo do PATH</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que é</th><th>Mostra alias/função/builtin?</th><th>Qual usar?</th></tr>
+<tr><td><code>type nome</code></td><td>Comando interno do Bash</td><td>Sim, com uma frase</td><td>Para entender, no terminal.</td></tr>
+<tr><td><code>type -a nome</code></td><td>Comando interno</td><td>Sim, todos os candidatos</td><td>Para descobrir "por que roda o errado".</td></tr>
+<tr><td><code>command -v nome</code></td><td>Comando interno (padrão POSIX)</td><td>Sim, de forma curta</td><td><strong>Em scripts</strong>, para testar se algo existe: <code>if command -v git &gt;/dev/null; then …</code></td></tr>
+<tr><td><code>type -P nome</code></td><td>Comando interno</td><td>Não, só o arquivo do <code>PATH</code></td><td>Quando você quer o caminho do programa, nunca o alias.</td></tr>
+<tr><td><code>which nome</code></td><td>Programa externo</td><td>Não (e muda de distro para distro)</td><td>Funciona, mas não sabe dos aliases e funções do seu shell. Prefira os outros.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Rodar o seu script pelo nome</h2>
+<p>A Ana escreveu um script e quer chamá-lo como se fosse um comando qualquer, de qualquer pasta. Ela cria a pasta <code>~/bin</code> e o arquivo:</p>
+
+<pre class="term">$ mkdir -p ~/bin
+$ printf '#!/usr/bin/env bash\necho "Bom dia, $USER!"\n' &gt; ~/bin/bomdia
+$ cat ~/bin/bomdia
+#!/usr/bin/env bash
+echo "Bom dia, $USER!"
+$ bomdia
+bash: bomdia: comando não encontrado
+$ echo $?
+127</pre>
+
+<p>Faltam duas coisas. Primeiro, o arquivo precisa da permissão de execução (veja <a href="executar.html">formas de executar</a>). Com o caminho completo, já dá para rodar:</p>
+
+<pre class="term">$ chmod +x ~/bin/bomdia
+$ ~/bin/bomdia
+Bom dia, ana!</pre>
+
+<p>Segundo, para rodar <strong>só pelo nome</strong>, a pasta precisa estar no <code>PATH</code>. Acrescentamos <code>~/bin</code> no começo da lista:</p>
+
+<dl class="anatomy">
+  <dt>PATH=</dt><dd>Vamos dar um valor novo ao <code>PATH</code>…</dd>
+  <dt>"$HOME/bin</dt><dd>…que começa com a pasta nova (use <code>$HOME</code>; o <code>~</code> dentro de aspas não é expandido)…</dd>
+  <dt>:</dt><dd>…o separador…</dd>
+  <dt>$PATH"</dt><dd>…e depois tudo o que já estava lá. Sem isso, você <strong>apagaria</strong> a lista antiga!</dd>
+</dl>
+
+<pre class="term">$ PATH="$HOME/bin:$PATH"
+$ echo $PATH
+/home/ana/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+$ bomdia
+Bom dia, ana!</pre>
+
+<p>O <code>PATH</code> já é uma variável exportada, então não precisa de <code>export</code>: os programas e scripts chamados a partir deste shell também recebem a lista nova. Mas a mudança vale só para este terminal; tornar permanente está mais abaixo.</p>
+
+<div class="try" data-setup="mkdir bin;;printf '#!/usr/bin/env bash\necho &quot;Oi da Ana&quot;\n' &gt; bin/oi" data-goal="exec:~/bin/oi,ran:^\s*oi\s*$,out:Oi da Ana" data-solucao="chmod +x ~/bin/oi;;PATH=&quot;$HOME/bin:$PATH&quot;;;oi">
+<p class="try-task"><strong>Missão:</strong> já existe o script <code>~/bin/oi</code>, mas <code>oi</code> dá "comando não encontrado". Dê permissão de execução a ele, coloque <code>~/bin</code> no começo do <code>PATH</code> (sem perder o resto!) e rode digitando só <code>oi</code>.</p>
+</div>
+
+<h3>No começo ou no fim?</h3>
+<p>Como a busca para no primeiro que encontra, a posição decide quem ganha quando há nomes repetidos. Para ver, a Ana cria um script com o mesmo nome de um programa do sistema, <code>date</code>:</p>
+
+<pre class="term">$ printf '#!/usr/bin/env bash\necho "o date da Ana"\n' &gt; ~/bin/date
+$ chmod +x ~/bin/date
+$ PATH="$PATH:$HOME/bin"              « ~/bin no FIM
+$ date +%Y
+2026                                  « ganhou o /usr/bin/date
+$ type -a date
+date é /usr/bin/date
+date é /bin/date
+date é /home/ana/bin/date</pre>
+
+<p>Num terminal novo, com <code>~/bin</code> no <strong>começo</strong>:</p>
+
+<pre class="term">$ PATH="$HOME/bin:$PATH"              « ~/bin no COMEÇO
+$ date +%Y
+o date da Ana                         « ganhou o script dela
+$ type -a date
+date é /home/ana/bin/date
+date é /usr/bin/date
+date é /bin/date
+$ /usr/bin/date +%Y
+2026                                  « o caminho completo sempre acha o original</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Posição</th><th>Vantagem</th><th>Risco</th></tr>
+<tr><td>No começo: <code>PATH="$HOME/bin:$PATH"</code></td><td>Você pode substituir um programa do sistema por uma versão sua (é o padrão do <code>.profile</code> do Debian/Ubuntu).</td><td>Um script seu com nome repetido (<code>test</code>, <code>date</code>) "esconde" o original sem você perceber.</td></tr>
+<tr><td>No fim: <code>PATH="$PATH:$HOME/bin"</code></td><td>Os programas do sistema sempre ganham; mais seguro.</td><td>Seu script com nome repetido nunca roda pelo nome.</td></tr>
+</table>
+</div>
+
+<p>Nos dois casos, a regra de ouro é: <strong>dê nomes únicos aos seus scripts</strong>. Antes de batizar, pergunte <code>type -a nome-pensado</code>; se a resposta for "não encontrado", o nome está livre.</p>
+
+<h3>Por que nunca colocar <code>.</code> no <code>PATH</code></h3>
+<p>O ponto quer dizer "a pasta atual". Com ele no <code>PATH</code>, você rodaria <code>backup.sh</code> sem o <code>./</code>. Parece prático, mas imagine que você baixou uma pasta da internet que traz um arquivo chamado <code>ls</code>:</p>
+
+<pre class="term">$ PATH=".:$PATH"
+$ cd baixado
+$ ls
+Te peguei! (eu não sou o ls de verdade)</pre>
+
+<p>Você só quis listar a pasta, e rodou um programa desconhecido, com as suas permissões. Poderia ser algo que apaga arquivos ou rouba senhas. Mesmo com o ponto no <strong>fim</strong>, um erro de digitação (<code>sl</code> em vez de <code>ls</code>) pode rodar uma armadilha. Por isso nenhuma distro coloca <code>.</code> no <code>PATH</code>, e você digita <code>./script.sh</code>: o <code>./</code> diz "eu sei que é este arquivo, desta pasta".</p>
+
+<div class="warning">
+<strong>Cuidado também com o <code>PATH</code> vazio por engano</strong>
+<p>Uma entrada vazia no <code>PATH</code> (dois-pontos no começo, no fim ou dobrados, como em <code>PATH=":/usr/bin"</code> ou <code>PATH="$PATH:"</code>) também quer dizer "a pasta atual". É o mesmo risco do <code>.</code>, escondido.</p>
+</div>
+
+<hr>
+
+<h2>A tabela <code>hash</code>: o atalho da memória</h2>
+<p>Procurar um programa em várias pastas toma tempo. Por isso o Bash <strong>anota</strong> onde achou cada programa, numa tabela chamada <em>hash</em> (um tipo de índice), e das próximas vezes vai direto. O comando interno <code>hash</code> mostra essa tabela:</p>
+
+<pre class="term">$ hash
+hash: tabela de hash está vazia
+$ bomdia
+Bom dia, ana!
+$ hash
+número	comando
+   1	/home/ana/bin/bomdia          « usado 1 vez, achado nesta pasta
+$ type bomdia
+bomdia está na tabela hash (/home/ana/bin/bomdia)</pre>
+
+<p>(Essa sessão começou num terminal novo, com <code>~/bin</code> já no <code>PATH</code>: por isso a tabela estava vazia.) Na maior parte do tempo você nem percebe que ela existe. Ela só aparece quando um programa <strong>muda de pasta</strong>. Na sessão abaixo, o <code>PATH</code> da Ana tem <code>~/.local/bin</code> e <code>~/bin</code>. Ela usa o <code>bomdia</code> e depois o move para <code>~/.local/bin</code>:</p>
+
+<pre class="term">$ bomdia
+Bom dia, ana!
+$ mv ~/bin/bomdia ~/.local/bin/
+$ bomdia
+bash: /home/ana/bin/bomdia: Arquivo ou diretório inexistente     « procurou no lugar antigo!
+$ echo $?
+127
+$ type -a bomdia
+bomdia é /home/ana/.local/bin/bomdia                              « o arquivo está aqui</pre>
+
+<p>O arquivo está numa pasta do <code>PATH</code>, mas o Bash nem procurou: foi direto ao endereço anotado, que não existe mais. Repare que a mensagem mostra o <strong>caminho completo</strong> antigo; isso é a assinatura de um hash desatualizado. A solução é esquecer as anotações:</p>
+
+<dl class="anatomy">
+  <dt>hash</dt><dd>O comando que mexe na tabela.</dd>
+  <dt>-r</dt><dd><em>reset</em>: esvazia a tabela inteira. O Bash volta a procurar no <code>PATH</code> na próxima vez.</dd>
+</dl>
+
+<pre class="term">$ hash -r
+$ bomdia
+Bom dia, ana!
+$ hash
+número	comando
+   1	/home/ana/.local/bin/bomdia     « anotado no lugar novo</pre>
+
+<p>Para esquecer só um nome, use <code>hash -d bomdia</code> (<em>delete</em>). E duas coisas limpam a tabela sozinhas: <strong>mudar o <code>PATH</code></strong> (qualquer atribuição a ele) e abrir um terminal novo. O mesmo problema acontece quando você instala um programa novo numa pasta que vem <strong>antes</strong> no <code>PATH</code> (por exemplo, uma versão mais nova em <code>/usr/local/bin</code>): o shell aberto continua usando a antiga até um <code>hash -r</code>.</p>
+
+<div class="try" data-setup="mkdir -p bin .local/bin;;printf '#!/usr/bin/env bash\necho &quot;Bom dia!&quot;\n' &gt; bin/bomdia;;chmod +x bin/bomdia;;PATH=&quot;$HOME/.local/bin:$HOME/bin:$PATH&quot;;;bomdia;;mv bin/bomdia .local/bin/" data-goal="ran:^\s*hash\s+-(r|d)|^\s*PATH=,out:Bom dia!" data-solucao="hash -r;;bomdia">
+<p class="try-task"><strong>Missão:</strong> o script <code>bomdia</code> acabou de ser movido de <code>~/bin</code> para <code>~/.local/bin</code>, e as duas pastas estão no <code>PATH</code>. Digite <code>bomdia</code> e veja o erro. Faça o Bash esquecer o endereço antigo e rode <code>bomdia</code> de novo.</p>
+</div>
+
+<hr>
+
+<h2>Tornar permanente</h2>
+<p>Como toda variável, o <code>PATH</code> mudado no terminal volta ao normal quando você fecha a janela. Para valer sempre, a mudança precisa estar num arquivo de inicialização (veja <a href="inicializacao.html">arquivos de inicialização</a>).</p>
+
+<h3>No Debian e no Ubuntu: basta criar a pasta</h3>
+<p>O <code>~/.profile</code> da Ana (e o de toda conta nova no Debian/Ubuntu) já tem este trecho:</p>
+
+<pre class="file" data-file="~/.profile (trecho)"># inclui a pasta bin pessoal no PATH, se existir
+if [ -d "$HOME/bin" ] ; then
+    PATH="$HOME/bin:$PATH"
+fi
+if [ -d "$HOME/.local/bin" ] ; then
+    PATH="$HOME/.local/bin:$PATH"
+fi
+</pre>
+
+<p>Ou seja: se a pasta <code>~/bin</code> ou <code>~/.local/bin</code> existir, ela entra no começo do <code>PATH</code>. Como o <code>.profile</code> é lido no <strong>login</strong>, a pasta nova passa a valer depois de sair da sessão e entrar de novo (ou reiniciar). Até lá, use o <code>PATH=…</code> no terminal.</p>
+
+<h3>Em qualquer sistema: no <code>.bashrc</code>, sem repetir</h3>
+<p>Se o seu sistema não tem esse trecho (ou você não quer esperar o próximo login), coloque no fim do <code>~/.bashrc</code> uma versão que só acrescenta a pasta se ela ainda não estiver na lista:</p>
+
+<pre class="file" data-file="~/.bashrc (no fim)">case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) PATH="$HOME/.local/bin:$PATH" ;;
+esac
+</pre>
+
+<dl class="anatomy">
+  <dt>":$PATH:"</dt><dd>O <code>PATH</code> com dois-pontos extras nas pontas, para que <strong>toda</strong> pasta fique "entre dois-pontos", inclusive a primeira e a última.</dd>
+  <dt>*":$HOME/.local/bin:"*)</dt><dd>Se a pasta já aparece na lista: não faz nada (<code>;;</code>).</dd>
+  <dt>*) PATH=…</dt><dd>Senão, acrescenta no começo.</dd>
+</dl>
+
+<p>Com o teste, ler o arquivo várias vezes não duplica a pasta (na sessão abaixo, <code>~/bin</code> já estava no <code>PATH</code> de antes):</p>
+
+<pre class="term">$ source ~/.bashrc
+$ source ~/.bashrc
+$ echo "$PATH" | tr ':' '\n'
+/home/ana/.local/bin            « entrou uma vez só
+/home/ana/bin
+/usr/local/sbin
+/usr/local/bin
+/usr/sbin
+/usr/bin
+/sbin
+/bin</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Onde colocar o <code>PATH</code> pessoal</th></tr>
+<tr><td>Debian, Ubuntu, Mint</td><td>Já vem no <code>~/.profile</code>: crie <code>~/bin</code> ou <code>~/.local/bin</code> e entre de novo na sessão.</td></tr>
+<tr><td>Fedora, RHEL</td><td>O <code>~/.bashrc</code> padrão já coloca <code>~/.local/bin</code> e <code>~/bin</code> no <code>PATH</code>, com um teste parecido com o acima.</td></tr>
+<tr><td>Arch</td><td>Nada vem pronto: acrescente o <code>case</code> acima no <code>~/.bashrc</code> (ou no <code>~/.bash_profile</code>).</td></tr>
+<tr><td>macOS (Bash)</td><td>No <code>~/.bash_profile</code>, que é o arquivo lido em cada aba.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"comando não encontrado" (código 127)</strong>
+<pre class="term" data-cwd="~/Documentos/projetos">$ ls -l backup.sh
+-rwxrwxr-x 1 ana ana 45 out 15 09:15 backup.sh
+$ backup.sh
+bash: backup.sh: comando não encontrado
+$ ./backup.sh
+Fazendo backup...</pre>
+<p><strong>O que aconteceu:</strong> o nome não tem barra, então o Bash procurou nas pastas do <code>PATH</code>, e a pasta atual não está lá (ainda bem, veja acima). Outras causas comuns: erro de digitação; programa não instalado; script numa pasta que não está no <code>PATH</code>.</p>
+<p><strong>Como confirmar:</strong> <code>type -a nome</code> (o Bash conhece?), <code>echo "$PATH" | tr ':' '\n'</code> (a pasta está na lista?), <code>ls -l caminho/do/arquivo</code> (o arquivo existe?).</p>
+<p><strong>Como resolver:</strong> rode com o caminho (<code>./backup.sh</code>), mova o script para <code>~/bin</code>, ou instale o programa. No Ubuntu, o terminal costuma sugerir o pacote ("O comando 'x' não foi encontrado, mas pode ser instalado com: sudo apt install …"); essa ajuda vem de um programa à parte, o <code>command-not-found</code>, e não existe em todas as distros.</p>
+</div>
+
+<div class="cenario">
+<strong>Nenhum comando funciona mais: <code>ls</code>, <code>cat</code>… "comando não encontrado"</strong>
+<pre class="term">$ PATH=~/scripts
+$ ls
+bash: ls: comando não encontrado
+$ cat frutas.txt
+bash: cat: comando não encontrado
+$ echo $PATH
+/home/ana/scripts</pre>
+<p><strong>O que aconteceu:</strong> faltou o <code>:$PATH</code> no fim. O <code>PATH</code> virou uma pasta só, e as pastas do sistema sumiram da lista. O <code>echo</code> e o <code>cd</code> continuam funcionando porque são comandos internos.</p>
+<p><strong>Como resolver:</strong> no terminal, devolva uma lista básica: <code>PATH=/usr/local/bin:/usr/bin:/bin</code> (ou simplesmente feche e abra o terminal). Se o erro estiver no <code>.bashrc</code> ou no <code>.profile</code>, conserte a linha para <code>PATH="$HOME/scripts:$PATH"</code>; enquanto isso, chame o editor pelo caminho completo: <code>/usr/bin/nano ~/.bashrc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente" com o caminho completo de um programa que existe</strong>
+<pre class="term">$ bomdia
+bash: /home/ana/bin/bomdia: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o programa mudou de pasta, e o Bash usou o endereço antigo anotado na tabela <code>hash</code>.</p>
+<p><strong>Como resolver:</strong> <code>hash -r</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"interpretador incorreto: Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ head -n 1 ~/.local/bin/rotina.sh
+#!/bin/bassh
+$ rotina.sh
+bash: /home/ana/.local/bin/rotina.sh: /bin/bassh: interpretador incorreto: Arquivo ou diretório inexistente
+$ echo $?
+126</pre>
+<p><strong>O que aconteceu:</strong> o script foi encontrado, mas a primeira linha (o <em>shebang</em>, <code>#!</code>) aponta para um programa que não existe: <code>/bin/bassh</code>, com dois "s". A mensagem confunde porque diz "inexistente", mas o que não existe é o <strong>interpretador</strong>, não o script. O código 126 quer dizer "achei, mas não consegui executar".</p>
+<p><strong>Como resolver:</strong> corrija a primeira linha para <code>#!/usr/bin/env bash</code> (ou <code>#!/bin/bash</code>). Confira com <code>head -n 1 arquivo</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"env: ‘bash\r’: Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ dos.sh
+env: ‘bash\r’: Arquivo ou diretório inexistente
+env: usa -[v]S para passar opções em linhas shebang
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> o script foi salvo no Windows (ou num editor configurado para ele), com fim de linha <code>\r\n</code>. O <code>\r</code> invisível grudou no nome do interpretador: o <code>env</code> procurou um programa chamado "bash<code>\r</code>". A segunda linha é uma dica do <code>env</code> que não tem a ver com o problema.</p>
+<p><strong>Como confirmar:</strong> <code>file dos.sh</code> diz "with CRLF line terminators"; <code>head -n 1 dos.sh | od -c</code> mostra o <code>\r</code>.</p>
+<p><strong>Como resolver:</strong> tire os <code>\r</code>: <code>sed -i 's/\r$//' dos.sh</code> (ou <code>dos2unix dos.sh</code>, se estiver instalado).</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada" (código 126)</strong>
+<pre class="term">$ semx.sh
+bash: /home/ana/.local/bin/semx.sh: Permissão negada
+$ echo $?
+126</pre>
+<p><strong>O que aconteceu:</strong> o arquivo está numa pasta do <code>PATH</code>, mas não tem permissão de execução. Quando não acha nenhum executável, o Bash ainda tenta o arquivo sem permissão que encontrou, e o sistema recusa.</p>
+<p><strong>Como resolver:</strong> <code>chmod +x ~/.local/bin/semx.sh</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Meu script não faz nada: dei a ele o nome de um comando que já existe</strong>
+<pre class="term">$ ls -l test
+-rwxrwxr-x 1 ana ana 43 out 15 10:30 test
+$ test
+$ echo $?
+1                                   « o script deveria escrever "meu teste rodou"
+$ type -a test
+test é um comando interno do shell
+test é /usr/bin/test
+test é /bin/test</pre>
+<p><strong>O que aconteceu:</strong> a Ana chamou o script de <code>test</code>, mas <code>test</code> é um comando interno (o mesmo que <code>[ ]</code>, veja <a href="testes.html">testes</a>). Comandos internos vêm antes do <code>PATH</code> na busca, então o script nunca roda pelo nome. Sem argumentos, o <code>test</code> interno só devolve 1, sem escrever nada. O mesmo acontece com <code>echo</code>, <code>time</code>, <code>kill</code>, <code>printf</code>…</p>
+<p><strong>Como resolver:</strong> renomeie o script para algo único (<code>teste-ana</code>, <code>meu-teste</code>) e confira antes com <code>type -a</code>. Para rodar o atual, use o caminho: <code>./test</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>echo "$PATH" | tr ':' '\n'</code></td><td>Mostra o <code>PATH</code>, uma pasta por linha</td></tr>
+<tr><td><code>PATH="$HOME/bin:$PATH"</code></td><td>Acrescenta uma pasta no começo (ganha dos programas do sistema)</td></tr>
+<tr><td><code>PATH="$PATH:$HOME/bin"</code></td><td>Acrescenta uma pasta no fim (perde para os do sistema)</td></tr>
+<tr><td><code>type nome</code></td><td>Diz o que o nome é: alias, palavra-chave, função, builtin ou arquivo</td></tr>
+<tr><td><code>type -a nome</code></td><td>Todos os candidatos, na ordem da busca</td></tr>
+<tr><td><code>type -t nome</code></td><td>Uma palavra: <code>alias</code>, <code>keyword</code>, <code>function</code>, <code>builtin</code>, <code>file</code></td></tr>
+<tr><td><code>type -P nome</code></td><td>Só o caminho no <code>PATH</code></td></tr>
+<tr><td><code>command -v nome</code></td><td>O que vai rodar; código 1 se não existe (ótimo em <code>if</code>)</td></tr>
+<tr><td><code>which nome</code></td><td>Programa externo: caminho no <code>PATH</code></td></tr>
+<tr><td><code>hash</code></td><td>Mostra a tabela de endereços lembrados</td></tr>
+<tr><td><code>hash -r</code> / <code>hash -d nome</code></td><td>Esquece tudo / esquece um nome</td></tr>
+<tr><td><code>./script</code>, <code>/caminho/script</code></td><td>Roda aquele arquivo, sem busca no <code>PATH</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Sem perder o que já estava</h3>
+<p>Complete para colocar <code>~/scripts</code> no <strong>começo</strong> do <code>PATH</code>:</p>
+<div class="ex-code">PATH="$HOME/scripts<input data-answer=":$PATH" aria-label="resto">"</div>
+</div>
+
+<div class="exercise">
+<h3>2. O comando sumiu</h3>
+<p>Você moveu um programa de pasta e agora o Bash diz que ele não existe, mostrando o caminho antigo. Complete:</p>
+<div class="ex-code">hash <input data-answer="-r" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Testar se um programa existe, num script</h3>
+<p>Complete o comando padrão para isso:</p>
+<div class="ex-code">if <input data-answer="command -v|type -P|type" aria-label="comando"> git &gt;/dev/null; then echo "tem git"; fi</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Existe <code>alias ls='ls --color=auto'</code>, uma função <code>ls</code> e o programa <code>/usr/bin/ls</code>. O que roda quando você digita <code>ls</code>?</p>
+<label><input type="radio" name="q4"> A função, porque funções vêm primeiro.</label>
+<label><input type="radio" name="q4"> O alias, porque aliases são verificados primeiro.</label>
+<label><input type="radio" name="q4"> O programa, porque o <code>PATH</code> vem primeiro.</label>
+<label><input type="radio" name="q4"> Dá erro, porque há três com o mesmo nome.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Por que não se coloca <code>.</code> no <code>PATH</code>?</p>
+<label><input type="radio" name="q5"> Porque o Bash não aceita pontos no <code>PATH</code>.</label>
+<label><input type="radio" name="q5"> Porque deixa todos os comandos mais lentos.</label>
+<label><input type="radio" name="q5"> Porque qualquer pasta em que você entrar pode trazer um programa com nome de comando comum, que rodaria no lugar do verdadeiro.</label>
+<label><input type="radio" name="q5"> Porque o <code>.</code> apaga a tabela <code>hash</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. A mensagem <code>bash: ./x.sh: /bin/bassh: interpretador incorreto: Arquivo ou diretório inexistente</code> quer dizer:</p>
+<label><input type="radio" name="q6"> O shebang (primeira linha) de <code>x.sh</code> aponta para um programa que não existe.</label>
+<label><input type="radio" name="q6"> O arquivo <code>x.sh</code> não existe.</label>
+<label><input type="radio" name="q6"> Falta permissão de execução.</label>
+<label><input type="radio" name="q6"> A pasta atual não está no <code>PATH</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Ordem da busca: alias → palavra-chave → função → comando interno → tabela hash → pastas do <code>PATH</code>, da esquerda para a direita. Com uma barra no nome, não há busca.</li>
+  <li><code>type -a</code> mostra todos os candidatos; em scripts, teste com <code>command -v</code>.</li>
+  <li>Acrescente pastas sem apagar a lista: <code>PATH="$HOME/bin:$PATH"</code>. No começo substitui programas do sistema; no fim, não. Nunca <code>.</code>.</li>
+  <li>Programa que mudou de pasta e "sumiu": <code>hash -r</code>.</li>
+  <li>Permanente: <code>~/.profile</code> (Debian/Ubuntu, basta criar a pasta) ou um <code>case</code> no <code>~/.bashrc</code> que não repete a pasta.</li>
+  <li>127 = não encontrado; 126 = encontrado, mas não executou (permissão ou shebang errado).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
