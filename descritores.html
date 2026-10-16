@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Descritores de Arquivo — exec, 3&gt;, read -u e /dev/fd | Guia Bash</title>
+<meta name="description" content="Descritores de arquivo no Bash: 0, 1, 2 e os seus (3 a 9), exec 3&gt; arquivo, &gt;&amp;3, fechar com 3&gt;&amp;-, ler com read -u, &lt;&gt;, ler dois arquivos ao mesmo tempo, redirecionar o script inteiro, trocar stdout e stderr, {fd}, /proc/$$/fd e /dev/tcp.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Descritores de Arquivo</span></h1>
+
+<p class="intro">Você já usa os canais 0, 1 e 2 toda vez que escreve <code>&gt;</code>, <code>2&gt;</code> ou <code>&lt;</code>. Esses números são <strong>descritores de arquivo</strong>, e o Bash deixa você abrir os seus: o 3, o 4, o 5… Com o comando <code>exec</code>, um arquivo fica aberto durante o script inteiro, e você escreve nele, lê dele ou redireciona tudo de uma vez.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é um descritor e como ver os do seu shell em <code>/proc/$$/fd</code>.</li>
+  <li>Abrir, usar e fechar os seus: <code>exec 3&gt; arquivo</code>, <code>echo … &gt;&amp;3</code>, <code>exec 3&gt;&amp;-</code>, <code>exec 3&lt; arquivo</code> e <code>read -u 3</code>.</li>
+  <li>Ler dois arquivos ao mesmo tempo, linha a linha.</li>
+  <li>Mandar toda a saída de um script para um log com <code>exec &gt; log 2&gt;&amp;1</code> (e ainda ver na tela, com <code>tee</code>).</li>
+  <li>Trocar a saída e o erro de lugar, deixar o Bash escolher o número (<code>{fd}</code>) e conhecer o <code>/dev/tcp</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que é um descritor</h2>
+<p>Quando um programa abre um arquivo, o sistema não devolve o arquivo em si, devolve um <strong>número</strong>: "de agora em diante, o arquivo que você abriu é o 3". Esse número é o <strong>descritor de arquivo</strong> (<em>file descriptor</em>, abreviado <em>fd</em>). Para ler ou escrever, o programa só diz o número.</p>
+
+<p>Todo processo já nasce com três descritores abertos, os que você conheceu em <a href="redirecionamento.html">Redirecionamento</a>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Número</th><th>Nome</th><th>Normalmente aponta para</th></tr>
+<tr><td><code>0</code></td><td>entrada padrão (stdin)</td><td>o teclado (o terminal)</td></tr>
+<tr><td><code>1</code></td><td>saída padrão (stdout)</td><td>a tela (o terminal)</td></tr>
+<tr><td><code>2</code></td><td>saída de erro (stderr)</td><td>a tela (o terminal)</td></tr>
+<tr><td><code>3</code> a <code>9</code></td><td>livres</td><td>o que você abrir</td></tr>
+<tr><td><code>10</code> em diante</td><td>uso interno do Bash</td><td>evite escolher esses à mão (veja <code>{fd}</code> abaixo)</td></tr>
+</table>
+</div>
+
+<h3>Vendo os descritores do seu shell</h3>
+<p>No Linux, a pasta <code>/proc/NÚMERO/fd</code> mostra os descritores abertos de um processo, um link por número. <code>$$</code> é o número (PID) do seu shell:</p>
+
+<pre class="term">$ echo $$
+37401
+$ ls -l /proc/$$/fd
+total 0
+lrwx------ 1 ana ana 64 out 16 09:52 0 -&gt; /dev/pts/0      « entrada: o terminal
+lrwx------ 1 ana ana 64 out 16 09:52 1 -&gt; /dev/pts/0      « saída: o terminal
+lrwx------ 1 ana ana 64 out 16 09:52 2 -&gt; /dev/pts/0      « erro: o terminal
+lrwx------ 1 ana ana 64 out 16 09:52 255 -&gt; /dev/pts/0    « cópia que o Bash guarda para si</pre>
+
+<p><code>/dev/pts/0</code> é a janela de terminal em que você está (o comando <code>tty</code> mostra o nome da sua). Os três canais apontam para ela: por isso você digita no mesmo lugar onde lê as respostas. O <code>255</code> é uma cópia que o Bash interativo mantém do terminal; ignore-o.</p>
+
+<hr>
+
+<h2>Abrir um descritor para escrever: <code>exec 3&gt; arquivo</code></h2>
+<p>Até agora, cada <code>&gt;</code> abria o arquivo, gravava e fechava, só para aquele comando. O <code>exec</code> sem nenhum comando faz outra coisa: aplica o redirecionamento <strong>ao próprio shell</strong>, e ele fica valendo até você desfazer.</p>
+
+<dl class="anatomy">
+  <dt>exec</dt><dd>Sem um comando depois, "aplique estes redirecionamentos ao shell atual, para sempre".</dd>
+  <dt>3</dt><dd>O número do descritor que você está criando. Colado no <code>&gt;</code>.</dd>
+  <dt>&gt;</dt><dd>Abre para escrita, esvaziando o arquivo (como sempre). <code>&gt;&gt;</code> abriria para acrescentar.</dd>
+  <dt>diario.txt</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term">$ exec 3&gt; diario.txt
+$ ls -l /proc/$$/fd
+total 0
+lrwx------ 1 ana ana 64 out 16 09:52 0 -&gt; /dev/pts/0
+lrwx------ 1 ana ana 64 out 16 09:52 1 -&gt; /dev/pts/0
+lrwx------ 1 ana ana 64 out 16 09:52 2 -&gt; /dev/pts/0
+lrwx------ 1 ana ana 64 out 16 09:52 255 -&gt; /dev/pts/0
+l-wx------ 1 ana ana 64 out 16 09:52 3 -&gt; /home/ana/diario.txt   « o novo descritor</pre>
+
+<p>O <code>exec</code> não mostrou nada e deixou código de saída 0. Mas o shell agora tem um quarto canal, o 3, aberto para escrita (<code>l-wx</code>: <em>w</em> de <em>write</em>) em <code>diario.txt</code>.</p>
+
+<h3>Escrever no descritor: <code>&gt;&amp;3</code></h3>
+<p>Para mandar a saída de um comando para o descritor 3, use <code>&gt;&amp;3</code>: "a saída vai para onde o 3 aponta". O <code>&amp;</code> diz que <code>3</code> é um descritor, não um arquivo chamado "3".</p>
+
+<pre class="term">$ echo "primeira linha" &gt;&amp;3
+$ echo "segunda linha" &gt;&amp;3
+$ cat diario.txt
+primeira linha
+segunda linha                     « as duas ficaram: o arquivo continuou aberto entre um echo e outro</pre>
+
+<p>Repare: usamos <code>&gt;&amp;3</code> duas vezes e a primeira linha não foi apagada. Quem esvaziou o arquivo foi o <code>exec 3&gt;</code>, uma vez só. Num laço que grava milhares de linhas, isso também é mais rápido do que abrir e fechar o arquivo a cada volta com <code>&gt;&gt;</code>.</p>
+
+<h3>Fechar: <code>exec 3&gt;&amp;-</code></h3>
+<p>O <code>-</code> no lugar do número quer dizer "feche". Depois de fechado, usar o 3 é erro:</p>
+
+<pre class="term">$ exec 3&gt;&amp;-
+$ echo "terceira" &gt;&amp;3
+bash: 3: Descritor de arquivo inválido</pre>
+
+<p>Feche sempre os descritores que abriu quando não precisar mais deles. No fim de um script, o sistema fecha tudo sozinho, mas fechar explicitamente deixa claro onde o arquivo deixou de ser usado e garante que tudo foi gravado.</p>
+
+<div class="try" data-goal="contains:~/compras.txt=pão,contains:~/compras.txt=leite,ran:exec 3&gt;,ran:&gt;&amp;3" data-solucao="exec 3&gt; compras.txt;;echo pão &gt;&amp;3;;echo leite &gt;&amp;3;;exec 3&gt;&amp;-">
+<p class="try-task"><strong>Missão:</strong> abra o descritor 3 para escrever em <code>compras.txt</code>. Usando <code>&gt;&amp;3</code>, grave as linhas <code>pão</code> e <code>leite</code>. Feche o descritor e confira com <code>cat compras.txt</code>.</p>
+</div>
+
+<hr>
+
+<h2>Abrir para ler: <code>exec 3&lt; arquivo</code> e <code>read -u 3</code></h2>
+<p>Com <code>&lt;</code>, o descritor é aberto para leitura. Cada <code>read</code> nele pega a <strong>próxima</strong> linha, porque o descritor lembra onde parou.</p>
+
+<dl class="anatomy">
+  <dt>read</dt><dd>Lê uma linha e guarda numa variável (veja <a href="read.html">Ler do Teclado</a>).</dd>
+  <dt>-u 3</dt><dd>Lê do descritor 3 em vez do 0 (<em>u</em> de <em>unit</em>, "unidade", nome antigo para descritor). Equivale a <code>read &lt;&amp;3</code>.</dd>
+  <dt>linha</dt><dd>A variável que recebe a linha.</dd>
+</dl>
+
+<pre class="term">$ exec 3&lt; frutas.txt
+$ read -u 3 linha; echo "$linha"
+banana                                « 1ª linha
+$ read -u 3 linha; echo "$linha"
+maçã                                  « continuou de onde parou
+$ read -r linha &lt;&amp;3; echo "$linha"
+laranja                               « &lt;&amp;3 é o mesmo que -u 3
+$ cat &lt;&amp;3
+banana                                « o cat lê o RESTO do arquivo
+uva
+maçã
+banana
+$ read -u 3 linha; echo "código: $? linha: [$linha]"
+código: 1 linha: []                   « fim do arquivo: read devolve 1
+$ exec 3&lt;&amp;-</pre>
+
+<p>Compare com <code>read linha &lt; frutas.txt</code>: esse abre o arquivo do zero a cada vez e sempre lê <code>banana</code>. O descritor aberto com <code>exec</code> é como um marcador de livro: guarda a posição.</p>
+
+<p>Quando o arquivo acaba, o <code>read</code> devolve código <strong>1</strong> e deixa a variável vazia. É isso que faz um <code>while read</code> parar.</p>
+
+<h3>Ler dois arquivos ao mesmo tempo</h3>
+<p>Aqui os descritores fazem algo que não dá de outro jeito com um laço só. A Ana tem os nomes num arquivo e as notas em outro, na mesma ordem:</p>
+
+<pre class="term">$ printf 'Ana\nBruno\nCarla\n' &gt; nomes.txt
+$ printf '9.5\n7.0\n8.5\n' &gt; resultados.txt</pre>
+
+<pre class="file" data-file="dois.sh">#!/usr/bin/env bash
+# lê nomes.txt e resultados.txt ao mesmo tempo, linha a linha
+exec 3&lt; nomes.txt 4&lt; resultados.txt
+while read -r nome &lt;&amp;3 &amp;&amp; read -r nota &lt;&amp;4; do
+  echo "$nome tirou $nota"
+done
+exec 3&lt;&amp;- 4&lt;&amp;-
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>exec 3&lt; nomes.txt 4&lt; resultados.txt</code></td><td>Abre os dois arquivos para leitura: um no 3, outro no 4. Um <code>exec</code> aceita vários redirecionamentos.</td></tr>
+<tr><td><code>while read -r nome &lt;&amp;3 &amp;&amp; read -r nota &lt;&amp;4; do</code></td><td>A cada volta, lê a próxima linha de cada arquivo. O laço continua enquanto as <strong>duas</strong> leituras derem certo.</td></tr>
+<tr><td><code>echo "$nome tirou $nota"</code></td><td>Usa as duas variáveis.</td></tr>
+<tr><td><code>exec 3&lt;&amp;- 4&lt;&amp;-</code></td><td>Fecha os dois descritores.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash dois.sh
+Ana tirou 9.5
+Bruno tirou 7.0
+Carla tirou 8.5
+$ echo $?
+0</pre>
+
+<p><strong>Por que não dá com <code>done &lt; nomes.txt</code>?</strong> Porque aí as duas leituras viriam do mesmo canal 0, uma linha de cada vez, do mesmo arquivo. Com descritores diferentes, cada <code>read</code> tem o seu "marcador de livro".</p>
+
+<div class="tryscript" data-file="dois.sh" data-setup="printf 'Ana\nBruno\nCarla\n' &gt; nomes.txt;;printf '9.5\n7.0\n8.5\n' &gt; resultados.txt" data-goal="out:Carla tirou 8.5,src:&lt;&amp;4">
+<p class="try-task"><strong>Missão:</strong> o script abre os dois arquivos, mas só lê os nomes e escreve "tirou ?". Faça o laço ler também uma linha do descritor 4 a cada volta e mostrar a nota de verdade.</p>
+<pre class="script">#!/usr/bin/env bash
+exec 3&lt; nomes.txt 4&lt; resultados.txt
+while read -r nome &lt;&amp;3; do
+  echo "$nome tirou ?"
+done
+exec 3&lt;&amp;- 4&lt;&amp;-
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+exec 3&lt; nomes.txt 4&lt; resultados.txt
+while read -r nome &lt;&amp;3 &amp;&amp; read -r nota &lt;&amp;4; do
+  echo "$nome tirou $nota"
+done
+exec 3&lt;&amp;- 4&lt;&amp;-
+</pre>
+</div>
+
+<h3>Ler e escrever no mesmo: <code>&lt;&gt;</code></h3>
+<p><code>exec 5&lt;&gt; arquivo</code> abre para leitura <strong>e</strong> escrita, sem esvaziar. Ler e escrever andam com a mesma posição:</p>
+
+<pre class="term">$ printf 'abcdef\n' &gt; abc.txt
+$ exec 5&lt;&gt; abc.txt
+$ read -n 3 -u 5 tres; echo "$tres"
+abc                                   « leu 3 caracteres; a posição agora é a 4ª
+$ echo -n "XY" &gt;&amp;5
+$ exec 5&gt;&amp;-
+$ cat abc.txt
+abcXYf                                « "XY" foi escrito por cima de "de"</pre>
+
+<p>É um recurso raro em scripts do dia a dia (serve para arquivos de dispositivo e conexões, como o <code>/dev/tcp</code> mais abaixo), mas é bom reconhecer quando aparecer.</p>
+
+<hr>
+
+<h2>Redirecionar o script inteiro: <code>exec &gt; log 2&gt;&amp;1</code></h2>
+<p>Um script de backup que roda sozinho de madrugada precisa guardar <strong>tudo</strong> o que disse num log. Em vez de pôr <code>&gt;&gt; backup.log 2&gt;&amp;1</code> em cada linha, ponha um <code>exec</code> no começo:</p>
+
+<pre class="file" data-file="backup.sh">#!/usr/bin/env bash
+exec &gt; backup.log 2&gt;&amp;1
+echo "Início: backup de Documentos"
+ls Documentos nada
+echo "Fim"
+</pre>
+
+<dl class="anatomy">
+  <dt>exec</dt><dd>Aplica ao shell que roda o script, daqui para baixo.</dd>
+  <dt>&gt; backup.log</dt><dd>O canal 1 (saída) passa a ser o arquivo.</dd>
+  <dt>2&gt;&amp;1</dt><dd>O canal 2 (erro) vai para onde o 1 aponta agora: o mesmo arquivo. A ordem importa, como em qualquer redirecionamento.</dd>
+</dl>
+
+<pre class="term">$ bash backup.sh
+$ echo $?
+0                                     « nada na tela, e terminou bem (o último comando foi o echo "Fim")
+$ cat backup.log
+Início: backup de Documentos
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+Documentos:
+acesso.log
+alunos.csv
+notas.txt
+projetos
+relatorio.odt
+Fim</pre>
+
+<p>Tudo, inclusive o erro do <code>ls</code>, foi para o log. Troque <code>&gt;</code> por <code>&gt;&gt;</code> para acumular as execuções em vez de apagar o log a cada vez.</p>
+
+<h3>Na tela <strong>e</strong> no log: <code>exec &gt; &gt;(tee backup.log) 2&gt;&amp;1</code></h3>
+<p>Quando você roda o script à mão, quer ver o que está acontecendo. A combinação com <a href="substituicao-processo.html">substituição de processo</a> manda a saída para o <code>tee</code>, que copia para a tela e para o arquivo:</p>
+
+<pre class="file" data-file="backup.sh">#!/usr/bin/env bash
+exec &gt; &gt;(tee backup.log) 2&gt;&amp;1
+echo "Início: backup de Documentos"
+ls Documentos nada
+echo "Fim"
+</pre>
+
+<pre class="term">$ bash backup.sh
+Início: backup de Documentos
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+Documentos:
+acesso.log
+alunos.csv
+notas.txt
+projetos
+relatorio.odt
+Fim
+$ cat backup.log
+Início: backup de Documentos
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+Documentos:
+…                                     « (encurtado) o mesmo conteúdo da tela
+Fim</pre>
+
+<p>O <code>tee</code> roda em paralelo ao script. Às vezes o prompt volta antes de as últimas linhas aparecerem na tela; o conteúdo é o mesmo.</p>
+
+<h3>Calar e depois devolver a saída</h3>
+<p>Antes de redirecionar, você pode <strong>guardar uma cópia</strong> do destino original num descritor livre, e depois restaurar:</p>
+
+<pre class="term">$ exec 3&gt;&amp;1 1&gt;/dev/null             « 3 = cópia da tela; 1 = lixo
+$ echo "sumiu"
+$ exec 1&gt;&amp;3 3&gt;&amp;-                     « 1 volta a ser a tela; fecha a cópia
+$ echo "voltou"
+voltou</pre>
+
+<p>O <code>3&gt;&amp;1</code> copia o descritor 1: o 3 passa a apontar para o mesmo lugar (a tela), mesmo depois que o 1 muda. Em scripts, essa técnica deixa você mandar a saída "normal" para um log e ainda falar com o usuário pelo 3.</p>
+
+<hr>
+
+<h2>Trocar a saída e o erro: <code>3&gt;&amp;1 1&gt;&amp;2 2&gt;&amp;3</code></h2>
+<p>O pipe <code>|</code> só leva o canal 1. E se você quiser filtrar os <strong>erros</strong> com <code>grep</code> ou <code>sed</code>, deixando a saída normal na tela? É preciso trocar os dois de lugar, usando o 3 como "mão livre", como quem troca o conteúdo de dois copos usando um terceiro.</p>
+
+<pre class="term">$ ls Documentos nada | sed "s/^/[cano] /"
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+[cano] Documentos:                    « só a saída normal passou pelo cano
+[cano] acesso.log
+[cano] alunos.csv
+[cano] notas.txt
+[cano] projetos
+[cano] relatorio.odt
+$ ls Documentos nada 3&gt;&amp;1 1&gt;&amp;2 2&gt;&amp;3 | sed "s/^/[cano] /"
+Documentos:
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+[cano] ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente   « agora é o erro que passa</pre>
+
+<dl class="anatomy">
+  <dt>3&gt;&amp;1</dt><dd>O 3 vira cópia do 1, que neste momento é o cano.</dd>
+  <dt>1&gt;&amp;2</dt><dd>O 1 passa a apontar para onde o 2 aponta: a tela.</dd>
+  <dt>2&gt;&amp;3</dt><dd>O 2 passa a apontar para onde o 3 aponta: o cano.</dd>
+</dl>
+
+<p>Lido da esquerda para a direita, cada passo usa o estado deixado pelo anterior. Repare num detalhe da segunda saída: a lista de <code>Documentos</code> voltou a sair em colunas, porque agora o canal 1 do <code>ls</code> é o terminal de novo.</p>
+
+<p>Se você quer só os erros numa variável, sem trocar nada de lugar, basta a ordem certa:</p>
+
+<pre class="term">$ erros=$(ls Documentos nada 2&gt;&amp;1 &gt;/dev/null)
+$ echo "$erros"
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente</pre>
+
+<p>Dentro do <code>$( )</code>, o 1 é o "cano" que vai para a variável. <code>2&gt;&amp;1</code> manda o erro para esse cano; depois, <code>&gt;/dev/null</code> manda a saída normal para o lixo.</p>
+
+<hr>
+
+<h2>Deixe o Bash escolher o número: <code>{fd}&gt;</code> <span class="versao">bash 4.1+</span></h2>
+<p>Num script grande, ou numa função que outra pessoa vai usar, escolher "3" à mão pode colidir com um 3 que já estava aberto. Escreva um <strong>nome de variável entre chaves</strong> no lugar do número: o Bash escolhe um descritor livre (10 ou mais) e guarda o número na variável.</p>
+
+<pre class="term">$ exec {log}&gt; registro.txt
+$ echo $log
+10                                    « o número escolhido
+$ echo "linha via {log}" &gt;&amp;$log
+$ exec {log}&gt;&amp;-                       « fechar também usa o nome
+$ cat registro.txt
+linha via {log}</pre>
+
+<dl class="anatomy">
+  <dt>{log}</dt><dd>"Escolha um descritor livre e guarde o número em <code>$log</code>." Sem <code>$</code> nas chaves.</dd>
+  <dt>&gt; registro.txt</dt><dd>Abre para escrita, como no <code>exec 3&gt;</code>.</dd>
+  <dt>&gt;&amp;$log</dt><dd>Para usar, o número sai da variável (aqui, <code>&gt;&amp;10</code>).</dd>
+</dl>
+
+<p>No macOS, com o Bash 3.2, isso não existe: use números fixos de 3 a 9.</p>
+
+<hr>
+
+<h2><code>/dev/fd</code>, <code>/dev/stdin</code> e companhia</h2>
+<p>O Linux mostra os descritores de cada processo como arquivos em <code>/dev/fd/</code>. É por isso que a <a href="substituicao-processo.html">substituição de processo</a> vira um nome como <code>/dev/fd/63</code>. Os três primeiros têm apelidos: <code>/dev/stdin</code> (0), <code>/dev/stdout</code> (1) e <code>/dev/stderr</code> (2).</p>
+
+<pre class="term">$ ls -l /dev/fd/
+total 0
+lrwx------ 1 ana ana 64 out 16 09:52 0 -&gt; /dev/pts/0
+lrwx------ 1 ana ana 64 out 16 09:52 1 -&gt; /dev/pts/0
+lrwx------ 1 ana ana 64 out 16 09:52 2 -&gt; /dev/pts/0
+lr-x------ 1 ana ana 64 out 16 09:52 3 -&gt; /proc/37538/fd    « a pasta que o próprio ls abriu para ler</pre>
+
+<p>Surpresa: aqui quem aparece é o <code>ls</code>, não o seu shell. <code>/dev/fd</code> sempre mostra os descritores de <strong>quem está olhando</strong>. O 3 é a pasta que o <code>ls</code> abriu para fazer a listagem. Para ver os do shell, use <code>/proc/$$/fd</code>, como no começo.</p>
+
+<p>Esses nomes servem para programas que só aceitam nome de arquivo: <code>echo "Erro!" &gt; /dev/stderr</code> funciona, mas no Bash a forma direta <code>&gt;&amp;2</code> é a preferida.</p>
+
+<hr>
+
+<h2>Conexões de rede: <code>/dev/tcp</code></h2>
+<p>O Bash tem um truque especial: redirecionar para <code>/dev/tcp/MÁQUINA/PORTA</code> abre uma <strong>conexão de rede</strong>. Esse caminho não existe no disco (<code>ls /dev/tcp</code> dá "inexistente"); quem o entende é o próprio Bash, só dentro de redirecionamentos.</p>
+
+<p>Exemplo <strong>ilustrativo</strong> (não rodado: o laboratório do guia não tem acesso à internet), pedindo uma página a um servidor web:</p>
+
+<pre class="file" data-file="exemplo (ilustrativo)">exec 3&lt;&gt; /dev/tcp/example.com/80
+printf 'GET / HTTP/1.0\r\nHost: example.com\r\n\r\n' &gt;&amp;3
+head -n 1 &lt;&amp;3          # a primeira linha da resposta, por exemplo: HTTP/1.0 200 OK
+exec 3&gt;&amp;-
+</pre>
+
+<p>Já o caso de erro foi conferido de verdade, tentando a porta 9 da própria máquina, onde nada escuta:</p>
+
+<pre class="term">$ exec 3&lt;&gt;/dev/tcp/127.0.0.1/9
+bash: connect: Conexão recusada
+bash: /dev/tcp/127.0.0.1/9: Conexão recusada
+$ echo $?
+1
+$ cat /dev/tcp/127.0.0.1/9
+cat: /dev/tcp/127.0.0.1/9: Arquivo ou diretório inexistente   « o cat não conhece o truque</pre>
+
+<p>É útil para testar se uma porta está aberta num servidor sem <code>curl</code> nem <code>nc</code>. Para baixar coisas de verdade, prefira <code>curl</code>: ele trata HTTPS, redirecionamentos e erros.</p>
+
+<hr>
+
+<h2>Formas diferentes de gravar várias linhas num arquivo</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td><code>&gt;&gt;</code> em cada linha</td><td><code>echo "a" &gt;&gt; log</code></td><td>São poucas linhas, espalhadas.</td></tr>
+<tr><td>Redirecionar o laço</td><td><code>for …; do echo …; done &gt; log</code></td><td>Toda a saída de um bloco vai para o mesmo arquivo.</td></tr>
+<tr><td>Grupo <code>{ }</code></td><td><code>{ echo a; echo b; } &gt; log</code></td><td>Vários comandos seguidos, um arquivo (veja <a href="subshell.html">Subshells e Grupos</a>).</td></tr>
+<tr><td><code>exec 3&gt;</code> + <code>&gt;&amp;3</code></td><td><code>echo "a" &gt;&amp;3</code></td><td>O arquivo é usado ao longo do script todo, misturado com a saída normal.</td></tr>
+<tr><td><code>exec &gt; log 2&gt;&amp;1</code></td><td>no começo do script</td><td>Tudo o que o script disser deve ir para o log.</td></tr>
+<tr><td><code>exec {fd}&gt;</code></td><td><code>echo "a" &gt;&amp;$fd</code></td><td>Como o <code>exec 3&gt;</code>, em funções/bibliotecas, sem risco de colidir (bash 4.1+).</td></tr>
+</table>
+</div>
+
+<p><strong>E para ler dois arquivos em paralelo?</strong> Se você só quer juntá-los lado a lado, o <code>paste nomes.txt resultados.txt</code> resolve sem laço. Os descritores <code>3&lt;</code>/<code>4&lt;</code> são para quando cada linha precisa de lógica (um <code>if</code>, uma conta).</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Descritor de arquivo inválido"</strong>
+<pre class="term">$ echo oi &gt;&amp;7
+bash: 7: Descritor de arquivo inválido
+$ read -u 3 x
+bash: read: 3: descritor de arquivo inválido: Descritor de arquivo inválido</pre>
+<p><strong>O que aconteceu:</strong> o descritor não está aberto: você esqueceu o <code>exec</code>, ele já foi fechado com <code>&gt;&amp;-</code>, ou foi aberto dentro de um <a href="subshell.html">subshell</a> (<code>( exec 3&gt; x )</code> ou dentro de um pipe) e sumiu junto com ele.</p>
+<p><strong>Como confirmar:</strong> <code>ls -l /proc/$$/fd</code> lista o que está aberto no shell atual.</p>
+<p><strong>Como resolver:</strong> abra com <code>exec 3&gt; arquivo</code> (ou <code>3&lt;</code>) no próprio shell, antes de usar.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>exec</code> não conseguiu abrir o arquivo</strong>
+<pre class="term">$ exec 3&lt; nao-existe.txt
+bash: nao-existe.txt: Arquivo ou diretório inexistente
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não existe (ou não há permissão). No terminal, o shell continua; num script com <code>set -e</code>, ou rodado pelo <code>sh</code>, o script pode terminar ali.</p>
+<p><strong>Como resolver:</strong> confira antes, ou trate o erro: <code>exec 3&lt; dados.txt || { echo "sem dados.txt" &gt;&amp;2; exit 1; }</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Escrevi <code>exec &gt; log</code> no terminal e "não aparece mais nada"</strong>
+<p><strong>O que aconteceu:</strong> o <code>exec</code> mudou a saída do seu shell interativo. Todo comando agora escreve no arquivo, inclusive as respostas que você esperava ver. O terminal parece "mudo", mas os erros (canal 2) ainda aparecem.</p>
+<p><strong>Como resolver:</strong> devolva a saída para o terminal com <code>exec &gt; /dev/tty</code>, ou feche a janela e abra outra. Para não passar por isso, use o par <code>exec 3&gt;&amp;1 1&gt;log</code> … <code>exec 1&gt;&amp;3 3&gt;&amp;-</code>, ou deixe o <code>exec &gt;</code> só em scripts.</p>
+</div>
+
+<div class="cenario">
+<strong>Escrevi <code>exec 3 &gt; arquivo</code> (com espaço)</strong>
+<pre class="term">$ exec 3 &gt; arquivo.txt
+bash: exec: 3: não encontrado
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> com espaço, o <code>3</code> deixa de ser o número do descritor e vira um <strong>comando</strong> chamado <code>3</code>, que o <code>exec</code> tentou rodar no lugar do shell. Como ele não existe: código 127. O <code>&gt; arquivo.txt</code> virou um redirecionamento comum do canal 1 e criou o arquivo vazio. No terminal o shell sobrevive; num script, o <code>exec</code> que falha <strong>encerra o script</strong> ali mesmo (<code>bash: linha 1: exec: 3: não encontrado</code>, código 127).</p>
+<p><strong>Como resolver:</strong> o número tem que estar <strong>colado</strong> no <code>&gt;</code>: <code>exec 3&gt; arquivo.txt</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>As linhas saem fora de ordem com <code>exec &gt; &gt;(tee log)</code></strong>
+<p><strong>O que aconteceu:</strong> o <code>tee</code> é um processo à parte. A saída de erro e a normal chegam a ele por caminhos com velocidades diferentes, e o prompt pode voltar antes da última linha.</p>
+<p><strong>Como resolver:</strong> para logs, a ordem dentro do arquivo é a que importa; se precisar de ordem perfeita na tela, prefira <code>exec &gt; log 2&gt;&amp;1</code> e acompanhe com <code>tail -f log</code> em outra janela.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>exec 3&gt; arq</code></td><td>Abre o descritor 3 para escrita (esvazia o arquivo)</td></tr>
+<tr><td><code>exec 3&gt;&gt; arq</code></td><td>Abre o 3 para acrescentar no fim</td></tr>
+<tr><td><code>exec 3&lt; arq</code></td><td>Abre o 3 para leitura</td></tr>
+<tr><td><code>exec 3&lt;&gt; arq</code></td><td>Abre o 3 para leitura e escrita, sem esvaziar</td></tr>
+<tr><td><code>cmd &gt;&amp;3</code></td><td>Saída de <code>cmd</code> para o descritor 3</td></tr>
+<tr><td><code>cmd &lt;&amp;3</code> / <code>read -u 3 v</code></td><td>Entrada a partir do descritor 3</td></tr>
+<tr><td><code>exec 3&gt;&amp;-</code> / <code>exec 3&lt;&amp;-</code></td><td>Fecha o descritor 3</td></tr>
+<tr><td><code>exec 3&gt;&amp;1</code></td><td>O 3 vira cópia do 1 (guarda o destino atual)</td></tr>
+<tr><td><code>exec &gt; log 2&gt;&amp;1</code></td><td>Daqui para baixo, saída e erro do script vão para <code>log</code></td></tr>
+<tr><td><code>exec &gt; &gt;(tee log) 2&gt;&amp;1</code></td><td>Saída e erro para a tela e para <code>log</code></td></tr>
+<tr><td><code>3&gt;&amp;1 1&gt;&amp;2 2&gt;&amp;3</code></td><td>Troca saída e erro de lugar (para filtrar erros num pipe)</td></tr>
+<tr><td><code>exec {v}&gt; arq</code></td><td>O Bash escolhe o número e guarda em <code>$v</code> (4.1+)</td></tr>
+<tr><td><code>/proc/$$/fd</code></td><td>Descritores abertos no shell atual</td></tr>
+<tr><td><code>/dev/fd/N</code>, <code>/dev/stdin</code>, <code>/dev/stdout</code>, <code>/dev/stderr</code></td><td>Os descritores como nomes de arquivo</td></tr>
+<tr><td><code>/dev/tcp/host/porta</code></td><td>Conexão de rede (só em redirecionamentos do Bash)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Abrir para acrescentar</h3>
+<p>Complete para abrir o descritor 4 de modo que tudo o que for escrito nele vá para o <strong>fim</strong> de <code>eventos.log</code>, sem apagar o que já está lá:</p>
+<div class="ex-code">exec <input data-answer="4&gt;&gt;" aria-label="redirecionamento"> eventos.log</div>
+</div>
+
+<div class="exercise">
+<h3>2. Fechar</h3>
+<p>Complete para fechar o descritor 4:</p>
+<div class="ex-code">exec <input data-answer="4&gt;&amp;-|4&lt;&amp;-" aria-label="fechar"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Script com log</h3>
+<p>Complete a segunda linha do script para que, daqui para baixo, saída e erros vão para <code>rotina.log</code>:</p>
+<div class="ex-code">exec <input data-answer="&gt; rotina.log 2&gt;&amp;1|&gt;rotina.log 2&gt;&amp;1|&amp;&gt; rotina.log|&amp;&gt;rotina.log" aria-label="redirecionamentos"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Depois de <code>exec 3&lt; frutas.txt</code>, você roda <code>read -u 3 a</code> duas vezes. O que tem em <code>$a</code> depois da segunda?</p>
+<label><input type="radio" name="q4"> A primeira linha, <code>banana</code>, porque o arquivo é lido do começo a cada vez.</label>
+<label><input type="radio" name="q4"> A segunda linha, <code>maçã</code>, porque o descritor lembra onde parou.</label>
+<label><input type="radio" name="q4"> Nada: <code>read -u</code> só funciona uma vez.</label>
+<label><input type="radio" name="q4"> As duas primeiras linhas juntas.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Para que serve <code>cmd 3&gt;&amp;1 1&gt;&amp;2 2&gt;&amp;3 | grep x</code>?</p>
+<label><input type="radio" name="q5"> Para mandar saída e erro juntos para o <code>grep</code>.</label>
+<label><input type="radio" name="q5"> Para descartar os erros.</label>
+<label><input type="radio" name="q5"> Para que o <code>grep</code> receba os <strong>erros</strong>, enquanto a saída normal vai para a tela.</label>
+<label><input type="radio" name="q5"> Para abrir o arquivo chamado "3".</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. O que <code>exec {meu}&gt; dados.txt</code> faz?</p>
+<label><input type="radio" name="q6"> Abre <code>dados.txt</code> num descritor livre escolhido pelo Bash e guarda o número em <code>$meu</code>.</label>
+<label><input type="radio" name="q6"> Cria um arquivo chamado <code>{meu}</code>.</label>
+<label><input type="radio" name="q6"> Executa o comando <code>meu</code> com a saída em <code>dados.txt</code>.</label>
+<label><input type="radio" name="q6"> Dá erro: chaves não são permitidas em redirecionamentos.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Descritor é o número de um arquivo aberto: 0 entrada, 1 saída, 2 erro; 3 a 9 são seus. Veja os abertos em <code>/proc/$$/fd</code>.</li>
+  <li><code>exec</code> sem comando aplica redirecionamentos ao shell atual: <code>exec 3&gt; arq</code> abre, <code>&gt;&amp;3</code> usa, <code>exec 3&gt;&amp;-</code> fecha.</li>
+  <li><code>exec 3&lt; arq</code> + <code>read -u 3</code> lê linha a linha guardando a posição; com dois descritores você lê dois arquivos juntos.</li>
+  <li><code>exec &gt; log 2&gt;&amp;1</code> no topo manda o script inteiro para um log; com <code>&gt;(tee log)</code>, também para a tela.</li>
+  <li><code>3&gt;&amp;1 1&gt;&amp;2 2&gt;&amp;3</code> troca saída e erro; <code>{fd}&gt;</code> deixa o Bash escolher o número; <code>/dev/tcp</code> abre conexões.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
