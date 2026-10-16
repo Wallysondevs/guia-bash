@@ -57,14 +57,20 @@ function rodarSessao(linhas, opt) {
   if (opt.setup) rodarSetup(s, opt.setup);
   var fila = linhas.slice(), texto = "";
   function limpa(t) { return opt.cores ? t : BashSim.semCor(t); }
+  var ps1Inicial = s.sh.valor("PS1"), ps2Inicial = s.sh.valor("PS2");
+  function pr1() { return s.sh.valor("PS1") === ps1Inicial ? "$ " : limpa(s.prompt()).replace(/\x1b\[[0-9;]*m/g, ""); }
+  function pr2() { return s.sh.valor("PS2") === ps2Inicial ? "> " : limpa(s.prompt2()).replace(/\x1b\[[0-9;]*m/g, ""); }
   while (fila.length) {
-    var l = fila.shift(), fonte = l, mostra = "$ " + l + "\n";
-    while (s.incompleta(fonte) && fila.length) { var n = fila.shift(); fonte += "\n" + n; mostra += "> " + n + "\n"; }
+    var l = fila.shift(), fonte = l, mostra = pr1() + l + "\n";
+    while (s.incompleta(fonte) && fila.length) { var n = fila.shift(); fonte += "\n" + n; mostra += pr2() + n + "\n"; }
+    if (s.incompleta(fonte)) mostra += pr2();
     texto += mostra;
     var saida = s.rodarSync(fonte, function () { return fila.length ? fila.shift() : null; });
     texto += limpa(saida.map(function (c) { return c.t; }).join(""));
     if (s.encerrado) break;
   }
+  // como no "lab -i": no fim da entrada o Bash mostra o prompt e "exit" (o "$ exit" é apagado)
+  if (!s.encerrado && pr1() !== "$ ") texto += pr1() + "exit\n";
   return { texto: texto, sessao: s };
 }
 function rodarSetup(s, setup) {

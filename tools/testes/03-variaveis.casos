@@ -34,7 +34,7 @@ readonly PI=3.14
 PI=3
 echo $?
 unset PI
-readonly -p | grep PI
+readonly -p | grep 'PI='
 ### unset
 x=1; unset x; echo "[$x]"
 f() { :; }; unset -f f; type f

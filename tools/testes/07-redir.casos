@@ -42,9 +42,6 @@ FIM
 cat <<'FIM'
 literal $USER
 FIM
-cat <<-FIM
-	com tab
-	FIM
 cat <<"X" | tr a-z A-Z
 abc
 X

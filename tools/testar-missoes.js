@@ -13,6 +13,8 @@
   Para cada .tryscript: roda o script original → meta não cumprida; roda pre.solucao →
                         meta cumprida; e roda a solução no laboratório (mesmo setup, arquivo,
                         argumentos e entrada) comparando saída, erros e código de saída.
+                        Diferenças só de data/hora, de $RANDOM ou de ordem de processos em
+                        paralelo viram avisos (⚠). data-comparar="nao" pula a comparação.
   O laboratório é chamado uma vez só, com todas as comparações (resultados em cache em
   tools/.cache-missoes.json).
 */
@@ -105,19 +107,19 @@ function citar(s) { return "'" + s.replace(/'/g, "'\\''") + "'"; }
 
 // ---- laboratório (uma chamada para tudo) ----
 var DRIVER = [
-  'mkdir -p /tmp/c; cd /tmp/c; cat > todos',
-  'cp -a --sparse=always /home/ana /tmp/modelo',
-  'reset_home() { cd /; find /home/ana -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null; cp -a --sparse=always /tmp/modelo/. /home/ana/; cd /home/ana; }',
-  'awk -v RS="\\x1e" "NR>1{f=\\"/tmp/c/caso\\" NR-1; printf \\"%s\\", \\$0 > f; close(f)}" /tmp/c/todos',
-  'for f in $(ls /tmp/c/caso* | sort -V); do',
+  'D=/dev/shm/labdrv; mkdir -p $D/c; cd $D/c; cat > todos',
+  'cp -a --sparse=always /home/ana $D/modelo',
+  'reset_home() { cd /; find /home/ana -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null; cp -a --sparse=always $D/modelo/. /home/ana/; rm -rf /tmp/* /tmp/.[!.]* 2>/dev/null; cd /home/ana; }',
+  'awk -v RS="\\x1e" "NR>1{f=\\"$D/c/caso\\" NR-1; printf \\"%s\\", \\$0 > f; close(f)}" $D/c/todos',
+  'for f in $(ls $D/c/caso* | sort -V); do',
   '  reset_home',
   '  id=$(sed -n 1p "$f")',
-  '  sed -n "2,/^\\x1f\\$/p" "$f" | sed "\\$d" > /tmp/c/setup',
-  '  sed -n "/^\\x1f\\$/,\\$p" "$f" | sed 1d > /tmp/c/cmd',
-  '  timeout 20 bash --rcfile /etc/lab-rc -i < /tmp/c/setup > /dev/null 2>&1',
+  '  sed -n "2,/^\\x1f\\$/p" "$f" | sed "\\$d" > $D/c/setup',
+  '  sed -n "/^\\x1f\\$/,\\$p" "$f" | sed 1d > $D/c/cmd',
+  '  env -u OLDPWD timeout 20 bash --rcfile /etc/lab-rc -i < $D/c/setup > /dev/null 2>&1',
   '  history -c 2>/dev/null',
   '  printf "\\x1d%s\\n" "$id"',
-  '  timeout 20 bash /tmp/c/cmd 2>&1; echo "[código de saída: $?]"',
+  '  env -u OLDPWD timeout 20 bash $D/c/cmd 2>&1; echo "[código de saída: $?]"',
   'done'
 ].join("\n");
 function rodarLab(casos) {
@@ -138,6 +140,10 @@ function casoLab(m) {
     "printf %s " + citar(stdin) + " | bash " + citar(arq) + (m.at["data-args"] ? " " + m.at["data-args"] : "") + "\n";
   var id = crypto.createHash("sha1").update(setup + "\0" + cmd).digest("hex").slice(0, 16);
   return { id: id, setup: setup, cmd: cmd };
+}
+function normalizarDatas(s) {
+  return s.replace(/(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g, "AAAA-MM-DD").replace(/\b\d{2}:\d{2}(:\d{2})?\b/g, "HH:MM").replace(/\b\d{8}([_-]?\d{4,6})?\b/g, "AAAAMMDD").replace(/_\d{6}(?!\d)/g, "_HHMMSS").replace(/\b\d{10}\b/g, "EPOCH")
+    .replace(/\b(seg|ter|qua|qui|sex|sáb|dom)\b/g, "DIA").replace(/\b\d{1,2} (jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/g, "D MES");
 }
 function diffLinhas(a, b) {
   var la = a.split("\n"), lb = b.split("\n"), out = [];
@@ -163,7 +169,7 @@ function main(argv) {
     missoes.forEach(function (m, ix) {
       total++;
       var nome = m.tipo + " #" + (ix + 1) + " (linha " + m.linha + ")" + (m.tarefa ? ": " + m.tarefa.slice(0, 70) + (m.tarefa.length > 70 ? "…" : "") : "");
-      var meta = m.at["data-goal"] || "", erros = [];
+      var meta = m.at["data-goal"] || "", erros = [], avisos = [];
       try {
         if (m.tipo === "try") {
           var sol = m.at["data-solucao"];
@@ -192,18 +198,18 @@ function main(argv) {
             if (f1.length) erros.push("com a solução, a meta não foi cumprida: " + f1.join(", ") + "\n      saída: " + JSON.stringify(r1.texto.slice(0, 300)) + " [código " + r1.status + "]");
           }
           var codigoComparar = m.solucao !== null ? m.solucao : m.script;
-          if (!semLab && codigoComparar !== null && !/^\s*$/.test(codigoComparar)) {
+          if (!semLab && codigoComparar !== null && !/^\s*$/.test(codigoComparar) && m.at["data-comparar"] !== "nao") {
             var mm = { at: m.at, solucao: codigoComparar };
             var cl = casoLab(mm);
             var rs = rodarScriptSim(m, codigoComparar, false);
-            comparacoes.push({ caso: cl, simTexto: rs.texto + "[código de saída: " + rs.status + "]\n", erros: erros, nome: nome });
+            comparacoes.push({ caso: cl, simTexto: rs.texto + "[código de saída: " + rs.status + "]\n", erros: erros, avisos: avisos, nome: nome, codigo: codigoComparar });
           } else if (m.script !== null && !meta) {
             var r2 = rodarScriptSim(m, m.script, true);
             if (/\(simulador\) erro interno/.test(r2.texto)) erros.push("erro interno do simulador: " + r2.texto);
           }
         }
       } catch (e) { erros.push("exceção: " + (e && e.stack || e)); }
-      linhas.push({ nome: nome, erros: erros });
+      linhas.push({ nome: nome, erros: erros, avisos: avisos });
     });
     relatorio.push({ pg: path.basename(arq), linhas: linhas });
   });
@@ -220,7 +226,13 @@ function main(argv) {
     comparacoes.forEach(function (c) {
       var real = cache[c.caso.id];
       if (real === undefined) { c.erros.push("sem resultado do laboratório"); return; }
-      if (real !== c.simTexto) c.erros.push("a saída no simulador é diferente da do Bash real:\n" + diffLinhas(real, c.simTexto));
+      if (real === c.simTexto) return;
+      // diferenças esperadas: relógio real do laboratório, números aleatórios, ordem de processos paralelos
+      var cod = c.codigo || "";
+      if (normalizarDatas(real) === normalizarDatas(c.simTexto)) { c.avisos.push("difere só na data/hora (o laboratório usa o relógio de verdade; o simulador, 15/10/2026 10:30)"); return; }
+      if (/\bS?RANDOM\b|\bshuf\b/.test(cod)) { c.avisos.push("usa números aleatórios: a saída não dá para comparar com o laboratório"); return; }
+      if (/&\s*($|\n|;)|&$/m.test(cod) && real.split("\n").sort().join("\n") === c.simTexto.split("\n").sort().join("\n")) { c.avisos.push("as mesmas linhas, em outra ordem (processos em paralelo)"); return; }
+      c.erros.push("a saída no simulador é diferente da do Bash real:\n" + diffLinhas(real, c.simTexto));
     });
   }
   relatorio.forEach(function (r) {
@@ -228,7 +240,7 @@ function main(argv) {
     console.log(r.pg);
     if (!Array.isArray(r.linhas[0]) && typeof r.linhas[0] === "string") { r.linhas.forEach(function (l) { console.log(l); }); return; }
     r.linhas.forEach(function (l) {
-      if (!l.erros.length) console.log("  ✔ " + l.nome);
+      if (!l.erros.length) { console.log("  ✔ " + l.nome); (l.avisos || []).forEach(function (a) { console.log("      ⚠ " + a); }); }
       else { falhas++; console.log("  ✗ " + l.nome); l.erros.forEach(function (e) { console.log("      - " + e); }); }
     });
   });

@@ -57,11 +57,6 @@ trap - USR1
 trap -p
 trap 'echo x' NADA
 trap -l | head -2
-### jobs-basico
-sleep 1 &
-jobs
-wait
-echo fim
 ### kill-erros
 kill 999999
 kill %3

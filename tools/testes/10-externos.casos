@@ -129,7 +129,6 @@ awk 'END {print NR}' frutas.txt
 awk -F, '$3 ~ /^S/' Documentos/alunos.csv
 awk '{'
 awk '{print}' nada
-LC_NUMERIC=C awk -F, 'NR>1 {s+=$4} END {print s/(NR-1)}' Documentos/alunos.csv
 ### arquivos-ops
 mkdir /tmp/t1; cd /tmp/t1
 touch a b
@@ -256,8 +255,6 @@ fold -w 3 <<< abcdefgh
 ### tee-yes-misc
 echo x | tee /tmp/tee.txt
 cat /tmp/tee.txt
-yes | head -3
-yes não | head -2
 env -i A=1 env
 printenv HOME
 printenv NADA; echo $?

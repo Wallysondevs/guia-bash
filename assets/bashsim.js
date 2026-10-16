@@ -193,7 +193,7 @@
   var BIN_EXTRA = ["nano", "vim", "vi", "less", "more", "curl", "wget", "ssh", "scp", "apt", "apt-get", "dpkg", "sudo", "su", "python3", "perl", "man", "systemctl", "crontab", "top", "htop", "git", "make", "gcc", "zip", "unzip", "tar", "gzip", "gunzip", "ping", "ip", "ss", "shellcheck", "dash", "watch", "timeout", "nohup", "tput", "clear", "shuf", "fold", "comm", "join", "od", "md5sum", "sha256sum", "base64", "factor", "tac", "yes", "mktemp", "readlink", "groups", "logname", "tty", "nproc", "uptime", "free", "pkill", "killall", "pidof", "tree", "awk", "mawk", "gawk", "test", "[", "true", "false", "echo", "printf", "pwd", "sleep", "bc", "expr", "xxd", "hexdump", "iconv", "split", "csplit", "truncate", "install", "fmt", "pr", "expand", "unexpand", "numfmt", "seq", "sort", "uniq", "who", "w", "last", "lsblk", "mount", "umount", "chown", "chgrp", "sync", "dd", "cksum", "sum", "sha1sum", "b2sum", "tsort", "ptx", "stdbuf", "env", "printenv", "nice", "renice", "basenc", "base32", "link", "unlink", "dir", "vdir", "dircolors", "pathchk", "mkfifo", "mknod", "shred", "users", "hostid", "pinky", "arch", "uname", "hostname", "whoami", "id", "date", "cal", "column", "rev", "look", "diff", "cmp", "patch", "file", "stat", "du", "df", "which", "whereis", "type", "xargs", "find", "locate", "grep", "egrep", "fgrep", "sed", "cut", "tr", "tee", "wc", "head", "tail", "cat", "nl", "paste", "ls", "cp", "mv", "rm", "mkdir", "rmdir", "touch", "ln", "chmod", "basename", "dirname", "realpath", "ps", "pgrep", "kill", "bash", "rbash", "sh", "lsof", "jq", "zcat", "openssl", "ssh-keygen", "rsync", "zsh", "fish", "code", "gedit", "xdg-open", "notify-send", "at", "batch", "flock", "getent", "logger", "lscpu", "sensors", "dmesg", "journalctl", "service", "ufw", "snap", "flatpak", "docker", "node", "npm", "pip", "pip3", "java", "ruby", "php", "lua", "tclsh", "xclip", "script", "strace", "ltrace", "gdb", "valgrind", "time", "env", "infocmp", "ldd"];
 
   function criarFS() {
-    var T0 = dataT(2026, 2, 26, 9, 0), TB = dataT(2026, 2, 13, 4, 0);
+    var T0 = dataT(2026, 3, 26, 9, 0), TB = dataT(2026, 2, 13, 4, 0);
     var raiz = mkD(0, 493, dataT(2026, 10, 13, 13, 7));
     function por(caminho, no) {
       var partes = caminho.split("/").filter(Boolean), atual = raiz;
@@ -206,7 +206,7 @@
     por("/sbin", mkL("usr/sbin", dataT(2024, 4, 22, 10, 0)));
     por("/lib", mkL("usr/lib", dataT(2024, 4, 22, 10, 0)));
     por("/root", mkD(0, 448, T0));
-    var tmp = por("/tmp", mkD(0, 1023, NOW0 - 3600000)); tmp.tam = 4096;
+    var tmp = por("/tmp", mkD(UID, 493, NOW0 - 3600000)); tmp.tam = 40; tmp.tmpfs = true;
     por("/usr/bin", mkD(0, 493, TB));
     por("/usr/sbin", mkD(0, 493, TB));
     por("/usr/lib", mkD(0, 493, TB));
@@ -242,37 +242,45 @@
     por("/dev/stderr", mkL("/proc/self/fd/2", DV));
     por("/dev/fd", mkL("/proc/self/fd", DV));
     // /home/ana — igual a ~/guia-bash-lab/template
-    por("/home", mkD(0, 493, dataT(2026, 3, 26, 9, 0)));
+    var hm = por("/home", mkD(UID, 493, NOW0)); hm.tam = 60;
     var h = por("/home/ana", mkD(UID, 488, dataT(2026, 10, 15, 8, 47)));
     var d12 = dataT(2026, 10, 12, 8, 3);
-    ["Área de trabalho", "Imagens", "Modelos", "Música", "Público", "Vídeos"].forEach(function (n) { h.c[n] = mkD(UID, 509, d12); });
+    // a ordem de criação imita a ordem do readdir no laboratório (find, du, grep -r)
     h.c["Documentos"] = mkD(UID, 509, dataT(2026, 10, 15, 9, 7));
-    h.c["Downloads"] = mkD(UID, 509, dataT(2026, 10, 15, 8, 47));
-    h.c[".bash_history"] = mkF(UID, 384, "", dataT(2026, 10, 15, 8, 40));
+    h.c["Música"] = mkD(UID, 509, d12);
+    h.c["Área de trabalho"] = mkD(UID, 509, d12);
     h.c[".bashrc"] = mkF(UID, 420, TXT.bashrc, T0);
-    h.c[".profile"] = mkF(UID, 420, TXT.profile, T0);
     h.c["frutas.txt"] = mkF(UID, 436, TXT.frutas, dataT(2026, 10, 14, 16, 5));
+    h.c["Downloads"] = mkD(UID, 509, dataT(2026, 10, 15, 8, 47));
+    h.c["Modelos"] = mkD(UID, 509, d12);
+    h.c[".profile"] = mkF(UID, 420, TXT.profile, T0);
+    h.c[".bash_history"] = mkF(UID, 384, "", dataT(2026, 10, 15, 8, 40));
+    h.c["Público"] = mkD(UID, 509, d12);
+    h.c["Vídeos"] = mkD(UID, 509, d12);
+    h.c["Imagens"] = mkD(UID, 509, d12);
     var doc = h.c["Documentos"].c;
-    doc["acesso.log"] = mkF(UID, 436, TXT.acesso, dataT(2026, 10, 15, 9, 7));
     doc["alunos.csv"] = mkF(UID, 436, TXT.alunos, dataT(2026, 10, 14, 18, 12));
     doc["notas.txt"] = mkF(UID, 436, TXT.notas, dataT(2026, 10, 14, 17, 40));
+    doc["acesso.log"] = mkF(UID, 436, TXT.acesso, dataT(2026, 10, 15, 9, 7));
     doc["relatorio.odt"] = mkF(UID, 436, null, dataT(2026, 10, 14, 17, 40), 8394);
     doc["projetos"] = mkD(UID, 509, dataT(2026, 10, 15, 9, 15));
-    doc["projetos"].c["backup.sh"] = mkF(UID, 509, TXT.backup, dataT(2026, 10, 15, 9, 15));
     doc["projetos"].c["site"] = mkD(UID, 509, d12);
+    doc["projetos"].c["backup.sh"] = mkF(UID, 509, TXT.backup, dataT(2026, 10, 15, 9, 15));
     doc["projetos"].c["site"].c["index.html"] = mkF(UID, 436, "<h1>Olá</h1>\n", d12);
     doc["projetos"].c["site"].c["style.css"] = mkF(UID, 436, "h1 { color: orange; }\n", d12);
     var dl = h.c["Downloads"].c;
-    dl["ubuntu-26.04-desktop-amd64.iso"] = mkF(UID, 436, null, dataT(2026, 10, 10, 21, 14), 6333579264);
     dl["manual.pdf"] = mkF(UID, 436, null, dataT(2026, 10, 13, 11, 2), 2411520);
-    dl["foto.jpg"] = mkF(UID, 436, null, dataT(2026, 10, 15, 8, 47), 49152);
-    dl["musica.mp3"] = mkF(UID, 436, null, dataT(2026, 10, 9, 20, 10), 5242880);
     dl["fotos-viagem.zip"] = mkF(UID, 436, null, dataT(2026, 10, 1, 19, 30), 104857600);
+    dl["musica.mp3"] = mkF(UID, 436, null, dataT(2026, 10, 9, 20, 10), 5242880);
+    dl["ubuntu-26.04-desktop-amd64.iso"] = mkF(UID, 436, null, dataT(2026, 10, 10, 21, 14), 6333579264);
+    dl["foto.jpg"] = mkF(UID, 436, null, dataT(2026, 10, 15, 8, 47), 49152);
     var im = h.c["Imagens"].c;
-    im["ferias.jpg"] = mkF(UID, 436, null, dataT(2026, 8, 2, 14, 0), 2097152);
     im["perfil.png"] = mkF(UID, 436, null, dataT(2026, 9, 20, 10, 0), 102400);
+    im["ferias.jpg"] = mkF(UID, 436, null, dataT(2026, 8, 2, 14, 0), 2097152);
     return raiz;
   }
+  // nomes de uma pasta na ordem do disco (readdir): ext4 = ordem de criação; tmpfs = inversa
+  function listarDir(no) { var k = Object.keys(no.c); return no.tmpfs ? k.reverse() : k; }
   function contarLinks(no) { // nº de ligações de uma pasta = 2 + subpastas
     if (no.t !== "d") return no.nl || 1;
     var n = 2; for (var k in no.c) if (no.c[k].t === "d") n++; return n;
@@ -598,7 +606,7 @@
     if (o.kind === "zero" || o.kind === "random") return fonteAvail(k, o);
     while (true) {
       var a = fonteAvail(k, o);
-      if (a !== "") { acc += a; fonteTake(k, o, a.length); continue; }
+      if (a !== "") { acc += a; fonteTake(k, o, a.length); if (acc.length > 20000000) throw new AbortSig("saida"); continue; }
       if (fonteEOF(k, o)) { if (o.kind === "tty-in" || o.kind === "tty-out") k.ttyEOF = false; return acc; }
       if (o.kind === "null" || o.kind === "pipe-w" || (o.kind === "file" && !o.rd)) return acc;
       yield* fonteWait(k, o);
@@ -631,22 +639,26 @@
     this.pilha = [];
     this.avisos = [];
     this.nome = o.nome || "";
+    this.dash = !!o.dash;
   }
   var PP = Parser.prototype;
 
   PP.fimInesperado = function (ch, linha) {
     if (this.inter) throw new Incomplete(ch);
+    if (this.dash) { var ed = new SyntaxErr(ch === "'" || ch === '"' ? "Syntax error: Unterminated quoted string" : "Syntax error: end of file unexpected (expecting \")\")", null, this.ln, true); ed.dash = true; throw ed; }
     throw new SyntaxErr("encontrado EOF inesperado enquanto procurava por `" + ch + "' correspondente", null, linha || this.ln, true);
   };
   PP.eofEm = function () {
     if (this.inter) throw new Incomplete("eof");
     var topo = this.pilha.length ? this.pilha[this.pilha.length - 1] : null;
+    if (this.dash) { var esp = topo ? ({ "if": "fi", "while": "done", "until": "done", "for": "done", "case": "esac", "{": "}", "(": ")", "function": "}" })[topo.kw] : null; var ed = new SyntaxErr("Syntax error: end of file unexpected" + (esp ? " (expecting \"" + esp + "\")" : ""), null, this.ln, true); ed.dash = true; throw ed; }
     if (topo) throw new SyntaxErr("erro de sintaxe: fim inesperado do arquivo do comando `" + topo.kw + "' na linha " + topo.ln, null, this.ln, true);
     throw new SyntaxErr("erro de sintaxe: fim prematuro do arquivo", null, this.ln, true);
   };
   PP.erroTok = function (t) {
     if (t.t === "EOF") this.eofEm();
     var txt = t.t === "NL" ? "newline" : t.t === "W" ? t.w.raw : t.t === "R" ? t.op : t.t === "ARITH" ? "((" : t.v;
+    if (this.dash) { var ed = new SyntaxErr("Syntax error: " + (t.t === "NL" ? "newline" : "\"" + txt + "\"") + " unexpected", txt, t.ln, true); ed.dash = true; return ed; }
     return new SyntaxErr("erro de sintaxe próximo ao token inesperado `" + txt + "'", txt, t.ln);
   };
 
@@ -676,7 +688,8 @@
     else if ((m = /^\{([A-Za-z_][A-Za-z0-9_]*)\}(?=[<>])/.exec(s.slice(this.i, this.i + 80)))) { fdvar = m[1]; this.i += m[0].length; }
     c = s[this.i]; c2 = s.substr(this.i, 2); c3 = s.substr(this.i, 3);
     if ((c === "<" || c === ">") && s[this.i + 1] === "(" && fd === null && fdvar === null) return this.palavra(ctx, ini, ln);
-    var ops = ["<<<", "<<-", "&>>", "<<", "<&", "<>", ">>", ">&", ">|", "&>", "<", ">"];
+    if (c === "}" && this.fimChave && fd === null && fdvar === null) { this.i++; return { t: "W", w: { p: [{ t: "L", v: "}" }], raw: "}" }, ln: ln }; }
+    var ops = this.dash ? ["<<-", "<<", "<&", "<>", ">>", ">&", ">|", "<", ">"] : ["<<<", "<<-", "&>>", "<<", "<&", "<>", ">>", ">&", ">|", "&>", "<", ">"];
     for (var k = 0; k < ops.length; k++) {
       if (s.substr(this.i, ops[k].length) === ops[k]) {
         if ((ops[k] === "&>" || ops[k] === "&>>") && (fd !== null || fdvar !== null)) break;
@@ -685,10 +698,10 @@
       }
     }
     if (fd !== null || fdvar !== null) { this.i = ini; }
-    var ctl = [";;&", ";;", ";&", ";", "&&", "&", "||", "|&", "|", "(", ")"];
+    var ctl = this.dash ? [";;", ";", "&&", "&", "||", "|", "(", ")"] : [";;&", ";;", ";&", ";", "&&", "&", "||", "|&", "|", "(", ")"];
     for (k = 0; k < ctl.length; k++) {
       if (s.substr(this.i, ctl[k].length) === ctl[k]) {
-        if (ctl[k] === "(" && ctx.cmd && s[this.i + 1] === "(") {
+        if (ctl[k] === "(" && ctx.cmd && s[this.i + 1] === "(" && !this.dash) {
           var ar = this.tentarAritmetica(this.i + 2);
           if (ar) { this.i = ar.fim; return { t: "ARITH", expr: ar.expr, ln: ln }; }
         }
@@ -754,12 +767,12 @@
         }
         if (c === "(") {
           if ((this.extglob || ctx.extglob) && /[?*+@!]$/.test(lit)) { lit += this.lerBalanceado(); continue; }
-          if (ctx.assign && partes.length === 0 && /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=$/.test(lit)) {
+          if (ctx.assign && !this.dash && partes.length === 0 && /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=$/.test(lit)) {
             flush(); this.i++;
             partes.push({ t: "ARR", itens: this.lerArray() });
             continue;
           }
-          if (ctx.assign && partes.length && /\+?=$/.test(lit) && /^[A-Za-z_][A-Za-z0-9_]*\[/.test(s.slice(ini, this.i))) {
+          if (ctx.assign && !this.dash && partes.length && /\+?=$/.test(lit) && /^[A-Za-z_][A-Za-z0-9_]*\[/.test(s.slice(ini, this.i))) {
             flush(); this.i++;
             partes.push({ t: "ARR", itens: this.lerArray() });
             continue;
@@ -776,7 +789,7 @@
       if (c === '"') { flush(); partes.push({ t: "D", p: this.lerDQ() }); continue; }
       if (c === "$") { var r = this.lerDolar(false); if (r) { flush(); partes.push(r); } else { lit += "$"; this.i++; } continue; }
       if (c === "`") { flush(); partes.push(this.lerCrase()); continue; }
-      if (c === "[" && ctx.assign && partes.length === 0 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(lit)) {
+      if (c === "[" && ctx.assign && !this.dash && partes.length === 0 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(lit)) {
         // subscrito de atribuição: a[i + 1]=x  (espaços permitidos dentro dos colchetes)
         var j = this.fimColchete(this.i);
         if (j > 0 && (s[j + 1] === "=" || (s[j + 1] === "+" && s[j + 2] === "="))) {
@@ -939,7 +952,7 @@
       return { t: "C", ast: ast, raw: s.slice(ini + 2, this.i - 1) };
     }
     if (n === "{") return this.lerChaves(emDQ);
-    if (n === "'" && !emDQ) {
+    if (n === "'" && !emDQ && !this.dash) {
       this.i++;
       var j = this.i + 1, txt = "";
       while (j < s.length && s[j] !== "'") { if (s[j] === "\\" && j + 1 < s.length) { txt += s[j] + s[j + 1]; j += 2; continue; } if (s[j] === "\n") this.ln++; txt += s[j]; j++; }
@@ -947,7 +960,7 @@
       this.i = j + 1;
       return { t: "Q", v: decodificarAnsi(txt), ansi: true };
     }
-    if (n === '"' && !emDQ) { this.i++; return { t: "D", p: this.lerDQ() }; }
+    if (n === '"' && !emDQ && !this.dash) { this.i++; return { t: "D", p: this.lerDQ() }; }
     if (n !== undefined && /[A-Za-z_]/.test(n)) {
       var m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i + 1, i + 200));
       this.i = i + 1 + m[0].length;
@@ -960,6 +973,18 @@
   PP.lerChaves = function (emDQ) {
     var s = this.s, ini = this.i, ln = this.ln;
     this.i += 2;
+    // ${ comandos; } e ${| comandos; } (Bash 5.3): substituição de comando no shell atual
+    if (/[ \t\n|]/.test(s[this.i] || "") && !this.dash) {
+      var reply = s[this.i] === "|"; if (reply) this.i++;
+      var la0 = this.la, fc0 = this.fimChave; this.la = null; this.fimChave = true;
+      this.pilha.push({ kw: "${", ln: ln });
+      try {
+        var lista = this.parseLista(false, null, false);
+        this.esperar("}");
+      } finally { this.fimChave = fc0; }
+      this.pilha.pop(); this.la = la0;
+      return { t: "F", ast: lista, reply: reply, raw: s.slice(ini, this.i) };
+    }
     var v = { t: "V", name: null, ln: ln };
     function fimRaw(self) { var d = 1, q = null, j = self.i; for (; j < s.length; j++) { var c = s[j]; if (q) { if (c === "\\" && q === '"') { j++; continue; } if (c === q) q = null; continue; } if (c === "\\") { j++; continue; } if (c === "'" && !emDQ) { q = c; continue; } if (c === '"') { q = c; continue; } if (c === "{") d++; else if (c === "}") { d--; if (d === 0) return j; } } return -1; }
     var c = s[this.i];
@@ -1076,7 +1101,7 @@
       }
       if (!achou) {
         if (this.inter) throw new Incomplete("heredoc");
-        this.avisos.push({ ln: this.ln, msg: "aviso: here-document na linha " + h.ln + " delimitado pelo fim do arquivo (desejava `" + h.delim + "')" });
+        this.avisos.push({ ln: s[s.length - 1] === "\n" ? this.ln - 1 : this.ln, msg: "aviso: here-document na linha " + h.ln + " delimitado pelo fim do arquivo (desejava `" + h.delim + "')" });
       }
       if (h.quoted) h.r.hd = { texto: corpo };
       else h.r.hd = { w: new Parser(corpo, { linha: lnIni }).lerAte(null, "hd") };
@@ -1188,7 +1213,7 @@
       if (!(f.t === "O" && f.v === ")")) throw this.erroTok(f);
       this.pilha.pop();
       cmd = { k: "sub", body: corpo, ln: ln };
-    } else if (p !== null && RESERVADAS[p] && t.w.raw === p) {
+    } else if (p !== null && RESERVADAS[p] && t.w.raw === p && !(this.dash && /^(\[\[|\]\]|function|select|time|coproc)$/.test(p))) {
       switch (p) {
         case "if": cmd = this.parseIf(); break;
         case "while": case "until": cmd = this.parseWhile(p); break;
@@ -1458,7 +1483,7 @@
     }
     var ln = this.ln;
     if (this.i >= s.length) { if (this.inter) throw new Incomplete("[["); throw new SyntaxErr("encontrado EOF inesperado enquanto procurava por `]]'", null, ln, true); }
-    if (regex) return { t: "W", w: this.lerRegex(), ln: ln };
+    if (regex) { this.lnRegex = ln; return { t: "W", w: this.lerRegex(), ln: ln }; }
     var c2 = s.substr(this.i, 2), c = s[this.i];
     if (c2 === "&&" || c2 === "||") { this.i += 2; return { t: "O", v: c2, ln: ln }; }
     if (c === "(" || c === ")") { this.i++; return { t: "O", v: c, ln: ln }; }
@@ -1481,9 +1506,16 @@
       if (c === "'") { flush(); partes.push({ t: "Q", v: this.lerSimples(), sq: true }); continue; }
       if (c === '"') { flush(); partes.push({ t: "D", p: this.lerDQ() }); continue; }
       if (c === "$") { var r = this.lerDolar(false); if (r) { flush(); partes.push(r); } else { lit += "$"; this.i++; } continue; }
+      if (c === "\n") this.ln++;
       lit += c; this.i++;
     }
     flush();
+    if (d > 0 && this.i >= s.length) {
+      if (this.inter) throw new Incomplete(")");
+      var e = new SyntaxErr("encontrado EOF inesperado enquanto procurava por `)' correspondente", null, this.lnRegex || this.ln, true);
+      e.extra = "argumento inesperado para operador binário condicional"; e.extraLinha = this.ln;
+      throw e;
+    }
     return { p: partes, raw: s.slice(ini, this.i) };
   };
   PP.parseCond = function () {
@@ -1524,7 +1556,8 @@
       if (COND_UN[raw] && !t.op) {
         var n = peekc();
         if (n.t === "W" && !fim(n)) { nextc(); return { op: "un", o: raw, a: n.w }; }
-        if (fim(n) || (n.t === "O" && (n.v === "&&" || n.v === "||" || n.v === ")"))) return { op: "word", a: t.w };
+        if (fim(n)) throw new SyntaxErr("argumento inesperado `]]' para operador unário condicional", "]]", n.ln, false, false, "erro de sintaxe próximo a `]]'");
+        if (n.t === "O" && (n.v === "&&" || n.v === "||" || n.v === ")")) return { op: "word", a: t.w };
         throw erro(n);
       }
       var b = peekc();
@@ -1601,7 +1634,7 @@
     this.e = expr; this.ctx = ctx; this.p = 0; this.lasttp = 0; this.tok = null; this.tv = null; this.nivel = nivel || 0;
   }
   var AP = Arith.prototype;
-  AP.erro = function (msg) { throw new ArithErr(msg, this.e.slice(this.lasttp)); };
+  AP.erro = function (msg, tok) { var e = new ArithErr(msg, tok !== undefined ? tok : this.e.slice(this.lasttp)); if (tok !== undefined) e.num = true; throw e; };
   AP.ler = function () {
     var e = this.e, p = this.p;
     while (p < e.length && /[ \t\n]/.test(e[p])) p++;
@@ -1638,9 +1671,9 @@
     var base = 10, dig = txt, m;
     if ((m = /^([0-9]+)#(.*)$/.exec(txt))) {
       base = parseInt(m[1], 10); dig = m[2];
-      if (base < 2 || base > 64) this.erro("base aritmética inválida");
-      if (dig === "") this.erro("número inválido");
-    } else if (/^0[xX]/.test(txt)) { base = 16; dig = txt.slice(2); if (dig === "") this.erro("número inválido"); }
+      if (base < 2 || base > 64) this.erro("base aritmética inválida", txt);
+      if (dig === "") this.erro("número inválido", txt);
+    } else if (/^0[xX]/.test(txt)) { base = 16; dig = txt.slice(2); if (dig === "") this.erro("número inválido", txt); }
     else if (txt.length > 1 && txt[0] === "0") { base = 8; dig = txt.slice(1); }
     var v = 0, vb = null;
     for (var i = 0; i < dig.length; i++) {
@@ -1649,7 +1682,7 @@
       else if (/[a-z]/.test(c)) d = c.charCodeAt(0) - 97 + 10;
       else if (/[A-Z]/.test(c)) d = base <= 36 ? c.charCodeAt(0) - 65 + 10 : c.charCodeAt(0) - 65 + 36;
       else if (c === "@") d = 62; else if (c === "_") d = 63; else d = 99;
-      if (d >= base) this.erro("valor muito grande para esta base de numeração");
+      if (d >= base) this.erro("valor muito grande para esta base de numeração", txt);
       if (vb === null) { v = v * base + d; if (v > MAXS) { vb = BigInt(Math.floor(v / base)) * BigInt(base) + BigInt(d); } }
       else vb = BigInt.asIntN(64, vb * BigInt(base) + BigInt(d));
     }
@@ -1659,7 +1692,7 @@
     var s = this.ctx.get(t.nome, t.idx);
     if (s === null || s === undefined || s === "") return 0;
     if (/^\s*-?[0-9]+\s*$/.test(s) && !/^\s*-?0[0-9]/.test(s)) { var n = parseInt(s, 10); if (seguro(n)) return n; }
-    if (this.nivel > 1000) this.erro("excedido o nível de recursividade da expressão");
+    if (this.nivel > 60) { var e = new ArithErr("excedido o nível de recursividade da expressão", t.nome); e.expr = t.nome; throw e; }
     var sub = new Arith(s, this.ctx, this.nivel + 1);
     return sub.avaliar();
   };
@@ -1978,14 +2011,14 @@
             var f = re.indexOf(":]", k);
             if (f > 0) {
               var nome = re.slice(k + 2, f);
-              cls += ({ alpha: "\\p{L}", digit: "0-9", alnum: "\\p{L}0-9", upper: "\\p{Lu}", lower: "\\p{Ll}", space: "\\s", blank: " \\t", punct: "!-\\/:-@\\[-`{-~", xdigit: "0-9A-Fa-f", cntrl: "\\x00-\\x1f", print: "\\x20-\\x7e\\u00a0-\\uffff", graph: "\\x21-\\x7e\\u00a1-\\uffff" })[nome] || "";
+              cls += ((opts.ascii ? { alpha: "A-Za-z", digit: "0-9", alnum: "A-Za-z0-9", upper: "A-Z", lower: "a-z", space: " \\t\\n\\r\\f\\v", blank: " \\t", punct: "!-\\/:-@\\[-`{-~", xdigit: "0-9A-Fa-f", cntrl: "\\x00-\\x1f\\x7f", print: "\\x20-\\x7e", graph: "\\x21-\\x7e" } : { alpha: "\\p{L}", digit: "0-9", alnum: "\\p{L}0-9", upper: "\\p{Lu}", lower: "\\p{Ll}", space: "\\s", blank: " \\t", punct: "!-\\/:-@\\[-`{-~", xdigit: "0-9A-Fa-f", cntrl: "\\x00-\\x1f", print: "\\x20-\\x7e\\u00a0-\\uffff", graph: "\\x21-\\x7e\\u00a1-\\uffff" }))[nome] || "";
               k = f + 2; continue;
             }
           }
           if (re[k] === "\\" || re[k] === "[" || (re[k] === "]")) { cls += "\\" + re[k]; k++; continue; }
           cls += re[k]; k++;
         }
-        if (k >= re.length) { out += "\\["; i++; continue; }
+        if (k >= re.length) { if (opts.estrito !== false) return null; out += "\\["; i++; continue; }
         out += cls + "]"; i = k + 1; continue;
       }
       if (bre) {
@@ -2001,6 +2034,7 @@
     return out;
   }
   function criarRegex(src, flags) {
+    if (src === null || src === undefined) return null;
     try { return new RegExp(src, (flags || "") + "u"); } catch (e) { try { return new RegExp(src, flags || ""); } catch (e2) { return null; } }
   }
 
@@ -2108,6 +2142,7 @@
     n.funcStack = this.funcStack.slice(); n.fonteStack = this.fonteStack.slice();
     n.loopNivel = this.loopNivel;
     n.dirStack = this.dirStack.slice();
+    n.jobs = this.jobs.slice(); n.jobCur = this.jobCur; n.jobAnt = this.jobAnt; n.proxJob = this.proxJob;
     n.hist = this.hist; n.histBase = this.histBase;
     n.inicio = this.inicio; n.ultimoBg = this.ultimoBg; n.ultimoArg = this.ultimoArg; n.umask = this.umask;
     n.nome0 = this.nome0; n.modoC = this.modoC; n.semErrexit = this.semErrexit;
@@ -2119,6 +2154,7 @@
   };
   SP.fecharTudo = function () { this.fds.forEach(function (x) { unref(x); }); this.fds = []; };
   SP.prefixo = function () {
+    if (this.ehSh) return this.nome0 + ": " + this.lineno + ": ";
     if (this.interativo) return "bash: ";
     return this.nome0 + ": linha " + this.lineno + ": ";
   };
@@ -2175,6 +2211,7 @@
       case "BASHOPTS": var self = this; return Object.keys(this.shopt).filter(function (k) { return self.shopt[k]; }).sort().join(":");
       case "BASH_ARGV0": return this.arg0;
       case "HISTCMD": return String(this.hist.length + 1);
+      case "BASH_COMMAND": return this.bashCommand || "";
     }
     return undefined;
   };
@@ -2194,11 +2231,7 @@
   // valor escalar de $nome (ou nome[idx]); null = não definida
   SP.valor = function (nome, idx) {
     var esp = idx == null ? this.especial(nome) : undefined;
-    if (esp !== undefined && !(nome === "RANDOM" && this.acharVar(nome) && this.acharVar(nome).unsetEsp)) {
-      if (nome === "SECONDS" || nome === "LINENO" || nome === "RANDOM" || nome === "SRANDOM" || nome === "EPOCHSECONDS" || nome === "EPOCHREALTIME" || nome === "BASHPID" || nome === "BASH_SUBSHELL" || nome === "SHELLOPTS" || nome === "BASHOPTS" || nome === "HISTCMD") {
-        var vv = this.acharVar(nome); if (!(vv && vv.removida)) return esp;
-      }
-    }
+    if (esp !== undefined) { var vv = this.acharVar(nome); if (!(vv && vv.removida)) return esp; }
     nome = this.resolverRef(nome);
     var ae = this.arrayEspecial(nome);
     if (ae) { var i0 = idx == null ? 0 : this.indiceNum(idx, ae.length); return i0 in ae ? ae[i0] : null; }
@@ -2257,6 +2290,7 @@
     var esc = opt.local ? this.pilhaLocal[this.pilhaLocal.length - 1] : (opt.global ? this.globais : (this.escopoDe(nome) || this.globais));
     var v = esc[nome];
     if (v && v.at.r) { this.erro(nome + ": a variável permite somente leitura"); return false; }
+    if (nome === "PATH" && opt.idx == null) this.hash = Object.create(null);
     if (nome === "RANDOM" && opt.idx == null) { this.rnd = (parseInt(valor, 10) || 0) >>> 0; this.ultimoRnd = -1; }
     if (nome === "SECONDS" && opt.idx == null) { this.inicio = this.k.clock; this.secBase = parseInt(valor, 10) || 0; }
     if (!v) { v = esc[nome] = new Var(undefined, {}); if (this.o.allexport) v.at.x = true; }
@@ -2286,7 +2320,7 @@
       else if (Array.isArray(v.v)) v.v[0] = (opt.add && hasOwn(v.v, 0) ? v.v[0] : "") + valor;
       else v.v = (opt.add && v.v !== undefined ? v.v : "") + valor;
     }
-    delete v.removida;
+    delete v.removida; delete v.semValor;
     if (nome === "PWD" && false) this.cwd = valor;
     return true;
   };
@@ -2373,7 +2407,7 @@
   };
   SP.erroArit = function (expr, e, rot) {
     if (e.tok === null) { this.erro(e.msg); return; }
-    this.erro((rot ? rot + ": " : "") + expr + ": " + e.msg + " (token de erro é \"" + e.tok + "\")");
+    this.erro((rot ? rot + ": " : "") + (e.expr !== undefined ? e.expr : e.num ? e.tok : expr.replace(/^[ \t\n]+/, "")) + ": " + e.msg + " (token de erro é \"" + e.tok + "\")");
   };
 
   /* ---------- caminhos e arquivos ---------- */
@@ -2556,8 +2590,8 @@
   };
   // aplica til no início das partes (e depois de ":" em atribuições)
   SP.aplicarTil = function (partes, atrib) {
-    if (!partes.length || partes[0].t !== "L") return partes;
-    var self = this, v = partes[0].v;
+    if (!partes.length || (partes[0].t !== "L" && !atrib)) return partes;
+    var self = this, v = partes[0].t === "L" ? partes[0].v : "";
     function troca(txt, inicioPalavra) {
       if (txt[0] !== "~") return null;
       var barra = txt.indexOf("/"), pref = barra < 0 ? txt.slice(1) : txt.slice(1, barra);
@@ -2574,16 +2608,26 @@
       if (!t) return partes;
       return [{ t: "Q", v: t.home, til: true }].concat(t.resto ? [{ t: "L", v: t.resto }] : [], partes.slice(1));
     }
-    // atribuição: til no início e depois de cada ":"
-    var pedacos = v.split(":"), saida = [];
-    pedacos.forEach(function (pd, i) {
-      var ultimoPedaco = i === pedacos.length - 1;
-      if (i > 0) saida.push({ t: "L", v: ":" });
-      var t2 = pd[0] === "~" && (pd.indexOf("/") >= 0 || !ultimoPedaco || partes.length === 1) ? troca(pd, true) : null;
-      if (t2) { saida.push({ t: "Q", v: t2.home, til: true }); if (t2.resto) saida.push({ t: "L", v: t2.resto }); }
-      else if (pd) saida.push({ t: "L", v: pd });
+    // atribuição: til no início e depois de cada ":" (em qualquer parte literal)
+    var saida = [];
+    partes.forEach(function (p, idx) {
+      if (p.t !== "L") { saida.push(p); return; }
+      var inicioOk = idx === 0 || (partes[idx - 1].t === "L" && /:$/.test(partes[idx - 1].v));
+      var pedacos = p.v.split(":");
+      pedacos.forEach(function (pd, i) {
+        if (i > 0) saida.push({ t: "L", v: ":" });
+        var ultimoPd = i === pedacos.length - 1;
+        if ((i > 0 || inicioOk) && pd[0] === "~") {
+          var barra = pd.indexOf("/"), pref = barra < 0 ? pd.slice(1) : pd.slice(1, barra);
+          if (barra >= 0 || !ultimoPd || idx === partes.length - 1) {
+            var r = self.til(pref);
+            if (r !== null) { saida.push({ t: "Q", v: r, til: true }); if (barra >= 0) saida.push({ t: "L", v: pd.slice(barra) }); return; }
+          }
+        }
+        if (pd) saida.push({ t: "L", v: pd });
+      });
     });
-    return saida.concat(partes.slice(1));
+    return saida;
   };
 
   /* ---------- partes → segmentos ---------- */
@@ -2615,6 +2659,7 @@
           break;
         }
         case "P": { var cam = yield* this.substProcesso(p); segs.push({ s: cam, q: true }); break; }
+        case "F": { var fo = yield* this.funsub(p); segs.push(ctx.dq ? { s: fo, q: true } : { s: fo, sp: true }); break; }
         case "ARR": segs.push({ s: "(" + "…" + ")", q: true }); break;
       }
     }
@@ -2649,6 +2694,7 @@
   function ifsDe(sh) { var v = sh.valor("IFS"); return v === null ? " \t\n" : v; }
   SP.expParam = function* (v, dq, ctx) {
     if (v.bad) { this.erro(v.raw + ": substituição incorreta"); throw new CmdErr(1); }
+    if (this.ehSh && (v.idx != null || v.ind || (v.op && !/^(:?[-=?+]|##?|%%?)$/.test(v.op)))) { this.erro("Bad substitution"); throw new FatalSig(2); }
     var nome = v.name, idx = v.idx, self = this;
     var lista = null, val = null, estrela = false, definida = true, ehArray = false;
     // ${!prefixo*} ${!prefixo@}
@@ -2894,7 +2940,7 @@
     var n = Number(r);
     if (n < 0) {
       var len = v && Array.isArray(v.v) ? v.v.length : (v && v.v !== undefined ? 1 : 0);
-      if (len + n < 0) { this.erro(nome + "[" + n + "]: subscrito de array incorreto"); return { i: 1e15, erro: true }; }
+      if (len + n < 0) { this.erro(nome + ": subscrito de array incorreto"); return { i: 1e15, erro: true }; }
       n = len + n;
     }
     return { i: n };
@@ -3017,6 +3063,24 @@
     } catch (e2) { if (e2 instanceof SigPipe) st = 141; else throw e2; }
     return st;
   };
+  SP.funsub = function* (p) {
+    var pp = novoPipe(), leitor = ref(pp[0]);
+    pp[0].p.semLimite = true;
+    var salvo = this.fds[1];
+    if (!p.reply) this.fds[1] = ref(pp[1]);
+    var esc = null;
+    if (p.reply) { esc = Object.create(null); esc.REPLY = new Var(undefined, {}); this.pilhaLocal.push(esc); }
+    var out;
+    try {
+      try { yield* this.rodarLista(p.ast); } catch (e) { if (!(e instanceof ReturnSig)) throw e; }
+      out = p.reply ? (this.valor("REPLY") || "") : pp[0].p.buf.replace(/\n+$/, "");
+    } finally {
+      if (!p.reply) { unref(this.fds[1]); this.fds[1] = salvo; }
+      if (esc) { var i = this.pilhaLocal.lastIndexOf(esc); if (i >= 0) this.pilhaLocal.splice(i, 1); }
+      unref(leitor);
+    }
+    return out;
+  };
   SP.substProcesso = function* (p) {
     var pp = novoPipe(), fd = 63;
     while (this.fds[fd]) fd--;
@@ -3104,6 +3168,18 @@
         return;
       }
       if (no.t !== "d" || !self.pode(no, 4) || !self.pode(no, 1)) return;
+      if (seg === "**" && star2 && ultimoS) {
+        var tudo = function (dno, pref, prof) {
+          Object.keys(dno.c).sort(collate).forEach(function (n) {
+            if (n[0] === "." && !dot) return;
+            var c = (pref === "" ? "" : pref + (pref === "/" ? "" : "/")) + n;
+            res.push(c);
+            if (dno.c[n].t === "d" && prof < 30) tudo(dno.c[n], c, prof + 1);
+          });
+        };
+        tudo(no, prefixo, 0);
+        return;
+      }
       if (seg === "**" && star2) {
         var visit = function (dno, pref, prof) {
           anda(dno, pref, k + 1);
@@ -3164,7 +3240,7 @@
         if (!semGlob && !this.o.noglob && c.glob && temCuringa(c.pat, this.shopt.extglob)) {
           var g = this.glob(c.pat);
           if (g.length) { g.forEach(function (x) { out.push(x); }); continue; }
-          if (this.shopt.failglob) { this.erro("nenhuma correspondência: " + c.txt); throw new CmdErr(1); }
+          if (this.shopt.failglob) { this.erro("sem correspondência: " + c.txt); throw new CmdErr(1); }
           if (this.shopt.nullglob) continue;
           out.push(c.txt.replace(/\\(.)/g, function (m, x) { return c.pat.indexOf(m) >= 0 && false ? x : m; }));
           continue;
@@ -3194,6 +3270,7 @@
      8. Executor
      ------------------------------------------------------------------ */
   var BUILTINS = {}; // preenchido adiante: nome → function*(args, sh)
+  var DASH_BUILTINS = {}; ". : [ alias bg break cd command continue echo eval exec exit export false fg getopts hash jobs kill local printf pwd read readonly return set shift test times trap true type ulimit umask unalias unset wait".split(" ").forEach(function (n) { DASH_BUILTINS[n] = 1; });
   var EXT = {};      // programas externos simulados
 
   SP.setLinha = function (ln) { if (!this.travarLinha) this.lineno = ln + (this.lnBase || 0); };
@@ -3376,7 +3453,7 @@
     var est = this.estadoJob(j), fim = est !== "Executando" && est !== "Parado";
     var txt = j.txt + (fim ? "" : " &");
     if (/^Fim da execução/.test(est)) est = "Fim da execução com status " + j.procs[j.procs.length - 1].status;
-    return "[" + j.n + "]" + marca + "  " + (comL ? "" : "") + pad(est, 24, true) + txt;
+    return "[" + j.n + "]" + marca + "  " + est + repete(" ", Math.max(1, 27 - utf8len(est))) + txt;
   };
 
   /* ---------- redirecionamentos ---------- */
@@ -3403,12 +3480,17 @@
         var lista = yield* this.expandirPalavra(r.w);
         if (lista.length !== 1) { this.erro(r.w.raw + ": redirecionamento ambíguo"); this.desfazerRedirs(salvos); return null; }
         alvo = lista[0];
+        if ((op === ">&" || op === "<&") && r.fdvar && alvo === "-") {
+          var fdv = parseInt(this.valor(r.fdvar), 10);
+          if (!isNaN(fdv)) troca(fdv, null);
+          continue;
+        }
         if (op === ">&" || op === "<&") {
           if (/^[0-9]+-?$/.test(alvo) || alvo === "-") {
             if (alvo === "-") { troca(fd, null); continue; }
             var origem = parseInt(alvo, 10), mover = /-$/.test(alvo);
             var od = this.fds[origem];
-            if (!od) { this.erro(origem + ": descritor de arquivo inválido"); this.desfazerRedirs(salvos); return null; }
+            if (!od) { this.erro(origem + ": Descritor de arquivo inválido"); this.desfazerRedirs(salvos); return null; }
             if (op === ">&" && !podeEscrever(od) && od.kind !== "tty-in") { /* o Bash deixa duplicar; o erro aparece na escrita */ }
             troca(fd, od);
             if (mover && origem !== fd) troca(origem, null);
@@ -3679,7 +3761,7 @@
         if (o === "=~") {
           var src = yield* this.expandirRegex(e.b);
           var re = criarRegex(ereParaJs(src), this.shopt.nocasematch ? "i" : "");
-          if (!re) { return 2; }
+          if (!re) { this.erro("[[: expressão regular inválida `" + src + "': Expressão regular inválida"); return 2; }
           var m = re.exec(l);
           if (!m) { this.definirArray("BASH_REMATCH", []); return 1; }
           var arr = []; for (var i = 0; i < m.length; i++) arr[i] = m[i] === undefined ? "" : m[i];
@@ -3800,7 +3882,7 @@
           var a = c.as[j];
           var v = yield* this.valorAtrib(a);
           if (this.o.xtrace) this.xtraceTxt(a.name + (a.idxRaw !== undefined ? "[" + a.idxRaw + "]" : "") + (a.add ? "+=" : "=") + (Array.isArray(v) ? "(" + v.map(function (x) { return citarX(x.v); }).join(" ") + ")" : citarX(v)));
-          if (!this.fazerAtrib(a, v)) { stA = 1; if (!this.interativo && false) throw new FatalSig(1); }
+          if (!this.fazerAtrib(a, v)) { stA = 1; if (this.ehReadonly(this.resolverRef(a.name))) throw new CmdErr(1); }
         }
       } catch (e2) {
         if (e2 instanceof CmdErr) { this.status = 1; throw e2; }
@@ -3824,6 +3906,7 @@
       this.xtraceTxt(args.map(citarX).join(" "));
     }
     this.ultimoArg = args[args.length - 1];
+    this.bashCommand = imprimirSimples(c);
     // DEBUG
     if (this.traps[101] && !this.emTrapDebug) {
       this.emTrapDebug = true;
@@ -3836,7 +3919,7 @@
     if (c.as.length) {
       temp = Object.create(null);
       c.as.forEach(function (a, ix) { var vv = new Var(Array.isArray(tempVals[ix]) ? "" : tempVals[ix], { x: true }); temp[a.name] = vv; });
-      this.pilhaLocal.push(temp); temp.__temp = true;
+      Object.defineProperty(temp, "__temp", { value: true, enumerable: false }); this.pilhaLocal.push(temp);
     }
     var st;
     try {
@@ -3847,6 +3930,7 @@
       this.fecharProcSubst();
     }
     this.status = st;
+    if (this.pendSig.length) { yield* this.tratarSinais(); this.status = st; }
     return st;
   };
   // valor de uma atribuição: string ou lista de {k, v}
@@ -3906,7 +3990,7 @@
         }
       });
       if (pend !== null) m.set(pend, "");
-      v.v = m;
+      v.v = m; delete v.semValor;
       return true;
     }
     var arr = add ? (Array.isArray(v.v) ? v.v : (v.v === undefined ? [] : [v.v])) : [];
@@ -3925,12 +4009,12 @@
     });
     if (v.at.u) arr = arr.map(function (x) { return x.toUpperCase(); });
     if (v.at.l) arr = arr.map(function (x) { return x.toLowerCase(); });
-    v.v = arr; v.at.a = true;
+    v.v = arr; v.at.a = true; delete v.semValor;
     return ok;
   };
 
   // procura um comando no PATH; devolve caminho ou null
-  SP.acharNoPath = function (nome) {
+  SP.acharNoPath = function (nome, semExec) {
     var path = this.valor("PATH");
     if (path === null) path = "";
     var dirs = path.split(":");
@@ -3938,7 +4022,7 @@
       var d = dirs[i] === "" ? "." : dirs[i];
       var c = (d === "/" ? "" : d) + "/" + nome;
       var r = this.resolver(c, true);
-      if (r.no && r.no.t === "f" && this.pode(r.no, 1)) return c;
+      if (r.no && r.no.t === "f" && (semExec || this.pode(r.no, 1))) return c;
     }
     return null;
   };
@@ -3955,7 +4039,7 @@
     opt = opt || {};
     var nome = args[0];
     if (!opt.semFuncao && this.funcs[nome] && !opt.builtin) return yield* this.chamarFuncao(nome, this.funcs[nome], args.slice(1));
-    if (BUILTINS[nome] && !(this.desabilitados && this.desabilitados[nome]) && !opt.externo) {
+    if (BUILTINS[nome] && !(this.desabilitados && this.desabilitados[nome]) && !opt.externo && !(this.ehSh && !DASH_BUILTINS[nome])) {
       try { return yield* BUILTINS[nome].call(this, args, opt); }
       catch (e) { if (e instanceof SigPipe) throw e; throw e; }
     }
@@ -3966,13 +4050,14 @@
     else {
       if (nome === "") { this.erro(": comando não encontrado"); return 127; }
       caminho = this.hash[nome] ? this.hash[nome].path : this.acharNoPath(nome);
-      if (caminho && this.hash[nome]) { var rr = this.resolver(caminho, true); if (!rr.no) { caminho = this.acharNoPath(nome); } }
       if (!caminho) {
+        var semX = this.acharNoPath(nome, true);
+        if (semX) { this.erro(semX + ": Permissão negada"); return 126; }
         if (this.funcs.command_not_found_handle && !this.emCNF) {
           this.emCNF = true;
           try { return yield* this.chamarFuncao("command_not_found_handle", this.funcs.command_not_found_handle, args); } finally { this.emCNF = false; }
         }
-        this.erro(nome + ": comando não encontrado"); return 127;
+        this.erro(nome + (this.ehSh ? ": not found" : ": comando não encontrado")); return 127;
       }
       if (!this.hash[nome]) this.hash[nome] = { path: caminho, hits: 0 };
       this.hash[nome].hits++;
@@ -4002,11 +4087,21 @@
     var linha1 = txt.split("\n")[0];
     var inter = null;
     if (/^#!/.test(linha1)) {
-      var m = /^#!\s*(\S+)(?:\s+(.*))?$/.exec(linha1);
+      var m = /^#!\s*([^ \t]+)(?:[ \t]+([\s\S]*))?$/.exec(linha1);
       inter = m ? m[1] : "";
-      var argI = m && m[2] ? m[2].trim() : "";
+      var argI = m && m[2] ? m[2].replace(/^[ \t]+|[ \t]+$/g, "") : "";
       var b = inter.slice(inter.lastIndexOf("/") + 1);
-      if (b === "env") { b = argI.split(/\s+/)[0]; }
+      var rI = this.resolver(inter, true);
+      if (!rI.no || rI.no.t !== "f") { this.erro(caminho + ": " + inter.replace(/\r/g, "^M") + ": interpretador incorreto: Arquivo ou diretório inexistente"); return 126; }
+      if (b === "env") {
+        var progEnv = argI;
+        if (/[\s\r]/.test(progEnv) || !(this.acharNoPath(progEnv) || progEnv.indexOf("/") >= 0)) {
+          this.escrever(2, "env: ‘" + progEnv.replace(/\r/g, "\\r").replace(/\t/g, "\\t") + "’: Arquivo ou diretório inexistente\n");
+          if (/[\s\r]/.test(progEnv)) this.escrever(2, "env: usa -[v]S para passar opções em linhas shebang\n");
+          return 127;
+        }
+        b = progEnv;
+      }
       if (b === "bash" || b === "sh" || b === "dash") {
         return yield* this.rodarScriptNovo(caminho, txt, args.slice(1), { argv0: args[0], sh: b === "sh" || b === "dash" });
       }
@@ -4100,17 +4195,18 @@
 
   /* ---------- rodar texto (script, source, eval, bash -c, trap) ---------- */
   SP.novoParser = function (txt, opt) {
-    return new Parser(txt, { aliases: this.shopt.expand_aliases ? this.aliases : null, extglob: this.shopt.extglob, linha: (opt && opt.linha) || 1, interativo: false });
+    return new Parser(txt, { aliases: this.shopt.expand_aliases ? this.aliases : null, extglob: this.shopt.extglob, linha: (opt && opt.linha) || 1, interativo: false, dash: !!this.ehSh });
   };
   SP.mostrarErroSintaxe = function (e, opt, txt) {
     opt = opt || {};
     var pref;
+    if (this.ehSh) { this.escrever(2, this.nome0 + ": " + e.line + ": " + e.msg + "\n"); return; }
     if (this.interativo && !opt.script && !opt.eval) { this.escrever(2, "bash: " + e.msg + "\n"); if (e.extra) this.escrever(2, "bash: " + e.extra + "\n"); return; }
-    if (opt.eval) pref = this.prefixoBase() + "eval: linha " + e.line + ": ";
+    if (opt.eval) pref = (this.interativo ? "bash: " : this.nome0 + ": ") + "eval: linha " + e.line + ": ";
     else if (opt.modoC) pref = this.nome0 + ": -c: linha " + e.line + ": ";
     else pref = this.nome0 + ": linha " + e.line + ": ";
     this.escrever(2, pref + e.msg + "\n");
-    if (e.extra) this.escrever(2, pref + e.extra + "\n");
+    if (e.extra) this.escrever(2, (e.extraLinha ? pref.replace(/linha \d+: $/, "linha " + e.extraLinha + ": ") : pref) + e.extra + "\n");
     if (!e.semEco && txt !== undefined) {
       var linhas = txt.split("\n"), l = linhas[(e.line || 1) - 1];
       if (l !== undefined) this.escrever(2, pref + "`" + l + "'\n");
@@ -4209,6 +4305,11 @@
 
   /* ---------- echo ---------- */
   B("echo", function* (args) {
+    if (this.ehSh) {
+      var dn = args[1] === "-n", txt = args.slice(dn ? 2 : 1).join(" "), rd = decodificarAnsi(txt, true);
+      this.escrever(1, rd.s + (dn || rd.parar ? "" : "\n"));
+      return 0;
+    }
     var n = false, e = this.shopt.xpg_echo, i = 1;
     for (; i < args.length; i++) {
       if (!/^-[neE]+$/.test(args[i])) break;
@@ -4244,14 +4345,13 @@
       neg = v < 0 || (v === 0 && 1 / v < 0);
       var a = Math.abs(v), p = prec === null ? 6 : prec;
       if (!isFinite(a)) s = isNaN(a) ? "nan" : "inf";
-      else if (conv === "f" || conv === "F") s = a.toFixed(p);
+      else if (conv === "f" || conv === "F") s = fixoExato(a, p);
       else if (conv === "e" || conv === "E") s = expC(a, p);
       else if (conv === "g" || conv === "G") {
         var P = p === 0 ? 1 : p;
-        var ex = a === 0 ? 0 : Math.floor(Math.log10(a));
-        var t = a.toExponential(P - 1); ex = parseInt(t.split("e")[1], 10);
+        var ex = a === 0 ? 0 : expExato(a, P - 1).e;
         if (ex < -4 || ex >= P) { s = expC(a, P - 1); if (flags.indexOf("#") < 0) s = s.replace(/\.?0+e/, "e"); }
-        else { s = a.toFixed(Math.max(0, P - 1 - ex)); if (flags.indexOf("#") < 0 && s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, ""); }
+        else { s = fixoExato(a, Math.max(0, P - 1 - ex)); if (flags.indexOf("#") < 0 && s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, ""); }
       } else if (conv === "a" || conv === "A") s = a.toString(16);
       if (conv === "E" || conv === "G") s = s.toUpperCase();
       s = s.replace(".", dec);
@@ -4265,7 +4365,42 @@
     if (larg !== null) { if (flags.indexOf("-") >= 0) while (s.length < larg) s += " "; else while (s.length < larg) s = " " + s; }
     return s;
   }
-  function expC(a, p) { var t = a.toExponential(p), m = /^(.*)e([+-])(\d+)$/.exec(t); return m[1] + "e" + m[2] + (m[3].length < 2 ? "0" : "") + m[3]; }
+  function expC(a, p) { var r = expExato(a, p); return r.dig + "e" + (r.e < 0 ? "-" : "+") + (Math.abs(r.e) < 10 ? "0" : "") + Math.abs(r.e); }
+  // valor exato de um double como fração m·2^e (BigInt)
+  function decompor(x) {
+    var dv = new DataView(new ArrayBuffer(8)); dv.setFloat64(0, x);
+    var hi = dv.getUint32(0), lo = dv.getUint32(4), ex = (hi >>> 20) & 2047;
+    var m = BigInt(hi & 1048575) * BigInt(4294967296) + BigInt(lo);
+    if (ex === 0) ex = 1; else m += BigInt(1) << BigInt(52);
+    return { m: m, e: ex - 1075 };
+  }
+  // arredonda x·10^p para inteiro (meio para o par), x >= 0
+  function escalaExata(x, p) {
+    var d = decompor(x), num = d.m, den = BigInt(1);
+    if (p >= 0) num *= BigInt(10) ** BigInt(p); else den *= BigInt(10) ** BigInt(-p);
+    if (d.e >= 0) num <<= BigInt(d.e); else den <<= BigInt(-d.e);
+    var q = num / den, r = num % den, dobro = r * BigInt(2);
+    if (dobro > den || (dobro === den && (q & BigInt(1)))) q += BigInt(1);
+    return q;
+  }
+  function fixoExato(x, p) {
+    if (!HAS_BIG || x === 0) return x.toFixed(p);
+    var s = escalaExata(x, p).toString();
+    if (p > 0) { while (s.length <= p) s = "0" + s; s = s.slice(0, s.length - p) + "." + s.slice(s.length - p); }
+    return s;
+  }
+  function expExato(x, p) {
+    if (x === 0) return { dig: p > 0 ? "0." + repete("0", p) : "0", e: 0 };
+    if (!HAS_BIG) { var t = x.toExponential(p).split("e"); return { dig: t[0], e: parseInt(t[1], 10) }; }
+    var e = Math.floor(Math.log10(x));
+    for (var tent = 0; tent < 3; tent++) {
+      var q = escalaExata(x, p - e).toString();
+      if (q.length > p + 1) { e++; continue; }
+      if (q.length < p + 1) { e--; continue; }
+      return { dig: p > 0 ? q[0] + "." + q.slice(1) : q, e: e };
+    }
+    var t2 = x.toExponential(p).split("e"); return { dig: t2[0], e: parseInt(t2[1], 10) };
+  }
   function bytesLen(s) { return utf8len(s); }
   function cortarBytes(s, n) { var r = "", t = 0; for (var ch of s) { var l = utf8len(ch); if (t + l > n) break; r += ch; t += l; } return r; }
   function padBytes(s, larg, esq) { var n = utf8len(s); while (n < larg) { s = esq ? s + " " : " " + s; n++; } return s; }
@@ -4277,6 +4412,7 @@
     if (inteiro) {
       var m = /^[+-]?(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)/.exec(t);
       if (!m) return { v: 0, erro: true };
+      if (/^[+-]?0[0-7]*[89]/.test(t)) return { v: 0, erro: "octal" };
       var txt = m[0], neg = txt[0] === "-", corpo = txt.replace(/^[+-]/, "");
       var v = /^0[xX]/.test(corpo) ? parseInt(corpo, 16) : (/^0[0-7]/.test(corpo) ? parseInt(corpo, 8) : parseInt(corpo, 10));
       if (!seguro(v) && HAS_BIG) { v = norm(BigInt(corpo.replace(/^0(?=[0-7])/, "0o"))); }
@@ -4312,7 +4448,7 @@
         }
         if (c !== "%") { out += c; i++; continue; }
         if (fmt[i + 1] === "%") { out += "%"; i += 2; continue; }
-        var mm = /^%([-+ #0']*)(\*|[0-9]+)?(?:\.(\*|[0-9]*))?(hh|h|ll|l|L|q|j|z|t)?(\([^)]*\)T|.)?/.exec(fmt.slice(i));
+        var mm = /^%([-+ #0']*)(\*|[0-9]+)?(?:\.(\*|[0-9]*))?(hh|h|ll|l|L|j|z|t)?(\([^)]*\)T|.)?/.exec(fmt.slice(i));
         var flags = mm[1], larg = mm[2], prec = mm[3], conv = mm[5];
         i += mm[0].length;
         if (larg === "*") { usouArg = true; var la = numPrintf(prox(), true, dec); larg = Number(la.v); if (larg < 0) { flags += "-"; larg = -larg; } }
@@ -4347,7 +4483,7 @@
           case "d": case "i": case "o": case "u": case "x": case "X": {
             usouArg = true; a = prox();
             var nv = numPrintf(a, true, dec);
-            if (nv.erro) { this.erro(cmd + ": " + a + ": número inválido"); st = 1; }
+            if (nv.erro) { this.erro(cmd + ": " + a + ": número " + (nv.erro === "octal" ? "octal " : "") + "inválido"); st = 1; }
             out += formatarNum(conv, flags, larg, prec, nv.v, dec); break;
           }
           case "f": case "F": case "e": case "E": case "g": case "G": case "a": case "A": {
@@ -4414,7 +4550,7 @@
     if (o.t !== undefined) {
       var tt = parseFloat(o.t);
       if (isNaN(tt)) { this.erro("read: " + o.t + ": especificação de tempo limite inválida"); return 1; }
-      if (tt === 0) { var disp = fonteAvail(this.k, fonte) !== "" || fonteEOF(this.k, fonte) === false && fonte.kind === "file"; return disp ? 0 : 1; }
+      if (tt === 0) { var disp = fonteAvail(this.k, fonte) !== "" || fonte.kind === "file" || fonte.kind === "null" || fonteEOF(this.k, fonte); return disp ? 0 : 1; }
       if (ehTty && this.k.semTeclado) { this.k.clock += tt * 1000; return 142; }
     }
     var req = { prompt: o.p !== undefined ? o.p : "", silencioso: !!o.s, n: max, tempo: o.t };
@@ -4451,6 +4587,7 @@
       return 1;
     }
     if (!nomes.length && !o.a) { this.atribuir("REPLY", chars.join("")); return stFinal; }
+    if (o.N !== undefined && nomes.length === 1) { return this.atribuir(nomes[0], chars.join("")) ? stFinal : 1; }
     // separa em campos
     var campos = [], p = 0, n = chars.length;
     while (p < n && ehWs(p)) p++;
@@ -4484,7 +4621,7 @@
 
   B("mapfile", function* (args) {
     var r = opcoesB(this, args, "tnOsdCcu", "nOsdCcu");
-    if (r.erro) return this.opInvalida(args[0], r.erro, args[0] + " [-d delim] [-n número] [-O origem] [-s número] [-t] [-u fd] [-C chamada] [-c quantum] [array]");
+    if (r.erro) return this.opInvalida(args[0], r.erro, args[0] + " [-d delim] [-n número] [-O origem] [-s número] [-t] [-u fd] [-C chamada] [-c quantidade] [array]");
     var o = r.o, nome = r.args[0] || "MAPFILE";
     var fd = o.u !== undefined ? parseInt(o.u, 10) : 0, fonte = this.fds[fd];
     if (!fonte) { this.erro(args[0] + ": " + o.u + ": descritor de arquivo inválido"); return 1; }
@@ -4493,12 +4630,18 @@
     var origem = o.O !== undefined ? parseInt(o.O, 10) : 0;
     var v = this.acharVar(nome);
     var arr = o.O !== undefined && v && Array.isArray(v.v) ? v.v.slice() : [];
-    var k = origem, lidas = 0;
+    var k = origem, lidas = 0, quantum = o.c !== undefined ? parseInt(o.c, 10) : 5000;
     while (!lim || lidas < lim) {
       var l = yield* lerAte(this.k, fonte, delim, null, {});
       if (!l.achou && l.s === "") break;
       if (pular > 0) { pular--; continue; }
-      arr[k++] = o.t || !l.achou ? l.s : l.s + delim;
+      var valor = o.t || !l.achou || delim === "\0" ? l.s : l.s + delim;
+      if (o.C !== undefined && (lidas + 1) % quantum === 0) {
+        this.definirArray(nome, arr);
+        yield* this.rodarTexto(o.C + " " + k + " " + citarQ(valor), {});
+        arr = (this.acharVar(nome) || { v: arr }).v || arr;
+      }
+      arr[k++] = valor;
       lidas++;
       if (!l.achou) break;
     }
@@ -4532,7 +4675,7 @@
     if (args[i] === "--") i++;
     else if (args[i] && /^-./.test(args[i]) && args[i] !== "-") return this.opInvalida("cd", args[i].slice(0, 2), "cd [-L|[-P [-e]]] [-@] [dir]");
     var resto = args.slice(i);
-    if (resto.length > 1) { this.erro("cd: número excessivo de argumentos"); return 1; }
+    if (resto.length > 1) { this.erro("cd: número excessivo de argumentos"); return 2; }
     var d = resto[0], imprimir = false;
     if (d === undefined) { d = this.valor("HOME"); if (d === null) { this.erro("cd: HOME não definida"); return 1; } if (d === "") return 0; }
     else if (d === "") { this.erro("cd: diretório nulo"); return 1; }
@@ -4634,9 +4777,10 @@
     if (v.v === undefined) return s;
     if (v.v instanceof Map) {
       var ks = ordemAssoc(v.v);
-      if (!ks.length) return s + "=()";
+      if (!ks.length) return v.semValor ? s : s + "=()";
       return s + "=(" + ks.map(function (k) { return "[" + (/^[A-Za-z0-9_.\/-]+$/.test(k) ? k : citarDeclare(k)) + "]=" + citarDeclare(v.v.get(k)); }).join(" ") + " )";
     }
+    if (Array.isArray(v.v) && !v.v.length && v.semValor) return s;
     if (Array.isArray(v.v)) return s + "=(" + Object.keys(v.v).map(function (i) { return "[" + i + "]=" + citarDeclare(v.v[i]); }).join(" ") + ")";
     return s + "=" + citarDeclare(v.v);
   };
@@ -4728,8 +4872,8 @@
       }
       if (flags.a && v.v instanceof Map) { self.erro(cmd + ": " + nomeBase + ": impossível converter array associativo para indexado"); stF = 1; return; }
       if (flags.A && Array.isArray(v.v) && v.v.length) { self.erro(cmd + ": " + nomeBase + ": impossível converter array indexado para associativo"); stF = 1; return; }
-      if (flags.A && !(v.v instanceof Map)) { v.v = new Map(); v.at.A = true; }
-      if (flags.a && !Array.isArray(v.v)) { v.v = v.v === undefined ? [] : [v.v]; v.at.a = true; }
+      if (flags.A && !(v.v instanceof Map)) { if (v.v === undefined) v.semValor = true; v.v = new Map(); v.at.A = true; }
+      if (flags.a && !Array.isArray(v.v)) { if (v.v === undefined) v.semValor = true; v.v = v.v === undefined ? [] : [v.v]; v.at.a = true; }
       "ilunxt".split("").forEach(function (f) { if (flags[f]) v.at[f] = true; if (mais[f]) delete v.at[f]; });
       if (flags.l) delete v.at.u; if (flags.u) delete v.at.l;
       if (val !== undefined) {
@@ -4969,7 +5113,7 @@
     var txt = args.slice(1).join(" ");
     if (!txt.trim()) return 0;
     var lnV = this.lineno;
-    var st = yield* this.rodarFonte(txt, { eval: true });
+    var st = yield* this.rodarFonte(txt + "\n", { eval: true, linha: this.lineno });
     this.lineno = lnV;
     return st;
   });
@@ -5011,6 +5155,7 @@
   function laco(tipo) {
     return function* (args) {
       var n = 1;
+      if (!this.loopNivel) { this.erro(tipo + ": significativo apenas em um loop de `for', `while' ou `until'"); return 0; }
       if (args[1] !== undefined) {
         if (!/^\s*-?[0-9]+\s*$/.test(args[1])) { this.erro(tipo + ": " + args[1] + ": requer argumento numérico"); if (!this.loopNivel) return 1; n = 1; throw new BreakSig(1e9); }
         n = parseInt(args[1], 10);
@@ -5032,7 +5177,7 @@
     function ehUn(op) { return COND_UN[op] && op !== "-a" || op === "-a" ; }
     function num(x) {
       var t = x.trim();
-      if (!/^[+-]?[0-9]+$/.test(t)) erro(x + ": esperava expressão de número inteiro");
+      if (!/^[+-]?[0-9]+$/.test(t)) erro(x + ": esperava número inteiro");
       return parseInt(t, 10);
     }
     function bin(x, op, y) {
@@ -5108,7 +5253,7 @@
       if (this.aliases[nome] !== undefined && this.shopt.expand_aliases) r.push({ t: "alias", s: nome + " está apelidada para `" + this.aliases[nome] + "'" });
       if (PALAVRAS_CHAVE.indexOf(nome) >= 0) r.push({ t: "keyword", s: nome + " é uma palavra-chave do shell" });
       if (this.funcs[nome] && !o.f) r.push({ t: "function", s: nome + " é uma função\n" + this.mostrarFuncao(nome).replace(/\n$/, "") });
-      if (BUILTINS[nome]) r.push({ t: "builtin", s: nome + " é um comando interno " + (ESPECIAIS[nome] ? "especial " : "") + "do shell" });
+      if (BUILTINS[nome] && !(this.desabilitados && this.desabilitados[nome])) r.push({ t: "builtin", s: nome + " é um comando interno " + (ESPECIAIS[nome] ? "especial " : "") + "do shell" });
     }
     if (o.a || !r.length || o.P) {
       if (nome.indexOf("/") >= 0) { var rr = this.resolver(nome, true); if (rr.no && rr.no.t === "f" && this.pode(rr.no, 1)) r.push({ t: "file", s: nome + " é " + nome, p: nome }); }
@@ -5149,10 +5294,11 @@
     var a = args.slice(i), self = this;
     if (!a.length) return 0;
     if (o.v || o.V) {
-      var st = 0;
+      var st = 0, achouAlgum = false;
       a.forEach(function (n) {
         var d = self.descrever(n, {});
-        if (!d.length) { if (o.V) self.erro("command: " + n + ": não encontrado"); st = 1; return; }
+        if (!d.length) { if (o.V) self.erro("command: " + n + ": não encontrado"); if (st !== 0 || true) st = st === 0 && achouAlgum ? 0 : 1; return; }
+        achouAlgum = true; st = 0;
         var x = d[0];
         if (o.V) self.escrever(1, x.s + "\n");
         else if (x.t === "alias") self.escrever(1, "alias " + n + "=" + citarSet(self.aliases[n]) + "\n");
@@ -5228,7 +5374,7 @@
           if (nome === "vi" && liga) this.o.emacs = 0; if (nome === "emacs" && liga) this.o.vi = 0;
           continue;
         }
-        if (!SET_LETRA[c]) { this.erro("set: " + a[0] + c + ": opção inválida"); this.usoB("set", "set [-abefhkmnptuvxBCEHPT] [-o nome-opção] [--] [-] [arg ...]"); return 2; }
+        if (!SET_LETRA[c]) { this.erro("set: " + a[0] + c + ": opção inválida"); this.usoB("set", "set [-abefhkmnptuvxBCEHPT] [-o opção-nome] [--] [-] [arg ...]"); return 2; }
         this.o[SET_LETRA[c]] = liga ? 1 : 0;
       }
     }
@@ -5245,7 +5391,7 @@
     function mostra(n) {
       if (o.q) return;
       if (o.p) self.escrever(1, (o.o ? "set " + (val(n) ? "-o " : "+o ") : "shopt " + (val(n) ? "-s " : "-u ")) + n + "\n");
-      else self.escrever(1, pad(n, o.o ? 15 : 15, true) + "\t" + (val(n) ? "on" : "off") + "\n");
+      else self.escrever(1, pad(n, o.o ? 15 : 20, true) + "\t" + (val(n) ? "on" : "off") + "\n");
     }
     if (!r.args.length) {
       nomes.forEach(function (n) { if (o.s && !val(n)) return; if (o.u && val(n)) return; mostra(n); });
@@ -5346,7 +5492,7 @@
       if (o.r && fim) return; if (o.s && !j.parado) return;
       if (o.p) { self.escrever(1, j.procs[0].pid + "\n"); return; }
       var linha = self.linhaJob(j);
-      if (o.l) linha = linha.replace(/^(\[\d+\][+\- ]) /, "$1 " + j.procs[0].pid + " ");
+      if (o.l) linha = linha.replace(/^(\[\d+\][+\- ])  /, "$1 " + j.procs[0].pid + " ");
       self.escrever(1, linha + "\n");
       if (fim) j.avisado = true;
     });
@@ -5356,6 +5502,7 @@
   SP.limparJobsAvisados = function () {
     var self = this;
     this.jobs = this.jobs.filter(function (j) { return !(j.avisado && j.procs.every(function (p) { return p.done; })); });
+    this.proxJob = this.jobs.length ? Math.max.apply(null, this.jobs.map(function (j) { return j.n; })) + 1 : 1;
     if (!this.jobs.some(function (j) { return j === self.jobCur; })) this.jobCur = this.jobs.length ? this.jobs[this.jobs.length - 1] : null;
     if (!this.jobs.some(function (j) { return j === self.jobAnt; })) this.jobAnt = null;
   };
@@ -5545,7 +5692,7 @@
     var pref = a[i] || "", res = [];
     tipos.forEach(function (t) {
       if (t === "a") res = res.concat(Object.keys(self.aliases));
-      if (t === "b") res = res.concat(Object.keys(BUILTINS));
+      if (t === "b") res = res.concat(Object.keys(BUILTINS).sort(cmpBytes));
       if (t === "k") res = res.concat(PALAVRAS_CHAVE);
       if (t === "f") res = res.concat(Object.keys(self.funcs));
       if (t === "v") res = res.concat(self.nomesVars());
@@ -5734,7 +5881,7 @@
       var m = /^\^([^^]*)\^([^^]*)\^?(.*)$/.exec(linha);
       if (m) {
         var ult = hist[hist.length - 1];
-        if (ult === undefined || ult.indexOf(m[1]) < 0) return { erro: "bash: :s" + m[1] + ": substitution failed" };
+        if (ult === undefined || ult.indexOf(m[1]) < 0) return { erro: "bash: :s" + linha + ": substitution failed" };
         return { linha: ult.replace(m[1], m[2]) + m[3], mudou: true };
       }
     }
@@ -6215,7 +6362,7 @@
           var p = sh.paiDe(cam);
           if (!p.pai || p.pai.t !== "d") { io.msg("cannot create directory " + qa(cam) + ": " + errMsg(p.err || "ENOTDIR")); st = 1; return; }
           if (!sh.pode(p.pai, 2)) { io.msg("cannot create directory " + qa(cam) + ": Permissão negada"); st = 1; return; }
-          p.pai.c[p.nome] = mkD(UID, i === partes.length - 1 ? modo : 509 & ~sh.umask | 448, sh.k.clock); p.pai.mt = sh.k.clock;
+          p.pai.c[p.nome] = mkD(UID, i === partes.length - 1 ? modo : 509 & ~sh.umask | 448, sh.k.clock); if (p.pai.tmpfs) p.pai.c[p.nome].tmpfs = true; p.pai.mt = sh.k.clock;
           if (g.o.v) io.out("mkdir: foi criado o diretório " + qn(cam) + "\n");
         }
         return;
@@ -6226,7 +6373,7 @@
       if (!pp.pai) { io.msg("cannot create directory " + qa(a) + ": " + errMsg(pp.err || "ENOENT")); st = 1; return; }
       if (pp.pai.t !== "d") { io.msg("cannot create directory " + qa(a) + ": Não é um diretório"); st = 1; return; }
       if (!sh.pode(pp.pai, 2)) { io.msg("cannot create directory " + qa(a) + ": Permissão negada"); st = 1; return; }
-      pp.pai.c[pp.nome] = mkD(UID, modo, sh.k.clock); pp.pai.mt = pp.pai.ct = sh.k.clock;
+      pp.pai.c[pp.nome] = mkD(UID, modo, sh.k.clock); if (pp.pai.tmpfs) pp.pai.c[pp.nome].tmpfs = true; pp.pai.mt = pp.pai.ct = sh.k.clock;
       if (g.o.v) io.out("mkdir: foi criado o diretório " + qn(a) + "\n");
     });
     return st;
@@ -6596,7 +6743,7 @@
   function headTail(cauda) {
     return function* (args, io) {
       var a = args.slice(0);
-      for (var i = 1; i < a.length; i++) { if (/^-[0-9]+$/.test(a[i])) a[i] = "-n" + a[i].slice(1); else if (/^\+[0-9]+$/.test(a[i]) && cauda && !/^-[nc]$/.test(a[i - 1] || "")) a[i] = "-n+" + a[i].slice(1); else if (a[i] === "--") break; }
+      for (var i = 1; i < a.length; i++) { if (/^-[0-9]+$/.test(a[i]) && !/^-[nc]$/.test(a[i - 1] || "")) a[i] = "-n" + a[i].slice(1); else if (/^\+[0-9]+$/.test(a[i]) && cauda && !/^-[nc]$/.test(a[i - 1] || "")) a[i] = "-n+" + a[i].slice(1); else if (a[i] === "--") break; }
       var g = getopt(a, "ncs", { lines: "n=", bytes: "c=", quiet: "q", silent: "q", verbose: "v", follow: "f", retry: "retry", "zero-terminated": "z" }, { validas: cauda ? "ncqvfFsz" : "ncqvz" });
       if (g.erro) return io.erroOpcao(g.erro);
       var o = g.o, modo = o.c !== undefined ? "c" : "n", spec = o.c !== undefined ? o.c : (o.n !== undefined ? o.n : "10");
@@ -6604,6 +6751,19 @@
       if (!num) { io.msg("número inválido de " + (modo === "c" ? "bytes" : "linhas") + ": " + qa(spec)); return 1; }
       var arqs = g.ops.length ? g.ops : ["-"], multi = arqs.length > 1 && !o.q || o.v;
       var primeiro = true, sh = io.sh;
+      if (!cauda && arqs.length === 1 && arqs[0] === "-" && num.sinal !== "-" && !multi) {
+        // lê só o necessário (yes | head não trava)
+        var ent = sh.fds[0];
+        if (!ent) return 1;
+        if (modo === "n") {
+          for (var q = 0; q < num.n; q++) { var lr = yield* lerAte(sh.k, ent, "\n", null, {}); if (!lr.achou && lr.s === "") break; io.out(lr.s + (lr.achou ? "\n" : "")); if (!lr.achou) break; }
+        } else {
+          var acc = [];
+          while (acc.length < num.n) { var lc = yield* lerAte(sh.k, ent, null, 1, {}); if (lc.s === "") break; utf8bytes(lc.s).forEach(function (b) { acc.push(b); }); }
+          io.out(decodUtf8(acc.slice(0, num.n)));
+        }
+        return 0;
+      }
       var st = yield* io.cadaArquivo(arqs, function (txt, nome) {
         if (multi) { io.out((primeiro ? "" : "\n") + "==> " + (nome === "-" ? "entrada padrão" : nome) + " <==\n"); }
         primeiro = false;
@@ -6741,7 +6901,7 @@
     }
     if (o.R) { linhas.sort(function () { return Math.random() - 0.5; }); }
     else if (o.c) {
-      for (var j = 1; j < linhas.length; j++) if (cmp(linhas[j - 1], linhas[j]) > 0) { io.msg("-:" + (j + 1) + ": desordem: " + linhas[j]); return 1; }
+      for (var j = 1; j < linhas.length; j++) if (cmp(linhas[j - 1], linhas[j]) > 0) { io.msg("-:" + (j + 1) + ": desordenado: " + linhas[j]); return 1; }
       return 0;
     } else {
       var idx = linhas.map(function (l, i) { return { l: l, i: i }; });
@@ -6966,11 +7126,13 @@
     var arqs = g.ops.length ? g.ops : ["-"], conteudos = [], st = 0;
     var stdinLido = null;
     for (var i = 0; i < arqs.length; i++) {
-      if (arqs[i] === "-") { if (stdinLido === null) { stdinLido = linhasDe(yield* io.stdin()); conteudos.push(stdinLido); } else conteudos.push([]); continue; }
+      if (arqs[i] === "-") { if (stdinLido === null) stdinLido = linhasDe(yield* io.stdin()); conteudos.push({ stdin: true }); continue; }
       var r = yield* io.ler(arqs[i]);
       if (r.err) { io.msg(arqs[i] + ": " + errMsg(r.err)); return 1; }
       conteudos.push(linhasDe(r.txt));
     }
+    var nStdin = conteudos.filter(function (c) { return c.stdin; }).length, kS = 0;
+    conteudos = conteudos.map(function (c) { if (!c.stdin) return c; var k = kS++; return g.o.s ? (k === 0 ? stdinLido : []) : stdinLido.filter(function (l, i) { return i % nStdin === k; }); });
     var out = "";
     if (g.o.s) conteudos.forEach(function (ls) { out += ls.map(function (l, i) { return (i ? dl[(i - 1) % dl.length] : "") + l; }).join("") + "\n"; });
     else {
@@ -7016,7 +7178,7 @@
     return st;
   };
   EXT.column = function* (args, io) {
-    var g = getopt(args, "sotcN", { table: "t", separator: "s=", "output-separator": "o=", "table-columns": "N=", "output-width": "c=" }, { validas: "tsoxcNnRJ" });
+    var g = getopt(args, "socN", { table: "t", separator: "s=", "output-separator": "o=", "table-columns": "N=", "output-width": "c=" }, { validas: "tsoxcNnRJ" });
     if (g.erro) return io.erroOpcao(g.erro);
     var linhas = [];
     var st = yield* io.cadaArquivo(g.ops, function (txt) { linhasDe(txt).forEach(function (l) { linhas.push(l); }); });
@@ -7067,8 +7229,8 @@
     var ops = []; i = 0; j = 0;
     while (i < n || j < m) {
       if (i < n && j < m && a[i] === b[j]) { ops.push({ t: "=", i: i, j: j }); i++; j++; }
-      else if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { ops.push({ t: "+", j: j }); j++; }
-      else { ops.push({ t: "-", i: i }); i++; }
+      else if (i < n && (j >= m || dp[i + 1][j] >= dp[i][j + 1])) { ops.push({ t: "-", i: i }); i++; }
+      else { ops.push({ t: "+", j: j }); j++; }
     }
     return ops;
   }
@@ -7242,6 +7404,7 @@
   }
   var UNIDADES = { sec: 1e3, second: 1e3, s: 1e3, min: 6e4, minute: 6e4, m: 6e4, hour: 36e5, h: 36e5, day: 864e5, d: 864e5, week: 6048e5, fortnight: 12096e5, month: "M", year: "Y" };
   function interpretarData(s, agora) {
+    interpretarData.absoluto = false;
     s = s.trim().toLowerCase();
     if (s === "" || s === "now" || s === "today" || s === "hoje" || s === "agora") return agora;
     var m;
@@ -7251,6 +7414,7 @@
     if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[t ]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(resto))) {
       base = epochDe(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0, m[6] ? +m[6] : 0);
       if (+m[2] > 12 || +m[3] > 31) return null;
+      interpretarData.absoluto = true;
       resto = resto.slice(m[0].length).trim();
     } else if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(resto))) {
       var ano = +m[3]; if (ano < 100) ano += 2000;
@@ -7288,11 +7452,12 @@
     return base + total;
   }
   EXT.date = function* (args, io) {
-    var g = getopt(args, "drIs", { date: "d=", utc: "u", universal: "u", reference: "r=", "iso-8601": "I?=", "rfc-email": "R", set: "s=", rfc3339: "rfc3339=" }, { validas: "durIRs" });
+    args = args.map(function (x, i) { return i > 0 && /^-I./.test(x) ? "--iso-8601=" + x.slice(2) : x; });
+    var g = getopt(args, "drs", { date: "d=", utc: "u", universal: "u", reference: "r=", "iso-8601": "I?=", "rfc-email": "R", set: "s=", rfc3339: "rfc3339=" }, { validas: "durIRs" });
     if (g.erro) return io.erroOpcao(g.erro);
     var sh = io.sh, quando = sh.k.clock, o = g.o;
     if (o.s) { io.msg("não foi possível definir a data: Operação não permitida"); return 1; }
-    if (o.d !== undefined) { var q = interpretarData(o.d, sh.k.clock); if (q === null) { io.msg("data inválida " + qa(o.d)); return 1; } quando = q; }
+    if (o.d !== undefined) { var q = interpretarData(o.d, sh.k.clock); if (q === null) { io.msg("data inválida " + qa(o.d)); return 1; } if (o.u && interpretarData.absoluto) q += TZ_OFF; quando = q; }
     if (o.r) { var no = sh.no(o.r); if (!no) { io.msg(o.r + ": Arquivo ou diretório inexistente"); return 1; } quando = no.mt; }
     var fmt = null;
     var mais = g.ops.filter(function (x) { return x[0] === "+"; });
@@ -7406,7 +7571,8 @@
     var n = sh.novoShell(); n.interativo = false;
     n.globais = Object.create(null);
     for (var k2 in env) n.globais[k2] = new Var(env[k2], { x: true });
-    n.globais.PATH = n.globais.PATH || new Var("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", { x: true });
+    var semPath = !n.globais.PATH;
+    if (semPath) n.globais.PATH = new Var("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", {});
     var t = n.acharNoPath(a[0]);
     if (!t && a[0].indexOf("/") < 0) { io.msg(qa(a[0]) + ": Arquivo ou diretório inexistente"); n.fecharTudo(); return 127; }
     try { return yield* n.executar(a, { semFuncao: true, externo: true }); } finally { n.fecharTudo(); }
@@ -7628,7 +7794,7 @@
       if (o.A || o.b) t = o.b ? tamanho(no) : Math.ceil(tamanho(no) / 1024);
       if (no.t === "d") {
         if (!sh.pode(no, 4)) { io.msg("não foi possível ler o diretório " + q1(rot) + ": Permissão negada"); st = 1; }
-        else Object.keys(no.c).sort(collate).forEach(function (n) {
+        else listarDir(no).forEach(function (n) {
           var f = no.c[n], c = rot.replace(/\/$/, "") + "/" + n;
           if (f.t === "d") t += anda(f, c, prof + 1);
           else { var ft = o.A || o.b ? (o.b ? tamanho(f) : Math.ceil(tamanho(f) / 1024)) : blocos(f); t += ft; if (o.a && prof + 1 <= maxD) out += fmt(ft) + "\t" + c + "\n"; }
@@ -7684,7 +7850,7 @@
       if (/python/.test(l1)) return "Python script, " + ascii + exec;
       return "a " + l1.slice(2).trim() + " script, " + ascii + exec;
     }
-    if (/^\s*<(!doctype html|html|h1|head|body|p|div)/i.test(d)) return "HTML document, " + ascii + exec;
+    if (/^\s*<(!doctype html|html|head|body)/i.test(d)) return "HTML document, " + ascii + exec;
     if (/\.csv$/.test(p) && /,/.test(d)) return "CSV " + ascii + exec;
     if (/\0/.test(d)) return "data";
     var longa = d.split("\n").some(function (l) { return l.length > 300; });
@@ -8050,7 +8216,7 @@
     switch (o) {
       case "+": case "-": s = Math.max(a.s, b.s); var x = decEscala(a, s).v, y = decEscala(b, s).v; return new Dec(o === "+" ? x + y : x - y, s);
       case "*": var sm = Math.min(a.s + b.s, Math.max(this.scale, a.s, b.s)); return decEscala(new Dec(a.v * b.v, a.s + b.s), sm);
-      case "/": if (b.v === Z) throw new BcErr("Runtime error (func=(main), adr=6): Divide by zero"); var sc = this.scale; var num = a.v * pot10(sc + b.s), den = b.v * pot10(a.s); return new Dec(num / den, sc);
+      case "/": if (b.v === Z) throw new BcErr("Runtime error (func=(main), adr=3): Divide by zero"); var sc = this.scale; var num = a.v * pot10(sc + b.s), den = b.v * pot10(a.s); return new Dec(num / den, sc);
       case "%": if (b.v === Z) throw new BcErr("Runtime error (func=(main), adr=6): Modulo by zero"); var sc2 = Math.max(this.scale + b.s, a.s); var q = this.op("/", a, b); var prod = decEscala(new Dec(q.v * b.v, q.s + b.s), Math.max(q.s + b.s, 0)); return decEscala(this.op("-", a, prod), sc2);
       case "^": {
         var e = Number(decEscala(b, 0).v), neg = e < 0; if (neg) e = -e;
@@ -8328,8 +8494,8 @@
       if (!ops.length) { io.err("Uso: grep [OPÇÃO]... PADRÕES [ARQUIVO]...\nExperimente \"grep --help\" para mais informações.\n"); return 2; }
       padroes = padroes.concat(ops.shift().split("\n"));
     }
-    if (o.P) { io.err("(simulador) grep -P (expressões Perl) não funciona neste simulador; use -E.\n"); return 2; }
     var srcs = padroes.map(function (p) {
+      if (o.P) return p;
       if (o.F) return p.replace(/[\\^$.*+?()[\]{}|\/]/g, "\\$&");
       return ereParaJs(p, { bre: !o.E });
     });
@@ -8339,8 +8505,7 @@
     if (o.x) src = "^(?:" + src + ")$";
     var re = criarRegex(src, (o.i && !o.noi ? "i" : "") + "g");
     if (!re) {
-      var m1 = /\(/.test(src) && !o.F ? "Sem correspondência para ( ou \\(" : (/\[/.test(padroes.join("")) ? "Sem correspondência para [, [^, [:, [., ou [=" : "Expressão regular inválida");
-      io.msg(m1); return 2;
+      io.msg("Expressão regular inválida"); return 2;
     }
     var tty = io.tty(), cor = (o.color === "always") || ((o.color === "auto" || o.color === true) && tty);
     var recursivo = o.r || o.R;
@@ -8363,7 +8528,7 @@
       if (r.no && r.no.t === "d") {
         if (!recursivo) { if (!o.s) io.msg(a + ": É um diretório"); return; }
         (function anda(no, rot) {
-          Object.keys(no.c).sort(collate).forEach(function (n) {
+          listarDir(no).forEach(function (n) {
             var f = no.c[n], c = rot === "." && semDotSlash ? n : rot.replace(/\/$/, "") + "/" + n;
             if (f.t === "l") { if (!o.R) return; f = sh.resolver(c, true).no; if (!f) return; }
             if (f.t === "d") { if (o["exclude-dir"] && casaPadrao(o["exclude-dir"], n)) return; if (!sh.pode(f, 4)) { if (!o.s) io.msg(c + ": Permissão negada"); erro = true; return; } anda(f, c); }
@@ -8511,7 +8676,7 @@
             if (s[i] === "\n" && false) break;
             rep += s[i]; i++;
           }
-          if (i >= s.length) { i++; erro("comando `s' não terminado"); }
+          if (i >= s.length) { erro("comando `s' não terminado"); }
           i++;
           var fl = { g: false, p: false, n: 1, i: false, w: null, m: false, e: false };
           while (i < s.length && /[gpiImMe0-9w]/.test(s[i])) {
@@ -8593,6 +8758,8 @@
       if (x === "-E" || x === "-r" || x === "--regexp-extended") { o.E = true; continue; }
       if (x === "-s" || x === "--separate") { o.s = true; continue; }
       if (x === "-z" || x === "--null-data") { o.z = true; continue; }
+      if (x === "--version") { io.out("sed (GNU sed) 4.9\nPackaged by Debian\nCopyright (C) 2022 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n"); return 0; }
+      if (x === "--help") { io.out(SED_USO); return 0; }
       if (x === "-u" || x === "--unbuffered" || x === "--posix" || x === "--debug" || x === "--sandbox") continue;
       if (x === "-e" || x === "--expression") { o.e.push(a[++i]); continue; }
       if (/^-e./.test(x)) { o.e.push(x.slice(2)); continue; }
@@ -8751,6 +8918,9 @@
 
   /* ---------- awk (subconjunto do mawk 1.3.4) ---------- */
   function AwkErr(msg) { this.msg = msg; }
+  // o mawk trabalha com bytes: dentro do awk as strings são "binárias" (1 caractere = 1 byte)
+  function paraB(s) { var b = utf8bytes(s), r = ""; for (var i = 0; i < b.length; i += 8192) r += String.fromCharCode.apply(null, b.slice(i, i + 8192)); return r; }
+  function deB(s) { var b = new Array(s.length); for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i) & 255; return decodUtf8(b); }
   function AwkSai(code) { this.code = code; }
   function SN(s) { this.s = s; } // "strnum": texto vindo da entrada (campo, getline, ARGV…)
   SN.prototype.toString = function () { return this.s; };
@@ -9003,6 +9173,7 @@
         if (this.ehOp("[")) { this.next(); var idx = this.exprLista(); this.espera("]"); return { k: "idx", n: t.v, idx: idx }; }
         return { k: "var", n: t.v };
       case "fname": {
+        (this.chamadas = this.chamadas || []).push(t.v);
         this.espera("("); var args = []; this.nls();
         while (!this.ehOp(")")) { args.push(this.expr()); this.nls(); if (this.ehOp(",")) { this.next(); this.nls(); } }
         this.next();
@@ -9092,7 +9263,7 @@
     if (fs === " ") return s.split(/[ \t\n]+/).filter(function (x) { return x !== ""; });
     if (s === "") return [];
     if (fs.length === 1 && fs !== "\\") { if (fs === "\t" || !/[.[\]()*+?^$|{}]/.test(fs)) return s.split(fs); }
-    var re = criarRegex(ereParaJs(fs), "");
+    var re = criarRegex(ereParaJs(fs, { ascii: true }), "");
     return s.split(re);
   };
   AW.setRegistro = function (s) {
@@ -9140,7 +9311,7 @@
   AW.regex = function (e) {
     var src = e.k === "ere" ? e.v : this.str(this.ev(e));
     var c = this.cacheRe = this.cacheRe || {};
-    if (!c[src]) { var r = criarRegex(ereParaJs(src), ""); if (!r) throw new AwkErr("run time error: regular expression compile failed (missing operand)\n" + src); c[src] = r; }
+    if (!c[src]) { var r = criarRegex(ereParaJs(src, { ascii: true }), ""); if (!r) throw new AwkErr("run time error: regular expression compile failed (missing operand)\n" + src); c[src] = r; }
     return c[src];
   };
   AW.cmp = function (a, b) {
@@ -9215,8 +9386,8 @@
       var larg = w ? parseInt(w, 10) : null, prec = p !== undefined ? (p === "" ? 0 : parseInt(p, 10)) : null;
       if (larg !== null && larg < 0) { fl += "-"; larg = -larg; }
       var s;
-      if (c === "s") { s = v === undefined ? "" : self.str(v); if (prec !== null) s = Array.from(s).slice(0, prec).join(""); }
-      else if (c === "c") { if (typeof v === "number") s = String.fromCodePoint(Math.floor(v) & 0x1fffff); else { s = v === undefined ? "" : Array.from(self.str(v))[0] || ""; } }
+      if (c === "s") { s = v === undefined ? "" : self.str(v); if (prec !== null) s = s.slice(0, prec); }
+      else if (c === "c") { if (typeof v === "number") s = String.fromCharCode(Math.floor(v) & 255); else { s = v === undefined ? "" : self.str(v).charAt(0); } }
       else {
         var n = v === undefined ? 0 : self.num(v);
         if (c === "d" || c === "i") { n = Math.trunc(n); return formatarNum("d", fl, larg, prec, isFinite(n) ? n : 0, dec); }
@@ -9224,7 +9395,7 @@
         if (c === "o" || c === "x" || c === "X") return formatarNum(c, fl, larg, prec, Math.trunc(n), dec);
         return formatarNum(c, fl, larg, prec, n, dec);
       }
-      if (larg !== null) { var wl = Array.from(s).length; while (wl < larg) { s = fl.indexOf("-") >= 0 ? s + " " : " " + s; wl++; } }
+      if (larg !== null) { var wl = s.length; while (wl < larg) { s = fl.indexOf("-") >= 0 ? s + " " : " " + s; wl++; } }
       return s;
     });
   };
@@ -9259,15 +9430,15 @@
     var self = this;
     var a = function (i) { return self.ev(args[i]); };
     switch (n) {
-      case "length": if (!args.length) return Array.from(this.registro).length; if (args[0].k === "var" && hasOwn(this.arr, args[0].n)) return this.arr[args[0].n].size; return Array.from(this.str(a(0))).length;
+      case "length": if (!args.length) return this.registro.length; if (args[0].k === "var" && hasOwn(this.arr, args[0].n)) return this.arr[args[0].n].size; return this.str(a(0)).length;
       case "substr": {
-        var s = Array.from(this.str(a(0))), m = this.num(a(1)), L = s.length;
+        var s = this.str(a(0)).split(""), m = this.num(a(1)), L = s.length;
         var ini = Math.round(m), fim = args.length > 2 ? Math.round(m + this.num(a(2))) : L + 1;
         if (args.length > 2) { var nn = this.num(a(2)); fim = Math.round(m + nn); var x = Math.round(m); ini = x; }
         if (ini < 1) ini = 1; if (fim > L + 1) fim = L + 1;
         return fim <= ini ? "" : s.slice(ini - 1, fim - 1).join("");
       }
-      case "index": { var s1 = this.str(a(0)), t = this.str(a(1)), i = s1.indexOf(t); return i < 0 ? 0 : Array.from(s1.slice(0, i)).length + 1; }
+      case "index": { var s1 = this.str(a(0)), t = this.str(a(1)), i = s1.indexOf(t); return i < 0 ? 0 : i + 1; }
       case "split": {
         var s2 = this.str(a(0)), nome = args[1].n, fs = args[2] ? (args[2].k === "ere" ? null : this.str(a(2))) : this.str(this.getVar("FS"));
         var partes = args[2] && args[2].k === "ere" ? (s2 === "" ? [] : s2.split(this.regex(args[2]))) : this.dividir(s2, fs);
@@ -9281,12 +9452,12 @@
         var s3 = this.str(a(0)), re = this.regex(args[1]); re.lastIndex = 0;
         var mm = re.exec(s3);
         if (!mm) { this.v.RSTART = 0; this.v.RLENGTH = -1; return 0; }
-        this.v.RSTART = Array.from(s3.slice(0, mm.index)).length + 1; this.v.RLENGTH = Array.from(mm[0]).length;
+        this.v.RSTART = mm.index + 1; this.v.RLENGTH = mm[0].length;
         return this.v.RSTART;
       }
       case "sprintf": return this.sprintf(this.str(a(0)), args.slice(1).map(function (x) { return self.ev(x); }));
-      case "tolower": return this.str(a(0)).toLowerCase();
-      case "toupper": return this.str(a(0)).toUpperCase();
+      case "tolower": return this.str(a(0)).replace(/[A-Z]+/g, function (x) { return x.toLowerCase(); });
+      case "toupper": return this.str(a(0)).replace(/[a-z]+/g, function (x) { return x.toUpperCase(); });
       case "int": return Math.trunc(this.num(a(0)));
       case "sqrt": return Math.sqrt(this.num(a(0)));
       case "exp": return Math.exp(this.num(a(0)));
@@ -9296,8 +9467,8 @@
       case "atan2": return Math.atan2(this.num(a(0)), this.num(a(1)));
       case "rand": this.rndEstado = (this.rndEstado * 1103515245 + 12345) % 2147483648; return this.rndEstado / 2147483648;
       case "srand": { var ant = this.semente; this.semente = args.length ? this.num(a(0)) : Math.floor(this.io.sh.k.clock / 1000); this.rndEstado = Math.floor(this.semente) || 1; return ant; }
-      case "system": { this.flush(); var cmd = this.str(a(0)); return this.io.sh.k.rodarAninhado(this.io.sh, cmd, null); }
-      case "close": { var nm = this.str(a(0)); if (this.saidas[nm]) { var sd = this.saidas[nm]; delete this.saidas[nm]; if (sd.pipe) return this.io.sh.k.rodarAninhado(this.io.sh, nm, sd.buf); if (sd.ofd) unref(sd.ofd); return 0; } if (this.entradas[nm]) { delete this.entradas[nm]; return 0; } return -1; }
+      case "system": { this.flush(); var cmd = deB(this.str(a(0))); return this.io.sh.k.rodarAninhado(this.io.sh, cmd, null); }
+      case "close": { var nm = this.str(a(0)); if (this.saidas[nm]) { var sd = this.saidas[nm]; delete this.saidas[nm]; if (sd.pipe) { this.flush(); return this.io.sh.k.rodarAninhado(this.io.sh, deB(nm), deB(sd.buf)); } if (sd.ofd) unref(sd.ofd); return 0; } if (this.entradas[nm]) { delete this.entradas[nm]; return 0; } return -1; }
       case "fflush": return 0;
     }
     return 0;
@@ -9342,7 +9513,7 @@
     var linha = null;
     if (e.cmd) {
       var cmd = this.str(this.ev(e.cmd));
-      if (!this.entradas[cmd]) { this.flush(); var out = this.io.sh.k.capturarAninhado(this.io.sh, cmd); this.entradas[cmd] = { linhas: linhasDe(out), i: 0 }; }
+      if (!this.entradas[cmd]) { this.flush(); var out = paraB(this.io.sh.k.capturarAninhado(this.io.sh, deB(cmd))); this.entradas[cmd] = { linhas: linhasDe(out), i: 0 }; }
       var en = this.entradas[cmd];
       if (en.i >= en.linhas.length) return 0;
       linha = en.linhas[en.i++];
@@ -9353,9 +9524,9 @@
     if (e.arq) {
       var nome = this.str(this.ev(e.arq));
       if (!this.entradas[nome]) {
-        var r = nome === "-" || nome === "/dev/stdin" ? { txt: this.lerStdinSync() } : this.io.sh.lerArquivo(nome);
+        var r = nome === "-" || nome === "/dev/stdin" ? { txt: this.lerStdinSync() } : this.io.sh.lerArquivo(deB(nome));
         if (r.err) return -1;
-        this.entradas[nome] = { linhas: linhasDe(r.txt), i: 0 };
+        this.entradas[nome] = { linhas: linhasDe(nome === "-" || nome === "/dev/stdin" ? r.txt : paraB(r.txt || "")), i: 0 };
       }
       var en2 = this.entradas[nome];
       if (en2.i >= en2.linhas.length) return 0;
@@ -9369,18 +9540,18 @@
     if (!e.alvo) this.setRegistro(l); else this.atribuir(e.alvo, new SN(l));
     return 1;
   };
-  AW.flush = function () { if (this.buf) { this.io.out(this.buf); this.buf = ""; } };
+  AW.flush = function () { if (this.buf) { this.io.out(deB(this.buf)); this.buf = ""; } };
   AW.escrever = function (txt, red) {
     if (!red) { this.buf = (this.buf || "") + txt; if (this.buf.length > 8192) this.flush(); return; }
     var nome = this.str(this.ev(red.e));
     if (nome === "/dev/stdout" || nome === "-") { this.buf = (this.buf || "") + txt; return; }
-    if (nome === "/dev/stderr") { this.flush(); this.io.err(txt); return; }
+    if (nome === "/dev/stderr") { this.flush(); this.io.err(deB(txt)); return; }
     var sd = this.saidas[nome];
     if (!sd) {
       if (red.op === "|") sd = this.saidas[nome] = { pipe: true, buf: "" };
-      else { var o = this.io.sh.abrir(nome, red.op === ">>" ? "a" : "w"); if (o.err) throw new AwkErr("cannot open \"" + nome + "\" for output"); ref(o); sd = this.saidas[nome] = { ofd: o }; }
+      else { var o = this.io.sh.abrir(deB(nome), red.op === ">>" ? "a" : "w"); if (o.err) throw new AwkErr("cannot open \"" + nome + "\" for output"); ref(o); sd = this.saidas[nome] = { ofd: o }; }
     }
-    if (sd.pipe) sd.buf += txt; else escreverOFD(this.io.sh.k, sd.ofd, txt);
+    if (sd.pipe) sd.buf += txt; else escreverOFD(this.io.sh.k, sd.ofd, deB(txt));
   };
   AW.exec = function (s) {
     var self = this;
@@ -9434,18 +9605,19 @@
     var dec = localeNum(sh);
     var prog, funcs;
     try {
-      var p = new AwkParser(awkLexer(fontes.join("\n")));
+      var p = new AwkParser(awkLexer(paraB(fontes.join("\n") + "\n")));
       prog = p.programa(); funcs = p.funcs;
-    } catch (e) { if (e instanceof AwkErr) { io.err(nome + ": " + e.msg + "\n"); return 2; } throw e; }
+      (p.chamadas || []).forEach(function (n) { if (!funcs[n]) throw new AwkErr("line " + p.t[p.t.length - 1].ln + ": function " + n + " never defined"); });
+    } catch (e) { if (e instanceof AwkErr) { io.err(nome + ": " + deB(e.msg) + "\n"); return 2; } throw e; }
     var aw = new Awk(io, prog, funcs, dec);
     var env = sh.exportadas(), envMap = new Map();
-    for (var kk in env) envMap.set(kk, new SN(env[kk]));
+    for (var kk in env) envMap.set(kk, new SN(paraB(env[kk])));
     aw.arr.ENVIRON = envMap;
-    aw.v.FS = fs === null ? " " : (fs === "t" ? "\t" : fs.replace(/\\t/g, "\t"));
+    aw.v.FS = fs === null ? " " : paraB(fs === "t" ? "\t" : fs.replace(/\\t/g, "\t"));
     aw.v.OFS = " "; aw.v.ORS = "\n"; aw.v.RS = "\n"; aw.v.NR = 0; aw.v.FNR = 0; aw.v.SUBSEP = "\x1c"; aw.v.CONVFMT = "%.6g"; aw.v.OFMT = "%.6g"; aw.v.FILENAME = ""; aw.v.RSTART = 0; aw.v.RLENGTH = -1;
-    var argv = new Map(); argv.set("0", nome); operandos.forEach(function (o, k) { argv.set(String(k + 1), new SN(o)); });
+    var argv = new Map(); argv.set("0", nome); operandos.forEach(function (o, k) { argv.set(String(k + 1), new SN(paraB(o))); });
     aw.arr.ARGV = argv; aw.v.ARGC = operandos.length + 1;
-    function aplicarDef(d) { var m = /^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/.exec(d); if (!m) return false; aw.v[m[1]] = new SN(decodificarAnsi(m[2]).replace(/\\n/g, "\n")); return true; }
+    function aplicarDef(d) { var m = /^([A-Za-z_][A-Za-z0-9_]*)=([\s\S]*)$/.exec(d); if (!m) return false; aw.v[m[1]] = new SN(paraB(decodificarAnsi(m[2]))); return true; }
     for (var d = 0; d < defs.length; d++) if (!aplicarDef(defs[d])) { io.err(nome + ": improper assignment: -v " + defs[d] + "\n"); return 2; }
     // entrada: arquivos lidos sob demanda
     var argIdx = 1, atual = null, st = 0, stdinLido = false, self = this;
@@ -9457,8 +9629,8 @@
     var stdinTxt = null;
     function precisaStdin() { var ops = []; for (var k = 1; k < aw.num(aw.getVar("ARGC")); k++) { var v = argv.get(String(k)); if (v !== undefined && aw.str(v) !== "" && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(aw.str(v))) ops.push(aw.str(v)); } return !ops.length || ops.indexOf("-") >= 0 || ops.indexOf("/dev/stdin") >= 0; }
     aw.lerStdinSync = function () { return stdinTxt === null ? "" : stdinTxt; };
-    if (temMain && precisaStdin()) stdinTxt = yield* io.stdin();
-    else if (prog.some(function (it) { return /getline/.test(JSON.stringify(it)); })) { var o0 = sh.fds[0]; if (o0 && !isTTY(o0)) stdinTxt = yield* io.stdin(); }
+    if (temMain && precisaStdin()) stdinTxt = paraB(yield* io.stdin());
+    else if (prog.some(function (it) { return /getline/.test(JSON.stringify(it)); })) { var o0 = sh.fds[0]; if (o0 && !isTTY(o0)) stdinTxt = paraB(yield* io.stdin()); }
     var fila = null;
     aw.proxRegistro = function () {
       while (true) {
@@ -9474,7 +9646,7 @@
           if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(s)) { aplicarDef(s); continue; }
           var txt;
           if (s === "-" || s === "/dev/stdin") txt = stdinTxt || "";
-          else { var r = sh.lerArquivo(s); if (r.err) { aw.flush(); io.err(nome + ": cannot open \"" + s + "\" (No such file or directory)\n"); throw new AwkSai(2); } txt = r.txt !== undefined ? r.txt : ""; }
+          else { var r = sh.lerArquivo(deB(s)); if (r.err) { aw.flush(); io.err(nome + ": cannot open \"" + deB(s) + "\" (No such file or directory)\n"); throw new AwkSai(2); } txt = paraB(r.txt !== undefined ? r.txt : ""); }
           aw.v.FILENAME = s; aw.v.FNR = 0;
           fila = { l: aw.registros(txt), i: 0 };
           achou = true; break;
@@ -9492,7 +9664,7 @@
       var rs = aw.str(aw.getVar("RS"));
       if (rs === "\n") { var l = txt.split("\n"); if (l[l.length - 1] === "") l.pop(); return l; }
       if (rs === "") { return txt.replace(/^\n+/, "").split(/\n\n+/).map(function (x) { return x.replace(/\n+$/, ""); }).filter(function (x) { return x !== ""; }); }
-      var partes = rs.length === 1 ? txt.split(rs) : txt.split(criarRegex(ereParaJs(rs), ""));
+      var partes = rs.length === 1 ? txt.split(rs) : txt.split(criarRegex(ereParaJs(rs, { ascii: true }), ""));
       if (partes[partes.length - 1] === "" || partes[partes.length - 1] === "\n") partes.pop();
       return partes;
     };
@@ -9533,12 +9705,12 @@
       try { prog.forEach(function (it) { if (it.tipo === "END") aw.exec(it.acao); }); }
       catch (e2) { if (e2 instanceof AwkSai) codigo = e2.code; else throw e2; }
     } catch (e3) {
-      if (e3 instanceof AwkErr) { aw.flush(); io.err(nome + ": " + (/^line |^run time/.test(e3.msg) ? "" : "run time error: ") + e3.msg + "\n\tFILENAME=\"" + aw.str(aw.v.FILENAME) + "\" FNR=" + aw.str(aw.v.FNR) + " NR=" + aw.str(aw.v.NR) + "\n"); return 2; }
+      if (e3 instanceof AwkErr) { aw.flush(); io.err(nome + ": " + (/^line |^run time/.test(e3.msg) ? "" : "run time error: ") + deB(e3.msg) + "\n\tFILENAME=\"" + deB(aw.str(aw.v.FILENAME)) + "\" FNR=" + aw.str(aw.v.FNR) + " NR=" + aw.str(aw.v.NR) + "\n"); return 2; }
       if (e3 === "break" || e3 === "continue") { aw.flush(); return 2; }
       throw e3;
     }
     aw.flush();
-    for (var nm in aw.saidas) { var sd = aw.saidas[nm]; if (sd.pipe) sh.k.rodarAninhado(sh, nm, sd.buf); else if (sd.ofd) unref(sd.ofd); }
+    for (var nm in aw.saidas) { var sd = aw.saidas[nm]; if (sd.pipe) sh.k.rodarAninhado(sh, deB(nm), deB(sd.buf)); else if (sd.ofd) unref(sd.ofd); }
     return codigo;
   };
   EXT.mawk = EXT.awk; EXT.gawk = function* (args, io) { io.err("(simulador) gawk não está instalado nesta máquina; use awk (que é o mawk).\n"); return 127; };
@@ -9613,7 +9785,7 @@
       if (t === "-print" || t === "-print0" || t === "-ls" || t === "-delete" || t === "-quit") { temAcao = true; if (t === "-delete") depthFirst = true; return { op: t }; }
       if (t === "-depth" || t === "-d") { depthFirst = true; return { op: "-true" }; }
       if (/^-(true|false|empty|prune|readable|writable|executable|nouser|nogroup|xdev|mount|noleaf|follow)$/.test(t)) return { op: t };
-      if (/^-/.test(t)) throw new ErrF("predicado desconhecido “" + t + "”");
+      if (/^-/.test(t)) throw new ErrF("predicado inválido \"" + t + "\"");
       throw new ErrF("caminhos devem preceder expressão: “" + t + "”");
     }
     function e_() { var l = prim(); while (p < expr.length && expr[p] !== ")" && expr[p] !== "-o" && expr[p] !== "-or" && expr[p] !== ",") { if (expr[p] === "-a" || expr[p] === "-and") p++; l = { op: "and", a: l, b: prim() }; } return l; }
@@ -9707,7 +9879,7 @@
       if (no.t === "d" && prof < maxD && !item.podar) {
         if (!sh.pode(no, 4) || !sh.pode(no, 1)) { io.msg(qa(c) + ": Permissão negada"); st = 1; }
         else {
-          var nomes = Object.keys(no.c).sort(collate);
+          var nomes = listarDir(no);
           for (var k = 0; k < nomes.length; k++) {
             var f = no.c[nomes[k]];
             if (!f) continue;
