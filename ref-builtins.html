@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Comandos Internos — referência dos 61 builtins do Bash 5.3 | Guia Bash</title>
+<meta name="description" content="Referência rápida de todos os comandos internos (builtins) do Bash 5.3, agrupados por categoria, com o que fazem, as opções principais, um exemplo com o resultado conferido e o link para a aula.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Comandos Internos</span></h1>
+
+<p class="intro">Um <strong>comando interno</strong> (<em>builtin</em>) é um comando que faz parte do próprio Bash: não existe um arquivo dele em <code>/usr/bin</code>, e ele roda dentro do shell, sem criar processo. Alguns <strong>precisam</strong> ser internos, porque mexem no próprio shell (<code>cd</code>, <code>export</code>, <code>source</code>); outros são internos só por velocidade (<code>echo</code>, <code>printf</code>, <code>test</code>). Esta página lista os 61 do Bash 5.3, agrupados por assunto.</p>
+
+<div class="note">
+<strong>Como usar esta referência</strong>
+<ul>
+  <li>Cada linha tem: o comando, o que faz, as opções mais usadas, um exemplo com o resultado (conferido no Bash 5.3, em português) e a aula onde ele é explicado.</li>
+  <li>No exemplo, <code>→</code> separa o comando do que ele mostra.</li>
+  <li>A ajuda completa de qualquer um está no próprio Bash: <code>help nome</code> (curta: <code>help -d nome</code>). Veja <a href="ajuda.html">Obtendo Ajuda</a>.</li>
+  <li>Use <kbd>Ctrl</kbd>+<kbd>F</kbd> do navegador para achar um comando.</li>
+</ul>
+</div>
+
+<h2>Como listar e reconhecer</h2>
+<pre class="term">$ compgen -b | wc -l
+61
+$ compgen -b | tr "\n" " "
+. : [ alias bg bind break builtin caller cd command compgen complete compopt continue declare dirs disown echo enable eval exec exit export false fc fg getopts hash help history jobs kill let local logout mapfile popd printf pushd pwd read readarray readonly return set shift shopt source suspend test times trap true type typeset ulimit umask unalias unset wait
+$ type -t cd ls ll if
+builtin                 « interno
+alias                   « o ls da Ana é um alias (ls --color=auto)
+alias
+keyword                 « palavra reservada: veja a tabela no fim
+$ type -a echo
+echo é um comando interno do shell
+echo é /usr/bin/echo                    « também existe um programa echo,
+echo é /bin/echo                        « mas o interno vence</pre>
+<p>Quando um nome existe como interno e como programa, o interno tem prioridade (depois de aliases e funções). Veja <a href="path.html">PATH e Onde os Comandos Moram</a>.</p>
+
+<p class="indice-letras"><a href="#saida">Saída e entrada</a> · <a href="#variaveis">Variáveis</a> · <a href="#fluxo">Fluxo e execução</a> · <a href="#testes">Testes e informação</a> · <a href="#pastas">Pastas</a> · <a href="#opcoes">Opções e limites</a> · <a href="#jobs">Jobs e sinais</a> · <a href="#interativo">Uso interativo</a> · <a href="#palavras">Palavras reservadas</a></p>
+
+<hr>
+
+<h2 id="saida">Saída e entrada</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>echo</code></td><td>Escreve os argumentos, separados por espaço, e uma quebra de linha.</td><td><code>-n</code> sem quebra; <code>-e</code> interpreta <code>\t</code>, <code>\n</code>…</td><td><code>echo -n "sem quebra"; echo " | fim"</code> → <code>sem quebra | fim</code></td><td><a href="printf.html">printf e echo</a></td></tr>
+<tr><td><code>printf</code></td><td>Escreve com formato: larguras, casas decimais, zeros à esquerda.</td><td><code>-v VAR</code> guarda numa variável; <code>%s %d %f %q %(fmt)T</code></td><td><code>LC_NUMERIC=C printf '%-6s|%3d|%.2f\n' Ana 7 3.14159</code> → <code>Ana   |  7|3.14</code></td><td><a href="printf.html">printf e echo</a></td></tr>
+<tr><td><code>read</code></td><td>Lê uma linha da entrada e divide em variáveis.</td><td><code>-r</code> (sempre!), <code>-p</code> pergunta, <code>-s</code> oculto, <code>-t</code> tempo, <code>-n N</code>, <code>-a</code> array, <code>-d</code> delimitador</td><td><code>read -r nome idade &lt;&lt;&lt; "Ana 29"; echo "$nome tem $idade"</code> → <code>Ana tem 29</code></td><td><a href="read.html">read</a></td></tr>
+<tr><td><code>mapfile</code></td><td>Lê linhas para um array, uma por item.</td><td><code>-t</code> tira o <code>\n</code>; <code>-n N</code> no máximo N; <code>-s N</code> pula N</td><td><code>mapfile -t frutas &lt; frutas.txt; echo "${#frutas[@]}"</code> → <code>7</code></td><td><a href="mapfile.html">mapfile</a></td></tr>
+<tr><td><code>readarray</code></td><td>Outro nome do <code>mapfile</code>.</td><td>as mesmas</td><td><code>readarray -t -n 2 duas &lt; frutas.txt; echo "${duas[@]}"</code> → <code>banana maçã</code></td><td><a href="mapfile.html">mapfile</a></td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>O <code>printf</code> e a vírgula decimal</strong>
+<p>Com o sistema em português, o <code>printf</code> do Bash espera números com <strong>vírgula</strong>: <code>printf '%.2f' 3.14159</code> dá <code>bash: printf: 3.14159: número inválido</code> (e mostra <code>3,00</code>), enquanto <code>printf '%.2f\n' 3,14159</code> dá <code>3,14</code>. Em scripts, use <code>LC_NUMERIC=C printf …</code> para ter sempre o ponto.</p>
+</div>
+
+<h2 id="variaveis">Variáveis, atributos e argumentos</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>declare</code></td><td>Cria variáveis e define atributos; sem argumentos, lista.</td><td><code>-i</code> inteiro, <code>-a</code> array, <code>-A</code> associativo, <code>-r</code> somente leitura, <code>-x</code> exportar, <code>-l</code>/<code>-u</code> minúsculas/maiúsculas, <code>-n</code> nameref, <code>-p</code> mostrar, <code>-f</code>/<code>-F</code> funções, <code>-g</code> global</td><td><code>declare -i n=5+3; declare -p n</code> → <code>declare -i n="8"</code></td><td><a href="variaveis.html">Variáveis</a></td></tr>
+<tr><td><code>typeset</code></td><td>Outro nome do <code>declare</code> (vem do ksh).</td><td>as mesmas</td><td><code>typeset -u grito=oi; echo $grito</code> → <code>OI</code></td><td><a href="variaveis.html">Variáveis</a></td></tr>
+<tr><td><code>local</code></td><td>Cria uma variável que só existe dentro da função.</td><td>as do <code>declare</code></td><td><code>f() { local x=dentro; echo $x; }; x=fora; f; echo $x</code> → <code>dentro</code> / <code>fora</code></td><td><a href="funcoes-retorno.html">local, return</a></td></tr>
+<tr><td><code>export</code></td><td>Marca a variável para ser herdada pelos programas filhos.</td><td><code>-n</code> desmarca; <code>-p</code> lista; <code>-f</code> exporta função</td><td><code>export EDITOR=nano; bash -c 'echo $EDITOR'</code> → <code>nano</code></td><td><a href="variaveis.html">Variáveis</a></td></tr>
+<tr><td><code>readonly</code></td><td>Torna a variável imutável até o shell terminar.</td><td><code>-p</code> lista; <code>-a</code>/<code>-A</code> arrays; <code>-f</code> funções</td><td><code>readonly PI=3.14; PI=3</code> → <code>bash: PI: a variável permite somente leitura</code></td><td><a href="variaveis.html">Variáveis</a></td></tr>
+<tr><td><code>unset</code></td><td>Apaga uma variável ou função.</td><td><code>-v</code> variável (padrão), <code>-f</code> função, <code>-n</code> o nameref</td><td><code>unset x; echo "[${x-apagada}]"</code> → <code>[apagada]</code></td><td><a href="variaveis.html">Variáveis</a></td></tr>
+<tr><td><code>let</code></td><td>Calcula expressões aritméticas (como <code>(( ))</code>).</td><td>—</td><td><code>let "y = 2 ** 10"; echo $y</code> → <code>1024</code></td><td><a href="aritmetica.html">Contas</a></td></tr>
+<tr><td><code>shift</code></td><td>Descarta os primeiros argumentos posicionais (<code>$1</code>…).</td><td><code>shift N</code></td><td><code>set -- a b c; shift; echo "$@ ($#)"</code> → <code>b c (2)</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>getopts</code></td><td>Lê opções de uma letra (<code>-v</code>, <code>-o arq</code>) uma por volta.</td><td><code>'vo:'</code> (<code>:</code> = recebe valor); <code>OPTARG</code>, <code>OPTIND</code></td><td><code>set -- -v -o saida.txt arq; while getopts 'vo:' op; do echo "$op ${OPTARG-}"; done</code> → <code>v</code> / <code>o saida.txt</code></td><td><a href="getopts.html">getopts</a></td></tr>
+</table>
+</div>
+
+<h2 id="fluxo">Fluxo e execução</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>source</code></td><td>Executa um arquivo no shell <strong>atual</strong> (as variáveis e funções dele ficam valendo).</td><td>argumentos viram <code>$1</code>…</td><td><code>source ~/.bashrc</code> → recarrega a configuração</td><td><a href="executar.html">Formas de Executar</a></td></tr>
+<tr><td><code>.</code></td><td>O mesmo que <code>source</code> (o nome POSIX).</td><td>—</td><td><code>. /dev/null; echo $?</code> → <code>0</code></td><td><a href="executar.html">Formas de Executar</a></td></tr>
+<tr><td><code>eval</code></td><td>Junta os argumentos num texto e o executa como comando. Perigoso com dados de fora.</td><td>—</td><td><code>cmd='echo $((1+2))'; eval "$cmd"</code> → <code>3</code></td><td><a href="eval-indirecao.html">eval e indireção</a></td></tr>
+<tr><td><code>exec</code></td><td>Troca o shell pelo comando (sem voltar) ou, sem comando, aplica redirecionamentos ao shell todo.</td><td><code>exec 3&gt;arq</code>, <code>exec &gt;log 2&gt;&amp;1</code>, <code>-a nome</code></td><td><code>bash -c 'exec echo "o bash virou echo"; echo nunca'</code> → <code>o bash virou echo</code></td><td><a href="descritores.html">Descritores</a></td></tr>
+<tr><td><code>exit</code></td><td>Termina o shell (ou script) com um código.</td><td><code>exit N</code> (0–255)</td><td><code>bash -c 'exit 7'; echo $?</code> → <code>7</code></td><td><a href="codigo-saida.html">Código de Saída</a></td></tr>
+<tr><td><code>return</code></td><td>Sai da função (ou do arquivo lido com <code>source</code>) com um código.</td><td><code>return N</code></td><td><code>g() { return 3; }; g; echo $?</code> → <code>3</code></td><td><a href="funcoes-retorno.html">local, return</a></td></tr>
+<tr><td><code>break</code></td><td>Sai do laço.</td><td><code>break N</code> sai de N laços</td><td><code>for i in 1 2 3; do [[ $i == 2 ]] &amp;&amp; break; echo $i; done</code> → <code>1</code></td><td><a href="break-continue.html">break e continue</a></td></tr>
+<tr><td><code>continue</code></td><td>Pula para a próxima volta do laço.</td><td><code>continue N</code></td><td><code>for i in 1 2 3; do [[ $i == 2 ]] &amp;&amp; continue; echo $i; done</code> → <code>1</code> / <code>3</code></td><td><a href="break-continue.html">break e continue</a></td></tr>
+<tr><td><code>:</code></td><td>Não faz nada e devolve 0. Útil como "comando vazio".</td><td>—</td><td><code>: &gt; vazio.txt; wc -c vazio.txt</code> → <code>0 vazio.txt</code></td><td><a href="redirecionamento.html">Redirecionamento</a></td></tr>
+<tr><td><code>true</code></td><td>Devolve 0 (sucesso).</td><td>—</td><td><code>true; echo $?</code> → <code>0</code></td><td><a href="codigo-saida.html">Código de Saída</a></td></tr>
+<tr><td><code>false</code></td><td>Devolve 1 (falha).</td><td>—</td><td><code>false; echo $?</code> → <code>1</code></td><td><a href="codigo-saida.html">Código de Saída</a></td></tr>
+<tr><td><code>command</code></td><td>Roda o comando ignorando funções e aliases; com <code>-v</code>, diz o que seria executado.</td><td><code>-v</code>, <code>-V</code>, <code>-p</code> (PATH padrão)</td><td><code>command -v ls</code> → <code>alias ls='ls --color=auto'</code></td><td><a href="path.html">PATH</a></td></tr>
+<tr><td><code>builtin</code></td><td>Roda o comando interno, mesmo que exista uma função com o mesmo nome.</td><td>—</td><td><code>builtin echo "o echo interno"</code> → <code>o echo interno</code></td><td><a href="funcoes.html">Funções</a></td></tr>
+<tr><td><code>caller</code></td><td>Diz quem chamou a função atual (linha, função, arquivo). Para mensagens de erro e depuração.</td><td><code>caller N</code> (N níveis acima)</td><td>no script <code>quem.sh</code>: <code>f() { caller 0; }; g() { f; }; g</code> → <code>2 g quem.sh</code></td><td><a href="depuracao.html">Depurar</a></td></tr>
+<tr><td><code>logout</code></td><td>Sai de um shell de <strong>login</strong>.</td><td>—</td><td><code>logout</code> (num terminal comum) → <code>bash: logout: não é um shell de login: use `exit'</code></td><td><a href="inicializacao.html">Inicialização</a></td></tr>
+</table>
+</div>
+
+<h2 id="testes">Testes e informação</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>test</code></td><td>Avalia uma condição e devolve 0 (verdade) ou 1.</td><td><code>-f -d -e -r -x -s</code>, <code>-z -n</code>, <code>= !=</code>, <code>-eq -lt -gt</code>…</td><td><code>test 5 -gt 3 &amp;&amp; echo maior</code> → <code>maior</code></td><td><a href="testes.html">Testes</a></td></tr>
+<tr><td><code>[</code></td><td>O mesmo que <code>test</code>; exige um <code>]</code> no fim, separado por espaço.</td><td>as mesmas</td><td><code>[ -d Documentos ] &amp;&amp; echo "é pasta"</code> → <code>é pasta</code></td><td><a href="testes.html">Testes</a></td></tr>
+<tr><td><code>type</code></td><td>Diz o que um nome é: alias, função, interno, palavra reservada ou programa.</td><td><code>-t</code> só o tipo, <code>-a</code> todos, <code>-P</code> só o caminho</td><td><code>type -t cd</code> → <code>builtin</code></td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+<tr><td><code>help</code></td><td>Mostra a ajuda dos comandos internos.</td><td><code>-d</code> uma linha, <code>-s</code> só a sintaxe, <code>-m</code> estilo man</td><td><code>help -d cd</code> → <code>cd - Change the shell working directory.</code></td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+<tr><td><code>hash</code></td><td>Mostra ou limpa a memória de onde ficam os programas já usados.</td><td><code>-r</code> esquece tudo, <code>-d nome</code>, <code>-p</code></td><td><code>hash -r; ls &gt; /dev/null; hash</code> → <code>1	/usr/bin/ls</code></td><td><a href="path.html">PATH</a></td></tr>
+</table>
+</div>
+
+<h2 id="pastas">Pastas</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>cd</code></td><td>Muda a pasta atual. Sem argumento, vai para <code>~</code>; <code>cd -</code> volta para a anterior.</td><td><code>-P</code> resolve links, <code>-L</code></td><td><code>cd Documentos; pwd; cd -</code> → <code>/home/ana/Documentos</code> / <code>/home/ana</code></td><td><a href="navegar.html">Navegar</a></td></tr>
+<tr><td><code>pwd</code></td><td>Mostra a pasta atual.</td><td><code>-P</code> caminho físico (sem links)</td><td><code>pwd</code> → <code>/home/ana</code></td><td><a href="navegar.html">Navegar</a></td></tr>
+<tr><td><code>pushd</code></td><td>Entra na pasta e a empilha.</td><td><code>+N</code> gira a pilha; <code>-n</code></td><td><code>pushd /tmp</code> → <code>/tmp ~</code></td><td><a href="navegar.html">Navegar</a></td></tr>
+<tr><td><code>popd</code></td><td>Desempilha e volta para a pasta anterior.</td><td><code>+N</code>, <code>-n</code></td><td><code>popd</code> → <code>~</code></td><td><a href="navegar.html">Navegar</a></td></tr>
+<tr><td><code>dirs</code></td><td>Mostra a pilha de pastas.</td><td><code>-v</code> numerada, <code>-c</code> limpa</td><td><code>pushd /tmp &gt;/dev/null; dirs</code> → <code>/tmp ~</code></td><td><a href="navegar.html">Navegar</a></td></tr>
+</table>
+</div>
+
+<h2 id="opcoes">Opções do shell e limites</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>set</code></td><td>Liga/desliga opções do shell e redefine os argumentos posicionais.</td><td><code>-e -u -x -o pipefail -o noclobber -n -v</code>; <code>+</code> desliga; <code>set --</code> args</td><td><code>set -o | grep '^noclobber '</code> → <code>noclobber      	off</code></td><td><a href="shopt.html">set e shopt</a></td></tr>
+<tr><td><code>shopt</code></td><td>Liga/desliga as opções "do Bash" (as que não são do <code>set</code>).</td><td><code>-s</code> liga, <code>-u</code> desliga, <code>-q</code> testa, <code>-p</code> lista</td><td><code>shopt -s nullglob; echo *.xyz</code> → linha vazia (sem nullglob: <code>*.xyz</code>)</td><td><a href="shopt.html">set e shopt</a></td></tr>
+<tr><td><code>enable</code></td><td>Desliga ou religa um comando interno.</td><td><code>-n</code> desliga, <code>-a</code> lista todos, <code>-f</code> carrega de biblioteca</td><td><code>enable -n echo; type echo</code> → <code>echo é /usr/bin/echo</code></td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+<tr><td><code>ulimit</code></td><td>Mostra ou muda limites de recursos do shell e dos filhos.</td><td><code>-a</code> todos, <code>-n</code> arquivos abertos, <code>-c</code> core, <code>-v</code> memória</td><td><code>ulimit -n</code> → <code>524288</code> (varia por sistema)</td><td>—</td></tr>
+<tr><td><code>umask</code></td><td>Mostra ou muda a máscara de permissões dos arquivos novos.</td><td><code>-S</code> forma simbólica</td><td><code>umask; umask -S</code> → <code>0002</code> / <code>u=rwx,g=rwx,o=rx</code></td><td><a href="criar-copiar.html">Criar, Copiar e Mover</a></td></tr>
+</table>
+</div>
+
+<h2 id="jobs">Jobs, processos e sinais</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>jobs</code></td><td>Lista os jobs (comandos em segundo plano ou parados) deste shell.</td><td><code>-l</code> com PID, <code>-p</code> só PID, <code>-r</code>/<code>-s</code></td><td><code>sleep 30 &amp; jobs</code> → <code>[1]+  Executando                 sleep 30 &amp;</code></td><td><a href="jobs.html">Jobs</a></td></tr>
+<tr><td><code>fg</code></td><td>Traz um job para o primeiro plano.</td><td><code>fg %N</code></td><td><code>fg %1</code> → o <code>sleep</code> volta a ocupar o terminal</td><td><a href="jobs.html">Jobs</a></td></tr>
+<tr><td><code>bg</code></td><td>Continua um job parado (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) em segundo plano.</td><td><code>bg %N</code></td><td><code>bg %1</code> → <code>[1]+ sleep 30 &amp;</code></td><td><a href="jobs.html">Jobs</a></td></tr>
+<tr><td><code>wait</code></td><td>Espera jobs terminarem e devolve o código deles.</td><td><code>-n</code> o próximo que terminar, <code>-p VAR</code></td><td><code>kill %1; wait %1; echo $?</code> → <code>143</code> (128 + 15, SIGTERM)</td><td><a href="paralelo.html">Rodar em Paralelo</a></td></tr>
+<tr><td><code>kill</code></td><td>Manda um sinal para um processo ou job.</td><td><code>-l</code> lista sinais, <code>-TERM</code>, <code>-KILL</code>, <code>-9</code>, <code>%N</code></td><td><code>kill -l 15</code> → <code>TERM</code></td><td><a href="trap.html">trap e Sinais</a></td></tr>
+<tr><td><code>disown</code></td><td>Tira um job da lista do shell (ele não recebe o SIGHUP ao fechar o terminal).</td><td><code>-h</code> só não manda HUP, <code>-a</code> todos</td><td><code>sleep 30 &amp; disown; jobs</code> → (nada)</td><td><a href="jobs.html">Jobs</a></td></tr>
+<tr><td><code>suspend</code></td><td>Para o próprio shell até ele receber SIGCONT (útil num shell aberto com <code>su</code>).</td><td><code>-f</code> mesmo num shell de login</td><td><code>suspend</code> → o shell para; <code>fg</code> no shell de fora o retoma</td><td><a href="jobs.html">Jobs</a></td></tr>
+<tr><td><code>trap</code></td><td>Define o que fazer ao receber um sinal ou num evento do shell.</td><td><code>EXIT ERR DEBUG RETURN INT TERM</code>; <code>-l</code>, <code>-p</code>; <code>trap - SINAL</code> desfaz</td><td><code>bash -c "trap 'echo tchau' EXIT; echo oi"</code> → <code>oi</code> / <code>tchau</code></td><td><a href="trap.html">trap e Sinais</a></td></tr>
+<tr><td><code>times</code></td><td>Mostra o tempo de processador gasto pelo shell e pelos filhos.</td><td>—</td><td><code>times</code> → <code>0m0,009s 0m0,011s</code> / <code>0m0,005s 0m0,009s</code></td><td><a href="jobs.html">Jobs</a></td></tr>
+</table>
+</div>
+
+<h2 id="interativo">Uso interativo: aliases, histórico, teclado e completar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Opções principais</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>alias</code></td><td>Cria um apelido; sem argumentos, lista. Só vale a partir da <strong>próxima</strong> linha.</td><td><code>-p</code> lista</td><td><code>alias oi='echo olá'</code> e, na linha seguinte, <code>oi</code> → <code>olá</code></td><td><a href="alias.html">alias</a></td></tr>
+<tr><td><code>unalias</code></td><td>Apaga um apelido.</td><td><code>-a</code> todos</td><td><code>unalias oi; type oi</code> → <code>bash: type: oi: não encontrado</code></td><td><a href="alias.html">alias</a></td></tr>
+<tr><td><code>history</code></td><td>Mostra ou mexe na lista de comandos já digitados.</td><td><code>N</code> últimos N, <code>-c</code> limpa, <code>-d N</code> apaga, <code>-a</code>/<code>-r</code>/<code>-w</code> arquivo</td><td><code>history 3</code> → <code>17  echo um</code> / <code>18  echo dois</code> / <code>19  history 3</code></td><td><a href="historico.html">Histórico</a></td></tr>
+<tr><td><code>fc</code></td><td>Lista, edita ou reexecuta comandos do histórico.</td><td><code>-l</code> lista, <code>-s</code> reexecuta, <code>-e editor</code></td><td><code>fc -l -2</code> → <code>18	 echo dois</code> / <code>19	 history 3</code></td><td><a href="historico.html">Histórico</a></td></tr>
+<tr><td><code>bind</code></td><td>Mostra ou muda os atalhos e variáveis do readline (a edição de linha).</td><td><code>-p</code> lista, <code>-q função</code>, <code>-x</code> atalho para comando, <code>-f arquivo</code></td><td><code>bind -q forward-search-history</code> → <code>forward-search-history pode ser chamado via "\C-s".</code></td><td><a href="ref-atalhos.html">Atalhos</a></td></tr>
+<tr><td><code>complete</code></td><td>Diz ao Bash o que sugerir no <kbd>Tab</kbd> depois de um comando.</td><td><code>-W lista</code>, <code>-F função</code>, <code>-f</code> arquivos, <code>-d</code> pastas, <code>-p</code> mostra, <code>-r</code> remove</td><td><code>complete -W 'start stop' servico; complete -p servico</code> → <code>complete -W 'start stop' servico</code></td><td><a href="complete.html">Completar Programável</a></td></tr>
+<tr><td><code>compgen</code></td><td>Gera as sugestões (sem completar nada): ótimo para testar e para listar coisas.</td><td><code>-W</code>, <code>-b</code> internos, <code>-c</code> comandos, <code>-d</code> pastas, <code>-f</code>, <code>-v</code> variáveis, <code>-A function</code></td><td><code>compgen -d Do</code> → <code>Documentos</code> / <code>Downloads</code></td><td><a href="complete.html">Completar Programável</a></td></tr>
+<tr><td><code>compopt</code></td><td>Muda as opções de uma completação já definida.</td><td><code>-o nospace</code>, <code>-o filenames</code>, <code>+o</code> desliga</td><td><code>compopt -o nospace servico; complete -p servico</code> → <code>complete -o nospace -W 'a b' servico</code></td><td><a href="complete.html">Completar Programável</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="palavras">Não são comandos internos: palavras reservadas</h2>
+<p>Estes nomes parecem comandos, mas são <strong>palavras reservadas</strong> (<em>keywords</em>) da gramática do Bash: só têm sentido no começo de um comando, e o Bash as reconhece antes de qualquer expansão. Por isso <code>[[ ]]</code> aceita <code>&amp;&amp;</code> e <code>&lt;</code> lá dentro, e <code>[</code> não. Lista: <code>compgen -k</code>.</p>
+<pre class="term">$ compgen -k | tr "\n" " "
+if then else elif fi case esac for select while until do done in function time { } ! [[ ]] coproc</pre>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Palavras</th><th>Para quê</th><th>Aula</th></tr>
+<tr><td><code>if then elif else fi</code></td><td>Decisão.</td><td><a href="if.html">if</a></td></tr>
+<tr><td><code>case in esac</code></td><td>Escolha por padrão.</td><td><a href="case.html">case</a></td></tr>
+<tr><td><code>for in do done</code>, <code>select</code></td><td>Laço sobre uma lista; menu.</td><td><a href="for.html">for</a>, <a href="interativo.html">select</a></td></tr>
+<tr><td><code>while until</code></td><td>Laço com condição.</td><td><a href="while.html">while e until</a></td></tr>
+<tr><td><code>function</code>, <code>{ }</code></td><td>Definir função; agrupar comandos.</td><td><a href="funcoes.html">Funções</a>, <a href="subshell.html">Grupos</a></td></tr>
+<tr><td><code>[[ ]]</code></td><td>Teste moderno (padrões, regex, <code>&amp;&amp;</code>).</td><td><a href="testes.html">Testes</a></td></tr>
+<tr><td><code>!</code></td><td>Inverte o código de saída de um pipeline.</td><td><a href="codigo-saida.html">Código de Saída</a></td></tr>
+<tr><td><code>time</code></td><td>Mede quanto um pipeline demora.</td><td><a href="paralelo.html">Rodar em Paralelo</a></td></tr>
+<tr><td><code>coproc</code></td><td>Roda um comando em paralelo com um canal de ida e volta.</td><td><a href="substituicao-processo.html">Substituição de Processo</a></td></tr>
+</table>
+</div>
+<p>E <code>(( ))</code>, que também não é comando interno: é uma construção da gramática (veja <a href="aritmetica.html">Contas</a>).</p>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. Por que <code>cd</code> precisa ser um comando interno?</p>
+<label><input type="radio" name="q1"> Porque é mais rápido.</label>
+<label><input type="radio" name="q1"> Porque o POSIX exige que todos sejam internos.</label>
+<label><input type="radio" name="q1"> Porque um programa separado mudaria a pasta do próprio processo, não a do shell.</label>
+<label><input type="radio" name="q1"> Porque <code>/usr/bin/cd</code> não pode existir.</label>
+</div>
+
+<div class="exercise">
+<h3>2. Quantos internos?</h3>
+<p>Complete o comando que lista os nomes de todos os comandos internos, um por linha:</p>
+<div class="ex-code">compgen <input data-answer="-b|-A builtin" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. <code>type -t [[</code> responde:</p>
+<label><input type="radio" name="q3"> <code>keyword</code></label>
+<label><input type="radio" name="q3"> <code>builtin</code></label>
+<label><input type="radio" name="q3"> <code>file</code></label>
+<label><input type="radio" name="q3"> <code>alias</code></label>
+</div>
+
+<div class="exercise">
+<h3>4. Ignorar a função</h3>
+<p>Existe uma função chamada <code>echo</code>. Complete para rodar o <code>echo</code> interno mesmo assim:</p>
+<div class="ex-code"><input data-answer="builtin|command" aria-label="comando"> echo oi</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. <code>printf '%.1f\n' 2.5</code> num sistema em português dá erro. Qual é a forma certa num script?</p>
+<label><input type="radio" name="q5"> <code>printf '%.1f\n' "2.5"</code></label>
+<label><input type="radio" name="q5"> <code>LC_NUMERIC=C printf '%.1f\n' 2.5</code></label>
+<label><input type="radio" name="q5"> <code>echo -f 2.5</code></label>
+<label><input type="radio" name="q5"> <code>printf -n 2.5</code></label>
+</div>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
