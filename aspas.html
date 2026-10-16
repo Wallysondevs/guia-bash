@@ -455,9 +455,8 @@ $ echo $?
 $ echo "~"
 ~
 $ cd "~/Documentos"
-bash: cd: ~/Documentos: Arquivo ou diretório inexistente     « procurou uma pasta chamada "~"
-$ cd ~/"Documentos"
-$ pwd
+bash: cd: ~/Documentos: Arquivo ou diretório inexistente     « procurou uma pasta chamada "~"</pre>
+<pre class="term">$ cd ~/"Documentos" &amp;&amp; pwd
 /home/ana/Documentos                « o ~ fora das aspas, o resto dentro</pre>
 
 <p>Para caminhos com espaço a partir da pasta pessoal, deixe o <code>~</code> de fora: <code>cd ~/"Área de trabalho"</code>. Ou use a variável: <code>cd "$HOME/Área de trabalho"</code>.</p>
@@ -638,8 +637,8 @@ Olá, $nome</pre>
 <div class="cenario">
 <strong>Aspas "tortas" copiadas da internet</strong>
 <pre class="term">$ cd “Documentos”
-bash: cd: “Documentos”: Arquivo ou diretório inexistente
-$ echo “Olá”
+bash: cd: “Documentos”: Arquivo ou diretório inexistente</pre>
+<pre class="term">$ echo “Olá”
 “Olá”</pre>
 <p><strong>O que aconteceu:</strong> editores de texto, sites e aplicativos de mensagem trocam <code>"</code> por aspas curvas, <code>“ ”</code> e <code>‘ ’</code>. Para o Bash, elas são letras comuns, não aspas. O <code>cd</code> procurou uma pasta cujo nome começa com <code>“</code>.</p>
 <p><strong>Como resolver:</strong> apague as aspas curvas e digite as retas do teclado (<kbd>"</kbd> e <kbd>'</kbd>). Ao copiar comandos, prefira o botão de copiar das páginas ou cole antes num editor de texto puro.</p>
