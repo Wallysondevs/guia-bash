@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash A Ordem das Expansões — o que acontece antes de o comando rodar | Guia Bash</title>
+<meta name="description" content="A ordem das expansões no Bash: palavras, alias, chaves, til, variáveis, aritmética e substituição de comando, separação de palavras, curingas e remoção de aspas. Um exemplo passo a passo, set -x e as consequências práticas ({1..$n}, $var com *, aspas).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">A Ordem das Expansões</span></h1>
+
+<p class="intro">Quando você aperta Enter, o Bash não roda a linha do jeito que você digitou. Antes, ele a <strong>transforma</strong>: troca <code>~</code> pela sua pasta, <code>$nome</code> pelo valor, <code>*.txt</code> pela lista de arquivos… Essas trocas acontecem <strong>sempre na mesma ordem</strong>. Conhecer essa ordem explica de uma vez vários "mistérios" do Bash: por que <code>{1..$n}</code> não funciona, por que uma variável com <code>*</code> vira lista de arquivos e por que as aspas resolvem tanta coisa.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As etapas, na ordem: palavras e alias → chaves → til → variáveis, contas e <code>$( )</code> → separação de palavras → curingas → remoção de aspas.</li>
+  <li>A acompanhar uma linha de verdade, etapa por etapa, até o comando final.</li>
+  <li>A usar <code>set -x</code> para ver o comando que o Bash realmente rodou.</li>
+  <li>A explicar (e consertar) os erros clássicos que nascem dessa ordem.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: o Bash reescreve a sua linha</h2>
+<p>Pense numa receita com abreviações: "1 xíc. de açúcar". Antes de cozinhar, alguém lê e entende "uma xícara". O Bash faz isso com cada linha. Você escreve abreviações (<code>~</code>, <code>$USER</code>, <code>*.txt</code>, <code>{a,b}</code>), e o Bash as <strong>expande</strong> (troca pelo texto completo). Só depois disso o comando roda. O programa chamado <strong>nunca vê</strong> as abreviações; ele recebe o resultado.</p>
+
+<p>Você já conhece cada expansão separada: <a href="chaves.html">chaves</a>, <a href="curingas.html">curingas</a>, <a href="variaveis-intro.html">variáveis</a>, <a href="aritmetica.html">contas</a>, <a href="substituicao-comando.html">substituição de comando</a> e <a href="aspas.html">aspas</a>. Esta aula junta tudo e mostra <strong>quem vem antes de quem</strong>.</p>
+
+<h2>O mapa</h2>
+
+<pre class="syntax">  linha digitada
+       │
+  ①  dividir em palavras e operadores   (espaços, | ; &amp; &lt; &gt; ( ), respeitando aspas)
+       │    + alias: a 1ª palavra do comando é trocada, se for um alias
+       ▼
+  ②  chaves              {a,b}  {1..5}
+       ▼
+  ③  til ─┐
+      parâmetros e variáveis   $nome  ${x%.txt}       ← estas quatro (e &lt;( ))
+      aritmética               $((2+3))                  acontecem juntas,
+      substituição de comando  $(cmd)  `cmd`             da esquerda para a direita
+       ▼
+  ④  separação de palavras   (só no que veio de ③ e SEM aspas; usa o IFS)
+       ▼
+  ⑤  curingas                *  ?  [ ]   (só fora de aspas)
+       ▼
+  ⑥  remoção de aspas        tira as ' " \ que você digitou
+       ▼
+  redirecionamentos (&gt; &lt; …) e, por fim, o comando roda</pre>
+
+<p>Duas regras resumem o mapa:</p>
+<ul>
+  <li><strong>Cada etapa só trabalha com o que sobrou da anterior.</strong> O que uma etapa produz não volta para uma etapa que já passou.</li>
+  <li><strong>As aspas valem do começo ao fim.</strong> Elas são respeitadas em todas as etapas e só são retiradas na última.</li>
+</ul>
+
+<hr>
+
+<h2>Uma linha acompanhada passo a passo</h2>
+<p>Vamos preparar duas variáveis e rodar uma linha que usa quase tudo:</p>
+
+<pre class="term">$ nome="Ana Paula"
+$ frase="olá *"
+$ echo {a,b}-$((2+3)) ~ $nome *.txt "$frase"
+a-5 b-5 /home/ana Ana Paula frutas.txt olá *</pre>
+
+<p>O <code>echo</code> junta os argumentos com um espaço, e isso esconde quantos argumentos ele recebeu. O <code>printf '[%s]\n'</code> mostra cada argumento entre colchetes, um por linha. É a ferramenta perfeita para ver o resultado das expansões:</p>
+
+<pre class="term">$ printf '[%s]\n' {a,b}-$((2+3)) ~ $nome *.txt "$frase"
+[a-5]
+[b-5]
+[/home/ana]
+[Ana]                « $nome sem aspas virou DOIS argumentos
+[Paula]
+[frutas.txt]
+[olá *]              « "$frase" com aspas: um argumento, e o * ficou intacto</pre>
+
+<p>Agora, etapa por etapa. A linha da esquerda é o estado depois de cada uma:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Etapa</th><th>Como a linha fica</th><th>O que mudou</th></tr>
+<tr><td>① palavras</td><td><code>echo</code> · <code>{a,b}-$((2+3))</code> · <code>~</code> · <code>$nome</code> · <code>*.txt</code> · <code>"$frase"</code></td><td>Seis palavras, separadas pelos espaços que você digitou. <code>echo</code> não é alias, nada a trocar.</td></tr>
+<tr><td>② chaves</td><td><code>echo a-$((2+3)) b-$((2+3)) ~ $nome *.txt "$frase"</code></td><td><code>{a,b}-…</code> virou duas palavras. Repare: a conta ainda não foi feita, foi <strong>copiada</strong> para as duas.</td></tr>
+<tr><td>③ til, variáveis, contas</td><td><code>echo a-5 b-5 /home/ana Ana␣Paula *.txt "olá *"</code></td><td><code>~</code> → <code>/home/ana</code>; as contas → <code>5</code>; <code>$nome</code> e <code>$frase</code> → os valores. <code>Ana␣Paula</code> ainda é <strong>uma</strong> palavra.</td></tr>
+<tr><td>④ separação</td><td><code>echo a-5 b-5 /home/ana Ana Paula *.txt "olá *"</code></td><td>O valor de <code>$nome</code> veio sem aspas: o espaço o partiu em <code>Ana</code> e <code>Paula</code>. O de <code>"$frase"</code> estava entre aspas: não foi partido.</td></tr>
+<tr><td>⑤ curingas</td><td><code>echo a-5 b-5 /home/ana Ana Paula frutas.txt "olá *"</code></td><td><code>*.txt</code> virou o único arquivo <code>.txt</code> da pasta. O <code>*</code> de <code>"olá *"</code> está entre aspas: não é curinga.</td></tr>
+<tr><td>⑥ aspas</td><td><code>echo a-5 b-5 /home/ana Ana Paula frutas.txt olá␣*</code></td><td>As aspas de <code>"olá *"</code> saem. O <code>echo</code> recebe 7 argumentos (o último é <code>olá *</code>, com espaço).</td></tr>
+</table>
+</div>
+
+<h3>Veja com os seus olhos: <code>set -x</code></h3>
+<p>O <code>set -x</code> liga o "modo rastro" (<em>x</em> de <em>xtrace</em>): antes de rodar cada comando, o Bash mostra uma linha com <code>+</code> e o comando <strong>já expandido</strong>. É o resultado da etapa ⑥, com aspas recolocadas onde é preciso para você enxergar onde cada argumento começa e termina:</p>
+
+<pre class="term">$ set -x
+$ echo {a,b}-$((2+3)) ~ $nome *.txt "$frase"
++ echo a-5 b-5 /home/ana Ana Paula frutas.txt 'olá *'      « o comando que realmente rodou
+a-5 b-5 /home/ana Ana Paula frutas.txt olá *
+$ set +x
++ set +x</pre>
+
+<p><code>set +x</code> desliga (o próprio <code>set +x</code> ainda aparece no rastro). Quando um comando se comporta de um jeito estranho, o <code>set -x</code> é o primeiro lugar para olhar. Ele é visto a fundo em <a href="depuracao.html">Depurar</a>.</p>
+
+<hr>
+
+<h2>Etapa a etapa, com o que cada uma explica</h2>
+
+<h3>① Palavras e alias</h3>
+<p>Primeiro o Bash corta a linha em <strong>palavras</strong> nos espaços e nos operadores (<code>|</code>, <code>;</code>, <code>&amp;</code>, <code>&gt;</code>…), sem cortar o que está entre aspas. É aqui que <code>if</code>, <code>for</code>, <code>|</code> e <code>&gt;</code> são reconhecidos. Por isso uma variável <strong>nunca</strong> vira operador:</p>
+
+<pre class="term">$ c="ls -l frutas.txt | wc -l"; $c
+ls: não foi possível acessar '|': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'wc': Arquivo ou diretório inexistente
+-rw-rw-r-- 1 ana ana 47 out 14 16:05 frutas.txt</pre>
+
+<p>O <code>|</code> dentro da variável só apareceu na etapa ③, quando os operadores já tinham sido reconhecidos. Para o <code>ls</code>, <code>|</code> e <code>wc</code> são nomes de arquivo. (Para guardar comandos, use <a href="funcoes.html">funções</a>; veja também <a href="eval-indirecao.html">eval</a>.)</p>
+
+<p>Ainda na etapa ①, se a primeira palavra de um comando for um <a href="alias.html">alias</a>, ela é trocada pelo texto do alias. Isso acontece quando a linha é <strong>lida</strong>, antes de qualquer comando dela rodar. Consequência curiosa:</p>
+
+<pre class="term">$ alias oi='echo olá'; oi
+bash: oi: comando não encontrado        « na hora em que a linha foi lida, o alias não existia
+$ oi
+olá                                     « na linha seguinte, já existe</pre>
+
+<h3>② Chaves vêm antes das variáveis</h3>
+<p>As chaves são a primeira expansão, e são puramente textuais: não sabem o valor de nenhuma variável. Por isso:</p>
+
+<pre class="term">$ n=3
+$ echo {1..$n}
+{1..3}                 « não virou 1 2 3!
+$ echo {1..3}
+1 2 3</pre>
+
+<p>Na etapa ②, o Bash viu <code>{1..$n}</code>. Isso não é uma sequência válida (<code>$n</code> não é número), então as chaves ficaram como estavam. Na etapa ③, o <code>$n</code> virou <code>3</code>, mas a etapa das chaves já tinha passado. Resultado: o texto <code>{1..3}</code>, literal.</p>
+
+<p>Para sequências com variáveis, use uma ferramenta que leia o valor <strong>depois</strong> da expansão:</p>
+
+<pre class="term">$ seq 1 $n
+1
+2
+3
+$ for ((i=1; i&lt;=n; i++)); do echo -n "$i "; done; echo
+1 2 3 </pre>
+
+<p>Do mesmo jeito, o resultado de uma variável nunca passa pelas chaves: com <code>x='{a,b}'</code>, <code>echo $x</code> mostra <code>{a,b}</code>.</p>
+
+<h3>③ Til, variáveis, contas e <code>$( )</code>: juntos, da esquerda para a direita</h3>
+<p>Estas expansões formam um mesmo passo. O Bash percorre a linha da esquerda para a direita e resolve cada uma na ordem em que aparece:</p>
+
+<pre class="term">$ i=1
+$ echo $((i++)) $((i++)) $i
+1 2 3                  « cada $(( )) já vê o i alterado pelo anterior</pre>
+
+<p>O <strong>til</strong> só é expandido no começo de uma palavra (ou depois de <code>=</code> e <code>:</code> em atribuições) e <strong>fora de aspas</strong>:</p>
+
+<pre class="term">$ echo \~ "~" ~ ~ana ~root ~/Documentos x~
+~ ~ /home/ana /home/ana /root /home/ana/Documentos x~</pre>
+
+<p>E o valor de uma variável é colocado <strong>como texto</strong>; ele não é expandido de novo:</p>
+
+<pre class="term">$ y='$HOME'
+$ echo $y
+$HOME                  « o $ do valor não é procurado outra vez</pre>
+
+<h3>④ Separação de palavras: só no que veio de uma expansão sem aspas</h3>
+<p>Depois da etapa ③, o Bash olha <strong>só para os pedaços que vieram de expansões</strong> (<code>$var</code>, <code>$(cmd)</code>, <code>$(( ))</code>) e que estavam <strong>sem aspas</strong>. Ele os parte em espaço, TAB e quebra de linha (os caracteres da variável <code>IFS</code>). Espaços repetidos viram um só:</p>
+
+<pre class="term">$ texto="a   b"
+$ echo $texto
+a b                    « sem aspas: dois argumentos, "a" e "b"
+$ echo "$texto"
+a   b                  « com aspas: um argumento, espaços preservados</pre>
+
+<p>Um valor vazio sem aspas não vira argumento vazio: ele <strong>desaparece</strong>.</p>
+
+<pre class="term">$ vazio=
+$ printf '[%s]\n' $vazio "$vazio" fim
+[]                     « este veio do "$vazio" (com aspas)
+[fim]                  « o $vazio sem aspas sumiu</pre>
+
+<p>Nas <strong>atribuições</strong> (<code>u=$t</code>) não há separação nem curingas: <code>t="a   b"; u=$t</code> guarda os três espaços. Mesmo assim, usar aspas ali não faz mal e evita dúvidas.</p>
+
+<h3>⑤ Curingas: depois da separação</h3>
+<p>Cada palavra que sobrou e tem <code>*</code>, <code>?</code> ou <code>[</code> <strong>fora de aspas</strong> é comparada com os nomes de arquivos. E isso vale também para o que veio de uma variável:</p>
+
+<pre class="term">$ x="*"
+$ echo $x
+Área de trabalho Documentos Downloads frutas.txt Imagens Modelos Música Público Vídeos
+$ echo "$x"
+*</pre>
+
+<p>O <code>*</code> chegou na etapa ③ (valor da variável), sobreviveu à separação e, sem aspas, foi tratado como curinga na ⑤. Com <code>set -x</code>, dá para ver a lista de arquivos no lugar do <code>*</code>:</p>
+
+<pre class="term">$ set -x
+$ echo $x
++ echo 'Área de trabalho' Documentos Downloads frutas.txt Imagens Modelos Música Público Vídeos
+Área de trabalho Documentos Downloads frutas.txt Imagens Modelos Música Público Vídeos
+$ echo "$x"
++ echo '*'
+*
+$ echo $(echo "*.txt")
+++ echo '*.txt'        « ++ = comando rodado dentro do $( )
++ echo frutas.txt      « a saída "*.txt" virou curinga
+frutas.txt
+$ set +x
++ set +x</pre>
+
+<p>Repare que o curinga gerou <code>'Área de trabalho'</code> como <strong>um</strong> argumento: o resultado da etapa ⑤ não é separado de novo. Já um <code>$arquivo</code> com espaços, sem aspas, é partido na etapa ④, antes:</p>
+
+<pre class="term">$ arquivo="notas de aula.txt"
+$ touch "$arquivo"
+$ set -x
+$ rm $arquivo
++ rm notas de aula.txt
+rm: não foi possível remover 'notas': Arquivo ou diretório inexistente
+rm: não foi possível remover 'de': Arquivo ou diretório inexistente
+rm: não foi possível remover 'aula.txt': Arquivo ou diretório inexistente
+$ set +x
++ set +x
+$ rm "$arquivo"        « com aspas, deu certo (sem mensagem, código 0)</pre>
+
+<p>Os curingas têm opções que mudam o que acontece quando nada casa (<code>nullglob</code>, <code>failglob</code>) e o que entra na lista (<code>dotglob</code>, <code>globstar</code>); veja <a href="shopt.html">Opções do Shell</a>.</p>
+
+<h3>⑥ Remoção de aspas</h3>
+<p>Por fim, as aspas e barras invertidas que <strong>você digitou</strong> são retiradas. Elas cumpriram o papel delas (proteger das etapas ② a ⑤) e não chegam ao comando. As aspas que vieram <em>de dentro</em> de uma variável não são retiradas: são parte do valor.</p>
+
+<pre class="term">$ echo "$HOME" '$HOME'
+/home/ana $HOME        « aspas duplas deixam a etapa ③ agir; simples, não</pre>
+
+<hr>
+
+<h2>Experimente</h2>
+
+<div class="try" data-setup="n=4" data-goal="outre:1\s+2\s+3\s+4,ran:\$n|&lt;= *n" data-solucao="seq 1 $n">
+<p class="try-task"><strong>Missão:</strong> a variável <code>n</code> já vale <code>4</code>. Primeiro tente <code>echo {1..$n}</code> e veja o que sai. Depois mostre os números de 1 até <code>n</code> de um jeito que funcione, <strong>usando a variável</strong> (sem digitar o 4).</p>
+</div>
+
+<div class="try" data-setup="touch 'relatorio final.txt';;arq='relatorio final.txt'" data-goal="absent:~/relatorio final.txt,ran:rm .*&quot;\$arq&quot;" data-solucao="rm &quot;$arq&quot;">
+<p class="try-task"><strong>Missão:</strong> a variável <code>arq</code> guarda o nome <code>relatorio final.txt</code>, que existe na pasta. Ligue o <code>set -x</code>, tente <code>rm $arq</code> e leia o rastro. Depois apague o arquivo do jeito certo, usando a variável.</p>
+</div>
+
+<hr>
+
+<h2>Formas de impedir uma expansão</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Bloqueia</th><th>Deixa passar</th><th>Use quando…</th></tr>
+<tr><td><code>"…"</code> aspas duplas</td><td>chaves, til, separação, curingas</td><td><code>$var</code>, <code>$(( ))</code>, <code>$( )</code></td><td>Quase sempre, em volta de variáveis: <code>"$arq"</code>.</td></tr>
+<tr><td><code>'…'</code> aspas simples</td><td>tudo</td><td>nada</td><td>O texto deve chegar exatamente como está: <code>'$HOME'</code>, regex, código de <code>awk</code>.</td></tr>
+<tr><td><code>\</code> barra invertida</td><td>o próximo caractere</td><td>o resto</td><td>Um caractere só: <code>\*</code>, <code>\$</code>, <code>\~</code>.</td></tr>
+<tr><td><code>set -f</code></td><td>só os curingas, na sessão toda</td><td>o resto</td><td>Raro: um trecho de script cheio de <code>*</code> que não são curingas.</td></tr>
+<tr><td>atribuição <code>v=$x</code></td><td>separação e curingas</td><td>o resto</td><td>Copiar valores (aspas ainda são uma boa ideia).</td></tr>
+</table>
+</div>
+
+<p><strong>Qual usar?</strong> Regra prática do Bash: <strong>ponha aspas duplas em toda expansão</strong> (<code>"$var"</code>, <code>"$(cmd)"</code>, <code>"${lista[@]}"</code>), a não ser que você <em>queira</em> separação ou curingas. Aspas simples para texto que não deve ser mexido. O <a href="shellcheck.html">ShellCheck</a> avisa quando faltam aspas (aviso SC2086).</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong><code>{1..$n}</code> sai literal</strong>
+<pre class="term">$ echo {1..$n}
+{1..3}</pre>
+<p><strong>O que aconteceu:</strong> as chaves (etapa ②) são expandidas antes das variáveis (etapa ③).</p>
+<p><strong>Como resolver:</strong> <code>seq 1 "$n"</code> ou <code>for ((i=1; i&lt;=n; i++))</code>. Você vai encontrar na internet <code>eval echo {1..$n}</code>, que funciona porque faz o Bash ler a linha duas vezes; evite (veja <a href="eval-indirecao.html">eval</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"redirecionamento ambíguo"</strong>
+<pre class="term">$ arq="meu log.txt"
+$ echo oi &gt; $arq
+bash: $arq: redirecionamento ambíguo
+$ echo oi &gt; "$arq"                     « certo</pre>
+<p><strong>O que aconteceu:</strong> depois das expansões, <code>$arq</code> virou duas palavras (<code>meu</code> e <code>log.txt</code>), e um <code>&gt;</code> só pode ter um destino. O mesmo erro aparece quando a variável está vazia ou quando um curinga casa vários arquivos.</p>
+<p><strong>Como resolver:</strong> aspas: <code>&gt; "$arq"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O til não vira a pasta pessoal</strong>
+<pre class="term">$ d="~/Documentos"
+$ ls "$d"
+ls: não foi possível acessar '~/Documentos': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o <code>~</code> estava entre aspas na atribuição, então ficou como o caractere <code>~</code>. Depois, ao usar <code>$d</code>, o til não é mais expandido: ele veio de uma variável, e o til não é procurado no resultado da etapa ③.</p>
+<p><strong>Como resolver:</strong> deixe o til fora das aspas (<code>d=~/Documentos</code>) ou, melhor ainda, use <code>"$HOME"</code>, que funciona dentro de aspas: <code>d="$HOME/Documentos"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Uma variável com <code>*</code> listou os arquivos</strong>
+<p><strong>O que aconteceu:</strong> <code>echo $x</code> com <code>x="*"</code>, ou <code>echo $(cmd)</code> cuja saída tem <code>*</code>: sem aspas, o valor passa pela etapa ⑤ e vira curinga. Num <code>for f in $(…)</code>, além disso, nomes com espaço são partidos na etapa ④.</p>
+<p><strong>Como resolver:</strong> <code>echo "$x"</code>, <code>echo "$(cmd)"</code>. Para listas de arquivos, use o curinga direto (<code>for f in *.txt</code>) ou um array (veja <a href="arrays.html">Arrays</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Guardei um comando com <code>|</code> numa variável e ele não funciona</strong>
+<p><strong>O que aconteceu:</strong> operadores como <code>|</code>, <code>&gt;</code>, <code>&amp;&amp;</code> e <code>;</code> são reconhecidos na etapa ①. O que vem de uma variável aparece só na ③ e é tratado como texto comum.</p>
+<p><strong>Como resolver:</strong> transforme o comando numa <a href="funcoes.html">função</a>: <code>conta() { ls -l frutas.txt | wc -l; }</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ordem</th><th>Etapa</th><th>Exemplo</th><th>Acontece dentro de <code>"…"</code>?</th></tr>
+<tr><td>①</td><td>Palavras, operadores e alias</td><td><code>ll</code> → <code>ls -l</code></td><td>—</td></tr>
+<tr><td>②</td><td>Chaves</td><td><code>{a,b}</code>, <code>{1..5}</code></td><td>Não</td></tr>
+<tr><td>③</td><td>Til</td><td><code>~</code>, <code>~ana</code></td><td>Não</td></tr>
+<tr><td>③</td><td>Parâmetros e variáveis</td><td><code>$x</code>, <code>${x:-padrão}</code></td><td>Sim</td></tr>
+<tr><td>③</td><td>Aritmética</td><td><code>$((2+3))</code></td><td>Sim</td></tr>
+<tr><td>③</td><td>Substituição de comando</td><td><code>$(date)</code></td><td>Sim</td></tr>
+<tr><td>③</td><td>Substituição de processo</td><td><code>&lt;(sort a)</code></td><td>Não</td></tr>
+<tr><td>④</td><td>Separação de palavras (IFS)</td><td><code>$x</code> com espaços → várias palavras</td><td>Não</td></tr>
+<tr><td>⑤</td><td>Curingas</td><td><code>*.txt</code></td><td>Não</td></tr>
+<tr><td>⑥</td><td>Remoção de aspas</td><td><code>"a b"</code> → <code>a b</code></td><td>—</td></tr>
+<tr><td>depois</td><td>Redirecionamentos, e o comando roda</td><td><code>&gt; "$arq"</code></td><td>—</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Quantos argumentos?</h3>
+<p>Com <code>nome="Ana Paula"</code>, quantos argumentos o <code>printf</code> recebe em <code>printf '[%s]\n' $nome</code> (sem contar o formato)? Escreva o número:</p>
+<div class="ex-code">argumentos: <input data-answer="2|dois" aria-label="número de argumentos"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Ver o comando expandido</h3>
+<p>Complete para ligar o modo que mostra, antes de rodar, cada comando já expandido:</p>
+<div class="ex-code">set <input data-answer="-x|-o xtrace" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Sequência com variável</h3>
+<p>Complete para mostrar os números de 1 até o valor de <code>$fim</code>, um por linha:</p>
+<div class="ex-code"><input data-answer="seq 1 $fim|seq 1 &quot;$fim&quot;|seq $fim|seq &quot;$fim&quot;" aria-label="comando"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Por que <code>echo {1..$n}</code> mostra <code>{1..3}</code> em vez de <code>1 2 3</code>?</p>
+<label><input type="radio" name="q4"> Porque <code>n</code> não foi exportada.</label>
+<label><input type="radio" name="q4"> Porque as chaves são expandidas antes das variáveis.</label>
+<label><input type="radio" name="q4"> Porque faltam aspas em volta de <code>$n</code>.</label>
+<label><input type="radio" name="q4"> Porque o <code>echo</code> não entende sequências.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Com <code>x="*"</code>, o que <code>echo "$x"</code> mostra?</p>
+<label><input type="radio" name="q5"> A lista de arquivos da pasta.</label>
+<label><input type="radio" name="q5"> <code>$x</code></label>
+<label><input type="radio" name="q5"> <code>*</code></label>
+<label><input type="radio" name="q5"> Uma linha vazia.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Em qual etapa as aspas que você digitou são retiradas?</p>
+<label><input type="radio" name="q6"> Na primeira, ao dividir a linha em palavras.</label>
+<label><input type="radio" name="q6"> Logo depois das chaves.</label>
+<label><input type="radio" name="q6"> Durante a expansão de variáveis.</label>
+<label><input type="radio" name="q6"> Na última, depois dos curingas.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Ordem: palavras/alias → chaves → til, variáveis, contas e <code>$( )</code> (juntos, da esquerda para a direita) → separação de palavras → curingas → remoção de aspas → redirecionamentos e execução.</li>
+  <li>Uma etapa nunca volta atrás: por isso <code>{1..$n}</code> não funciona e um <code>|</code> dentro de variável não vira pipe.</li>
+  <li>Separação e curingas só atingem o que veio de expansões <strong>sem aspas</strong>: <code>"$var"</code> chega inteiro.</li>
+  <li><code>printf '[%s]\n' …</code> mostra os argumentos um a um; <code>set -x</code> mostra o comando final.</li>
+  <li>Na dúvida, aspas duplas em volta de toda expansão.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
