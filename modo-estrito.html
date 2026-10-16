@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Modo Estrito — set -e, set -u e pipefail | Guia Bash</title>
+<meta name="description" content="Entenda set -euo pipefail linha por linha: o que errexit, nounset e pipefail fazem, as exceções do set -e, o debate sobre o modo estrito, IFS, ${var:-} e inherit_errexit, com saídas reais do Bash 5.3.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Modo Estrito</span></h1>
+
+<p class="intro">Por padrão, o Bash é "bonzinho": se um comando falha, ele mostra o erro e <strong>continua</strong> para a próxima linha, como se nada tivesse acontecido. Num script que apaga ou copia arquivos, isso é perigoso. O <strong>modo estrito</strong> é a linha <code>set -euo pipefail</code> no topo do script: ela faz o Bash parar no primeiro erro, reclamar de variáveis que não existem e enxergar falhas no meio de um pipe.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que cada parte de <code>set -euo pipefail</code> faz, com um teste antes e depois.</li>
+  <li>As situações em que o <code>set -e</code> <strong>não</strong> para o script (e por que elas existem).</li>
+  <li>Como usar <code>${var:-}</code> para conviver com o <code>set -u</code>.</li>
+  <li>O debate: por que o modo estrito é uma rede de segurança, e não um substituto para tratar erros.</li>
+  <li>O que é o "unofficial strict mode" com <code>IFS=$'\n\t'</code>, e por que este guia não o recomenda.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: o Bash continua depois do erro</h2>
+<p>A Ana escreveu um script para limpar uma pasta de arquivos temporários. Por segurança, no lugar do <code>rm -rf *</code> ela deixou só um <code>echo</code>, para ver onde o script <em>teria</em> apagado:</p>
+
+<pre class="file" data-file="limpar.sh">#!/usr/bin/env bash
+cd ~/pasta-temporaria
+echo "Apagando tudo em: $PWD"
+echo "(aqui viria um rm -rf *)"
+</pre>
+
+<p>Só que a pasta <code>pasta-temporaria</code> não existe. Veja o que acontece:</p>
+
+<pre class="term">$ bash limpar.sh
+limpar.sh: linha 2: cd: /home/ana/pasta-temporaria: Arquivo ou diretório inexistente
+Apagando tudo em: /home/ana                    « o cd falhou, então continuamos na pasta pessoal!
+(aqui viria um rm -rf *)
+$ echo $?
+0                                              « e o script ainda diz que deu tudo certo</pre>
+
+<p>Leia com calma: o <code>cd</code> falhou (linha 2), o Bash mostrou o erro e <strong>seguiu em frente</strong>. A pasta atual continuou sendo <code>/home/ana</code>. Se a linha 4 fosse mesmo <code>rm -rf *</code>, a Ana teria apagado a pasta pessoal inteira. E o código de saída do script é <code>0</code> ("sucesso"), porque o Bash devolve o código do <strong>último</strong> comando, o <code>echo</code>, que deu certo.</p>
+
+<p>Isso não é um defeito: o Bash nasceu para ser usado no terminal, onde você vê o erro e decide o que fazer. Num script, ninguém está olhando. O modo estrito muda esse comportamento.</p>
+
+<hr>
+
+<h2><code>set -e</code>: parar no primeiro erro</h2>
+<p>O comando interno <code>set</code> liga e desliga opções do shell. A opção <code>-e</code> tem o nome longo <code>errexit</code> (<em>error exit</em>, "sair no erro"): <strong>se um comando falhar (código diferente de 0), o script termina na hora</strong>, com o código desse comando.</p>
+
+<dl class="anatomy">
+  <dt>set</dt><dd>Comando interno que liga (<code>-</code>) e desliga (<code>+</code>) opções do shell atual.</dd>
+  <dt>-e</dt><dd>Liga o <code>errexit</code>. É o mesmo que <code>set -o errexit</code>. Para desligar: <code>set +e</code>.</dd>
+</dl>
+
+<pre class="file" data-file="limpar-e.sh">#!/usr/bin/env bash
+set -e
+cd ~/pasta-temporaria
+echo "Apagando tudo em: $PWD"
+echo "(aqui viria um rm -rf *)"
+</pre>
+
+<pre class="term">$ bash limpar-e.sh
+limpar-e.sh: linha 3: cd: /home/ana/pasta-temporaria: Arquivo ou diretório inexistente
+$ echo $?
+1                                              « parou no cd e devolveu o código dele</pre>
+
+<p>Agora o script parou na linha 3. Nenhum <code>echo</code> rodou, e o código de saída é <code>1</code>, o mesmo do <code>cd</code> que falhou. Quem chamou o script (você, outro script ou o <a href="agendar.html">cron</a>) fica sabendo que deu errado.</p>
+
+<div class="tip">
+<strong>"Falhar" quer dizer "devolver código diferente de 0"</strong>
+<p>O <code>set -e</code> não lê mensagens de erro: ele olha o <a href="codigo-saida.html">código de saída</a>. Por isso, um <code>grep</code> que não encontra nada (código 1) também conta como "falha" e para o script. Você vai ver esse caso daqui a pouco.</p>
+</div>
+
+<hr>
+
+<h2><code>set -u</code>: variável que não existe é erro</h2>
+<p>Agora outro script da Ana. Ela errou o nome de uma variável: criou <code>pasta</code> e usou <code>psata</code>.</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+pasta=Documentos
+echo "Arquivos em $psata:"
+ls "$psata"
+</pre>
+
+<pre class="term">$ bash relatorio.sh
+Arquivos em :                                  « $psata virou texto vazio, sem aviso
+ls: não foi possível acessar '': Arquivo ou diretório inexistente
+$ echo $?
+2</pre>
+
+<p>Para o Bash, uma variável que não existe vale "nada". Ele não avisa, só troca por vazio. O erro aparece longe da causa, numa mensagem confusa do <code>ls</code> sobre um nome vazio (<code>''</code>).</p>
+
+<p>A opção <code>-u</code> (nome longo <code>nounset</code>, "não definida") faz o Bash <strong>parar quando você usa uma variável que nunca recebeu valor</strong>:</p>
+
+<pre class="file" data-file="relatorio-u.sh">#!/usr/bin/env bash
+set -u
+pasta=Documentos
+echo "Arquivos em $psata:"
+ls "$psata"
+</pre>
+
+<pre class="term">$ bash relatorio-u.sh
+relatorio-u.sh: linha 4: psata: variável não associada     « aponta o nome e a linha exatos
+$ echo $?
+1</pre>
+
+<p>A mensagem "variável não associada" (em inglês, <em>unbound variable</em>) diz exatamente qual nome e qual linha. Com <code>-u</code>, o script <strong>sempre</strong> termina nesse erro, mesmo sem <code>-e</code>.</p>
+
+<div class="warning">
+<strong>Vazia não é o mesmo que não definida</strong>
+<p><code>nome=""</code> cria a variável com valor vazio: o <code>set -u</code> aceita. Ele só reclama de nomes que <strong>nunca</strong> receberam valor (ou que foram apagados com <code>unset</code>). Os parâmetros <code>$1</code>, <code>$2</code>… também contam: se o script foi chamado sem argumentos, <code>$1</code> não existe.</p>
+</div>
+
+<h3>Conviver com o <code>-u</code>: <code>${var:-}</code></h3>
+<p>Às vezes é normal uma variável não existir: um argumento opcional, ou uma variável de ambiente como <code>DEBUG</code> que só às vezes é definida. Veja o que o <code>-u</code> faz com um argumento que não veio:</p>
+
+<pre class="file" data-file="saudar.sh">#!/usr/bin/env bash
+set -u
+nome=$1
+echo "Olá, $nome!"
+</pre>
+
+<pre class="term">$ bash saudar.sh
+saudar.sh: linha 3: $1: variável não associada
+$ echo $?
+1
+$ bash saudar.sh Bruno
+Olá, Bruno!</pre>
+
+<p>A solução é a <a href="expansao-parametros.html">expansão</a> <code>${var:-padrão}</code>: "o valor de <code>var</code>; se não existir ou estiver vazia, use <code>padrão</code>". Com o padrão vazio, <code>${var:-}</code>, você diz ao Bash: "sei que pode não existir, trate como vazio".</p>
+
+<dl class="anatomy">
+  <dt>${1:-visitante}</dt><dd>O primeiro argumento; se não veio, a palavra <code>visitante</code>.</dd>
+  <dt>${DEBUG:-}</dt><dd>O valor de <code>DEBUG</code>; se não existe, texto vazio, <strong>sem erro</strong>.</dd>
+</dl>
+
+<pre class="file" data-file="saudar2.sh">#!/usr/bin/env bash
+set -u
+nome=${1:-visitante}
+echo "Olá, $nome!"
+if [[ -z ${DEBUG:-} ]]; then
+  echo "(DEBUG desligado)"
+fi
+vazia=()
+echo "argumentos: $# ${@}; itens: ${#vazia[@]} ${vazia[@]}"
+</pre>
+
+<pre class="term">$ bash saudar2.sh
+Olá, visitante!
+(DEBUG desligado)
+argumentos: 0 ; itens: 0                      « "$@" e um array vazio não dão erro</pre>
+
+<p>A última linha mostra uma boa notícia: <code>$@</code> sem argumentos e um <a href="arrays.html">array</a> vazio (<code>${vazia[@]}</code>) <strong>não</strong> disparam o <code>-u</code>. <span class="versao">bash 4.4+</span> No Bash 4.3 e anteriores (e no Bash 3.2 do macOS), <code>"${vazia[@]}"</code> com <code>set -u</code> dá "variável não associada"; lá, a saída é <code>${vazia[@]+"${vazia[@]}"}</code>.</p>
+
+<hr>
+
+<h2><code>set -o pipefail</code>: erro no meio do pipe</h2>
+<p>Num <a href="pipes.html">pipe</a>, o código de saída é o do <strong>último</strong> comando. Os erros do meio somem:</p>
+
+<pre class="term">$ cat compras.txt | wc -l
+cat: compras.txt: Arquivo ou diretório inexistente
+0
+$ echo $?
+0                                              « o wc deu certo, então o pipe "deu certo"</pre>
+
+<p>O arquivo nem existe, mas o pipe devolveu 0, porque o <code>wc</code> contou zero linhas sem problema. Nem o <code>set -e</code> veria esse erro.</p>
+
+<p>A opção <code>pipefail</code> ("falha do pipe") muda a regra: <strong>o código do pipe passa a ser o do último comando que falhou</strong> (o mais à direita com código diferente de 0). Se todos deram certo, continua 0. Ela não tem letra curta: o nome vai depois de <code>-o</code> (<em>option</em>).</p>
+
+<pre class="term">$ set -o pipefail
+$ cat compras.txt | wc -l
+cat: compras.txt: Arquivo ou diretório inexistente
+0
+$ echo $?
+1                                              « agora o erro do cat aparece no código</pre>
+
+<p>A saída na tela é a mesma; o que mudou foi o código. É ele que o <code>set -e</code> e o <code>if</code> enxergam.</p>
+
+<div class="tip">
+<strong>Quer saber o código de cada parte?</strong>
+<p>Logo depois do pipe, o array <code>PIPESTATUS</code> guarda o código de cada comando, da esquerda para a direita. Ele é sobrescrito pelo próximo comando (até por um <code>echo $?</code>), então leia na hora: <code>cat compras.txt | wc -l; echo "${PIPESTATUS[@]}"</code> mostra <code>1 0</code>. Mais em <a href="erros.html">Tratar Erros</a>.</p>
+</div>
+
+<div class="try" data-goal="ran:set -o pipefail,ran:compras\.txt *\| *wc,exit:1" data-solucao="set -o pipefail;;cat compras.txt | wc -l">
+<p class="try-task"><strong>Missão:</strong> ligue o <code>pipefail</code> neste terminal e, <strong>por último</strong>, rode <code>cat compras.txt | wc -l</code>. O arquivo não existe: o pipe deve terminar com código <code>1</code>. (Se quiser comparar, rode o pipe uma vez <em>antes</em> de ligar a opção e veja <code>echo $?</code>.)</p>
+</div>
+
+<hr>
+
+<h2>Juntando tudo: <code>set -euo pipefail</code></h2>
+<p>As três opções costumam vir juntas, numa linha só, logo depois do <a href="script-primeiro.html">shebang</a>. As letras curtas podem ser agrupadas, como em <code>ls -la</code>:</p>
+
+<pre class="syntax">set -euo pipefail</pre>
+
+<dl class="anatomy">
+  <dt>set</dt><dd>Liga opções do shell que está rodando o script.</dd>
+  <dt>-e</dt><dd><code>errexit</code>: um comando falhou → o script termina com o código dele.</dd>
+  <dt>-u</dt><dd><code>nounset</code>: usou variável que não existe → erro e fim.</dd>
+  <dt>-o pipefail</dt><dd>O pipe falha se qualquer parte falhar. O <code>o</code> está grudado em <code>-eu</code>, e o nome <code>pipefail</code> é o argumento dele.</dd>
+</dl>
+
+<p>A linha é exatamente igual a estas três, escritas por extenso (mais fáceis de ler para quem está começando):</p>
+
+<pre class="file" data-file="estrito.sh">#!/usr/bin/env bash
+set -o errexit    # = set -e
+set -o nounset    # = set -u
+set -o pipefail
+</pre>
+
+<p>Para conferir quais opções estão ligadas, use <code>set -o</code> (a lista completa) ou a variável <code>$-</code>, que guarda as letras ativas:</p>
+
+<pre class="term">$ bash -euo pipefail -c 'echo $-; set -o | grep pipefail'
+ehuBc                                          « e (errexit) e u (nounset) aparecem nas letras
+pipefail       	on</pre>
+
+<p>Esse exemplo mostra outra forma de ligar as opções: na linha de comando do <code>bash</code>. Também funciona no shebang (<code>#!/bin/bash -e</code>), mas aí a opção se perde quando alguém roda <code>bash script.sh</code>, porque o shebang é ignorado. <strong>Prefira o <code>set</code> dentro do script.</strong></p>
+
+<div class="tryscript" data-file="contar-kiwi.sh" data-goal="src:set -euo pipefail,out:Kiwis: 0">
+<p class="try-task"><strong>Missão:</strong> coloque <code>set -euo pipefail</code> na segunda linha do script e clique em Rodar. O script vai terminar sem mostrar nada! Descubra o motivo na seção "Quando não funciona" mais abaixo e conserte, para que ele mostre <code>Kiwis: 0</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+n=$(grep -c kiwi frutas.txt)
+echo "Kiwis: $n"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+n=$(grep -c kiwi frutas.txt || true)
+echo "Kiwis: $n"
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando o <code>set -e</code> <strong>não</strong> para o script</h2>
+<p>Esta é a parte que mais confunde. O <code>set -e</code> foi pensado para não atrapalhar os testes: se você escreve <code>if grep …</code>, o "não achei" do <code>grep</code> é uma <strong>resposta</strong>, não um erro. Por isso, o Bash ignora falhas em vários lugares. Veja todos de uma vez:</p>
+
+<pre class="file" data-file="excecoes.sh">#!/usr/bin/env bash
+set -e
+
+if grep -q kiwi frutas.txt; then
+  echo "tem kiwi"
+fi
+echo "1) falha dentro do if: o script continua"
+
+grep -q kiwi frutas.txt &amp;&amp; echo "tem kiwi"
+echo "2) falha antes do &amp;&amp;: o script continua"
+
+grep -q kiwi frutas.txt || echo "não tem kiwi"
+echo "3) falha antes do ||: o script continua"
+
+! grep -q banana frutas.txt
+echo "4) comando com ! na frente: o script continua"
+
+while grep -q kiwi frutas.txt; do :; done
+echo "5) falha na condição do while: o script continua"
+
+grep -q kiwi frutas.txt
+echo "6) falha solta: esta linha NUNCA aparece"
+</pre>
+
+<pre class="term">$ bash excecoes.sh
+1) falha dentro do if: o script continua
+2) falha antes do &amp;&amp;: o script continua
+não tem kiwi
+3) falha antes do ||: o script continua
+4) comando com ! na frente: o script continua
+5) falha na condição do while: o script continua
+$ echo $?
+1                                              « só o grep "solto" (caso 6) parou o script</pre>
+
+<p>Não há kiwi em <code>frutas.txt</code>, então todo <code>grep -q kiwi</code> devolve 1. Mesmo assim, só o último parou o script. A regra do Bash é: <strong>o <code>-e</code> não age quando o comando que falhou está sendo testado</strong>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Onde a falha acontece</th><th>Exemplo</th><th>O <code>-e</code> para?</th></tr>
+<tr><td>Condição de <code>if</code>/<code>elif</code></td><td><code>if grep -q x arq; then</code></td><td>Não</td></tr>
+<tr><td>Condição de <code>while</code>/<code>until</code></td><td><code>while read -r l; do</code></td><td>Não</td></tr>
+<tr><td>Antes de <code>&amp;&amp;</code> ou <code>||</code></td><td><code>grep -q x arq &amp;&amp; echo sim</code></td><td>Não (só o <strong>último</strong> comando da lista conta)</td></tr>
+<tr><td>Comando com <code>!</code> na frente</td><td><code>! grep -q x arq</code></td><td>Não</td></tr>
+<tr><td>Parte do meio de um pipe (sem <code>pipefail</code>)</td><td><code>cat nada | wc -l</code></td><td>Não</td></tr>
+<tr><td>Dentro de uma função chamada num teste</td><td><code>if copiar; then</code></td><td>Não, em <strong>nenhuma</strong> linha da função</td></tr>
+<tr><td>Atribuição com <code>local</code>/<code>export</code>/<code>declare</code></td><td><code>local x=$(falha)</code></td><td>Não (o código é o do <code>local</code>)</td></tr>
+<tr><td>Dentro de <code>$( )</code></td><td><code>echo "$(false; echo oi)"</code></td><td>Não, a menos que <code>inherit_errexit</code> esteja ligado</td></tr>
+<tr><td>Comando solto</td><td><code>grep -q x arq</code></td><td><strong>Sim</strong></td></tr>
+<tr><td>Atribuição simples</td><td><code>n=$(grep -c x arq)</code></td><td><strong>Sim</strong> (o código é o do <code>$( )</code>)</td></tr>
+</table>
+</div>
+
+<h3>A pegadinha das funções</h3>
+<p>Uma <a href="funcoes.html">função</a> chamada dentro de um <code>if</code> (ou antes de <code>&amp;&amp;</code>/<code>||</code>) roda <strong>inteira</strong> com o <code>-e</code> desligado. Um erro no meio dela não para nada:</p>
+
+<pre class="file" data-file="funcao-e.sh">#!/usr/bin/env bash
+set -e
+
+copiar() {
+  cp nada.txt destino.txt     # falha aqui...
+  echo "copiar: terminei"     # ...mas esta linha roda?
+}
+
+if copiar; then
+  echo "cópia OK"
+fi
+echo "--- agora chamando sem if ---"
+copiar
+echo "nunca chega aqui"
+</pre>
+
+<pre class="term">$ bash funcao-e.sh
+cp: não foi possível obter estado de 'nada.txt': Arquivo ou diretório inexistente
+copiar: terminei                               « dentro do if, o cp falhou e a função seguiu
+cópia OK                                       « e ainda devolveu 0 (código do último echo)!
+--- agora chamando sem if ---
+cp: não foi possível obter estado de 'nada.txt': Arquivo ou diretório inexistente
+$ echo $?
+1                                              « fora do if, o -e funcionou</pre>
+
+<p>A primeira chamada é a mais traiçoeira: o <code>cp</code> falhou, a função continuou, e como o último comando dela (<code>echo</code>) deu certo, ela devolveu 0. O <code>if</code> achou que a cópia foi feita. A solução é a função checar os próprios erros (<code>cp nada.txt destino.txt || return 1</code>), como você vai ver em <a href="erros.html">Tratar Erros</a>.</p>
+
+<h3>A pegadinha do <code>local x=$(…)</code></h3>
+<pre class="file" data-file="local-e.sh">#!/usr/bin/env bash
+set -e
+
+contar() {
+  local linhas=$(wc -l &lt; compras.txt)
+  echo "contar: $linhas linhas (o local escondeu a falha)"
+  local total
+  total=$(wc -l &lt; compras.txt)
+  echo "contar: nunca chega aqui"
+}
+contar
+</pre>
+
+<pre class="term">$ bash local-e.sh
+local-e.sh: linha 5: compras.txt: Arquivo ou diretório inexistente
+contar:  linhas (o local escondeu a falha)     « a linha 5 falhou e o script seguiu
+local-e.sh: linha 8: compras.txt: Arquivo ou diretório inexistente
+$ echo $?
+1                                              « a linha 8 parou o script</pre>
+
+<p>Na linha 5, o código que o <code>-e</code> vê é o do comando <code>local</code>, que conseguiu criar a variável (código 0). O erro do <code>$( )</code> se perde. Separando em duas linhas (7 e 8), a atribuição <code>total=$(…)</code> fica sozinha e devolve o código do <code>$( )</code>. Vale o mesmo para <code>export x=$(…)</code>, <code>declare x=$(…)</code> e <code>readonly x=$(…)</code>. O <a href="shellcheck.html">ShellCheck</a> avisa esse caso (aviso SC2155).</p>
+
+<h3>Dentro de <code>$( )</code>: <code>shopt -s inherit_errexit</code></h3>
+<p>A <a href="substituicao-comando.html">substituição de comando</a> roda num subshell, e esse subshell <strong>não herda</strong> o <code>-e</code>:</p>
+
+<pre class="term">$ cat subst-e.sh
+#!/usr/bin/env bash
+set -e
+echo "Resultado: $(false; echo 'continuei dentro do $( )')"
+$ bash subst-e.sh
+Resultado: continuei dentro do $( )            « o false não parou o subshell</pre>
+
+<p>A opção <code>inherit_errexit</code> (<em>herdar o errexit</em>), ligada com <code>shopt -s</code>, faz o <code>$( )</code> herdar o <code>-e</code>. <span class="versao">bash 4.4+</span></p>
+
+<pre class="term">$ cat atrib-e.sh
+#!/usr/bin/env bash
+set -e
+shopt -s inherit_errexit
+resultado=$(false; echo "x")
+echo "fim"
+$ bash atrib-e.sh
+$ echo $?
+1                                              « o subshell parou no false, e a atribuição falhou</pre>
+
+<p>Repare: com <code>inherit_errexit</code>, o subshell parou no <code>false</code> e devolveu 1. Como era uma atribuição simples, o script também parou. Se o <code>$( )</code> estivesse no meio de um <code>echo</code>, o subshell pararia, mas o <code>echo</code> de fora rodaria normalmente (com o texto vazio).</p>
+
+<hr>
+
+<h2>O debate: o modo estrito é bom ou ruim?</h2>
+<p>Programadores experientes discordam sobre o <code>set -e</code>. Os dois lados têm razão em parte:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>A favor</th><th>Contra</th></tr>
+<tr><td>Um erro esquecido não vira desastre (o <code>cd</code> que falha antes do <code>rm</code>).</td><td>As exceções (funções em <code>if</code>, <code>local</code>, <code>$( )</code>) dão a falsa sensação de que tudo está protegido.</td></tr>
+<tr><td>O <code>-u</code> pega erros de digitação em nomes de variáveis na hora.</td><td>Comandos que devolvem 1 como resposta (<code>grep</code> sem resultado, <code>((n++))</code> com <code>n=0</code>, <code>diff</code> com diferenças) matam o script sem mensagem nenhuma.</td></tr>
+<tr><td>O script devolve um código de erro de verdade para quem chamou (cron, CI, outro script).</td><td>O comportamento mudou entre versões do Bash e difere de outros shells.</td></tr>
+<tr><td>Custa uma linha.</td><td>O script para em silêncio: muitas vezes a única pista é o código de saída.</td></tr>
+</table>
+</div>
+
+<p><strong>A posição deste guia:</strong> use <code>set -euo pipefail</code> nos seus scripts, como <strong>rede de segurança</strong>. Mas continue checando os erros que importam, com <code>if</code>, <code>||</code> e mensagens claras (<a href="erros.html">Tratar Erros</a>), e mostre de onde veio a falha com um <a href="trap.html"><code>trap … ERR</code></a>. Uma rede de segurança não é um plano de voo.</p>
+
+<hr>
+
+<h2>O "unofficial strict mode" e o <code>IFS=$'\n\t'</code></h2>
+<p>Na internet, você vai achar esta receita, chamada de <em>unofficial bash strict mode</em> ("modo estrito não oficial"):</p>
+
+<pre class="file" data-file="receita.sh">#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+</pre>
+
+<p>A terceira linha muda o <code>IFS</code> (<em>Internal Field Separator</em>, "separador interno de campos"): a lista de caracteres que o Bash usa para quebrar variáveis <strong>sem aspas</strong> em palavras. O padrão é espaço, tab e quebra de linha. A receita tira o espaço, para que um nome como <code>Área de trabalho</code> não vire três pedaços. Veja o que ela muda de verdade:</p>
+
+<pre class="file" data-file="ifs.sh">#!/usr/bin/env bash
+pasta="Área de trabalho"
+echo "--- IFS padrão, sem aspas:"
+for p in $pasta; do echo "[$p]"; done
+IFS=$'\n\t'
+echo "--- IFS=\$'\n\t', sem aspas:"
+for p in $pasta; do echo "[$p]"; done
+frutas=(banana maçã uva)
+echo "--- \"\${frutas[*]}\" com o IFS novo:"
+echo "${frutas[*]}"
+linha="Ana 29 Recife"
+read -r nome idade cidade &lt;&lt;&lt; "$linha"
+echo "--- read com o IFS novo: nome=[$nome] idade=[$idade]"
+</pre>
+
+<pre class="term">$ bash ifs.sh
+--- IFS padrão, sem aspas:
+[Área]
+[de]
+[trabalho]                                     « o problema que a receita quer evitar
+--- IFS=$'\n\t', sem aspas:
+[Área de trabalho]                             « resolvido…
+--- "${frutas[*]}" com o IFS novo:
+banana
+maçã
+uva                                            « …mas ${a[*]} agora junta com quebra de linha
+--- read com o IFS novo: nome=[Ana 29 Recife] idade=[]   « …e o read parou de separar por espaço</pre>
+
+<p><strong>A crítica:</strong> o <code>IFS</code> global muda o comportamento de <code>read</code>, <code>"$*"</code>, <code>"${a[*]}"</code> e de todo comando do script, inclusive em código copiado de outro lugar que esperava o <code>IFS</code> normal. E ele esconde o problema real, que é a <strong>falta de aspas</strong>. A solução certa é a mais simples:</p>
+
+<ul>
+  <li>Use <a href="aspas.html">aspas</a> sempre: <code>for p in "$pasta"</code>, <code>"$@"</code>, <code>"${a[@]}"</code>.</li>
+  <li>Quando precisar de outro separador, mude o <code>IFS</code> <strong>só para um comando</strong>: <code>IFS=, read -r nome idade cidade nota</code>. Fora dessa linha, o <code>IFS</code> continua o de sempre.</li>
+</ul>
+
+<hr>
+
+<h2>Formas de ligar o modo estrito: qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td>Linha curta no script</td><td><code>set -euo pipefail</code></td><td>O padrão. Vale mesmo se rodarem <code>bash script.sh</code>.</td></tr>
+<tr><td>Por extenso</td><td><code>set -o errexit -o nounset -o pipefail</code></td><td>Quando o script será lido por iniciantes.</td></tr>
+<tr><td>No shebang</td><td><code>#!/bin/bash -e</code></td><td>Evite: <code>bash script.sh</code> ignora o shebang e a opção some. E <code>env</code> não aceita opções extras de forma portável.</td></tr>
+<tr><td>Na linha de comando</td><td><code>bash -eu script.sh</code></td><td>Para testar um script alheio sem editá-lo.</td></tr>
+<tr><td>Só num trecho</td><td><code>set +e</code> … <code>set -e</code></td><td>Para um bloco em que falhas são esperadas. Prefira <code>cmd || true</code> numa linha só.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O script terminou sem mostrar nada</strong>
+<pre class="term">$ cat contar-kiwi.sh
+#!/usr/bin/env bash
+set -euo pipefail
+n=$(grep -c kiwi frutas.txt)
+echo "Kiwis: $n"
+$ bash contar-kiwi.sh
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> não há kiwi; o <code>grep -c</code> imprime <code>0</code>, mas devolve o código 1 ("não achei"). A atribuição <code>n=$(…)</code> devolve esse 1, e o <code>-e</code> encerra o script calado.</p>
+<p><strong>Como confirmar:</strong> rode o script com <code>bash -x contar-kiwi.sh</code> (veja <a href="depuracao.html">Depurar</a>): a última linha <code>+</code> mostra o comando que estava rodando.</p>
+<p><strong>Como resolver:</strong> diga que essa falha é esperada: <code>n=$(grep -c kiwi frutas.txt || true)</code>. O <code>|| true</code> transforma o código em 0. Com a correção, o script mostra <code>Kiwis: 0</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Um <code>((contador++))</code> mata o script</strong>
+<pre class="term">$ cat aritm-e.sh
+#!/usr/bin/env bash
+set -e
+n=0
+((n++))
+echo "n vale $n"
+$ bash aritm-e.sh
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> <code>((expressão))</code> devolve 1 quando o resultado é zero. <code>n++</code> devolve o valor <strong>antigo</strong> (0) e só depois soma, então o código é 1.</p>
+<p><strong>Como resolver:</strong> use <code>((++n))</code> (devolve o valor novo), <code>n=$((n + 1))</code> (uma atribuição, sempre 0) ou <code>((n++)) || true</code>. Veja <a href="aritmetica.html">Contas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"variável não associada" num argumento opcional</strong>
+<pre class="term">$ bash saudar.sh
+saudar.sh: linha 3: $1: variável não associada</pre>
+<p><strong>O que aconteceu:</strong> com <code>set -u</code>, <code>$1</code> sem argumento é uma variável que não existe.</p>
+<p><strong>Como resolver:</strong> dê um padrão: <code>nome=${1:-visitante}</code>, ou teste antes com <code>if [[ $# -eq 0 ]]</code> e mostre uma mensagem de uso (<a href="erros.html">Tratar Erros</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Com <code>pipefail</code>, <code>| head</code> dá erro 141</strong>
+<pre class="term">$ set -o pipefail
+$ seq 1 200000 | head -n 1
+1
+$ echo "${PIPESTATUS[@]}"
+141 0</pre>
+<p><strong>O que aconteceu:</strong> o <code>head</code> leu uma linha e saiu. O <code>seq</code> ainda tentava escrever no pipe, recebeu o sinal <code>SIGPIPE</code> ("cano quebrado") e morreu com código 141 (128 + 13, o número do sinal; veja <a href="trap.html">trap e Sinais</a>). Com <code>pipefail</code>, o pipe inteiro "falha". Com pouca saída (como <code>seq 1 10</code>), o <code>seq</code> termina antes e o erro não aparece; por isso o problema é intermitente.</p>
+<p><strong>Como resolver:</strong> se o corte é intencional, aceite a falha: <code>seq 1 200000 | head -n 1 || true</code>, ou deixe o próprio comando parar sozinho (<code>sed -n 1p</code> e <code>awk 'NR==1'</code> leem tudo e não quebram o cano).</p>
+</div>
+
+<div class="cenario">
+<strong>Eu liguei <code>set -e</code> no terminal e ele fechou</strong>
+<p><strong>O que aconteceu:</strong> o <code>set -e</code> vale para o shell em que você o roda. No terminal, o primeiro comando que falhar (até um <code>ls nada</code>) encerra o shell, e a janela fecha.</p>
+<p><strong>Como resolver:</strong> use o modo estrito só dentro de scripts. Para testar no terminal, abra um shell filho antes (<code>bash</code>) ou use <code>bash -c 'set -e; …'</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Nome longo</th><th>O que faz</th></tr>
+<tr><td><code>set -e</code></td><td><code>set -o errexit</code></td><td>Sai do script quando um comando "solto" falha.</td></tr>
+<tr><td><code>set -u</code></td><td><code>set -o nounset</code></td><td>Erro ao usar variável que nunca recebeu valor.</td></tr>
+<tr><td><code>set -o pipefail</code></td><td>—</td><td>Código do pipe = último comando que falhou.</td></tr>
+<tr><td><code>set +e</code>, <code>set +u</code>, <code>set +o pipefail</code></td><td>—</td><td>Desligam a opção.</td></tr>
+<tr><td><code>shopt -s inherit_errexit</code></td><td>—</td><td><code>$( )</code> herda o <code>-e</code>. <span class="versao">bash 4.4+</span></td></tr>
+<tr><td><code>${var:-}</code></td><td>—</td><td>Usa vazio se a variável não existe (sem erro com <code>-u</code>).</td></tr>
+<tr><td><code>${var:-padrão}</code></td><td>—</td><td>Usa <code>padrão</code> se não existe ou está vazia.</td></tr>
+<tr><td><code>cmd || true</code></td><td>—</td><td>Aceita a falha de <code>cmd</code> (código 0).</td></tr>
+<tr><td><code>echo $-</code> / <code>set -o</code></td><td>—</td><td>Mostram as opções ligadas.</td></tr>
+<tr><td><code>"${PIPESTATUS[@]}"</code></td><td>—</td><td>Códigos de cada parte do último pipe.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A linha do modo estrito</h3>
+<p>Complete a linha que liga errexit, nounset e pipefail de uma vez:</p>
+<div class="ex-code">set <input data-answer="-euo pipefail|-eu -o pipefail|-ueo pipefail" aria-label="opções"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Argumento opcional com <code>set -u</code></h3>
+<p>Complete para que <code>pasta</code> receba o primeiro argumento ou, se não houver, o texto <code>.</code> (ponto), sem erro de "variável não associada":</p>
+<div class="ex-code">pasta=<input data-answer="${1:-.}|&quot;${1:-.}&quot;" aria-label="expansão"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Falha esperada</h3>
+<p>Com <code>set -e</code>, complete para que o script não morra quando o <code>grep</code> não encontrar nada:</p>
+<div class="ex-code">erros=$(grep -c ERRO app.log || <input data-answer="true|:" aria-label="comando">)</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Com <code>set -e</code> ligado, qual destas linhas <strong>para</strong> o script quando <code>nada.txt</code> não existe?</p>
+<label><input type="radio" name="q4"> <code>if cat nada.txt; then echo ok; fi</code></label>
+<label><input type="radio" name="q4"> <code>cat nada.txt || echo "não achei"</code></label>
+<label><input type="radio" name="q4"> <code>conteudo=$(cat nada.txt)</code></label>
+<label><input type="radio" name="q4"> <code>local conteudo=$(cat nada.txt)</code> (dentro de uma função)</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Sem <code>pipefail</code>, qual é o código de saída de <code>cat nada.txt | sort</code>?</p>
+<label><input type="radio" name="q5"> 1, porque o <code>cat</code> falhou.</label>
+<label><input type="radio" name="q5"> 0, porque vale o código do último comando, o <code>sort</code>.</label>
+<label><input type="radio" name="q5"> 2, a soma dos dois.</label>
+<label><input type="radio" name="q5"> 141, por causa do SIGPIPE.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Por que este guia não recomenda <code>IFS=$'\n\t'</code> no topo do script?</p>
+<label><input type="radio" name="q6"> Porque ele só funciona no Bash 5.3.</label>
+<label><input type="radio" name="q6"> Porque ele desliga o <code>set -e</code>.</label>
+<label><input type="radio" name="q6"> Porque ele impede o uso de arrays.</label>
+<label><input type="radio" name="q6"> Porque muda o comportamento de <code>read</code> e <code>"${a[*]}"</code> no script todo e esconde a falta de aspas, que é o problema real.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Sem opções, o Bash continua depois de um erro e o script pode devolver 0 mesmo tendo falhado.</li>
+  <li><code>set -e</code> para no primeiro comando "solto" que falha; <code>set -u</code> para em variáveis inexistentes; <code>set -o pipefail</code> faz o pipe falhar se qualquer parte falhar.</li>
+  <li>O <code>-e</code> é ignorado em testes (<code>if</code>, <code>while</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>!</code>), em funções chamadas nesses lugares, em <code>local x=$(…)</code> e dentro de <code>$( )</code> sem <code>inherit_errexit</code>.</li>
+  <li>Use <code>${var:-}</code> para variáveis opcionais e <code>|| true</code> para falhas esperadas.</li>
+  <li>O modo estrito é uma rede de segurança: continue tratando os erros importantes com <code>if</code>/<code>||</code> e mensagens claras. Prefira aspas a mudar o <code>IFS</code> global.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
