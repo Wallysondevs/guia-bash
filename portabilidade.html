@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash POSIX sh e Bashismos — dash, #!/bin/sh e portabilidade | Guia Bash</title>
+<meta name="description" content="POSIX sh × Bash: por que /bin/sh é o dash no Debian/Ubuntu, os bashismos mais comuns e o equivalente POSIX, os erros reais do dash, bash --posix, ShellCheck com #!/bin/sh, o caso do macOS e quando escrever em POSIX ou em Bash.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">POSIX sh e Bashismos</span></h1>
+
+<p class="intro">O Bash não é o único shell. Existe um padrão, o <strong>POSIX sh</strong>, que todo sistema do tipo Unix segue, e há shells mais simples que só sabem esse padrão, como o <code>dash</code>, que é o <code>/bin/sh</code> do Debian e do Ubuntu. Um <strong>bashismo</strong> é um recurso que só o Bash tem. Nesta aula você aprende a reconhecer os bashismos, ver os erros que eles causam no <code>sh</code> e decidir quando vale a pena escrever um script portável.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é POSIX, e por que <code>#!/bin/sh</code> não quer dizer "Bash".</li>
+  <li>Os bashismos mais comuns e o equivalente POSIX de cada um, com os erros reais do <code>dash</code>.</li>
+  <li>Por que alguns bashismos não dão erro nenhum, só resultado errado.</li>
+  <li>Conferir um script com <code>sh</code>, <code>shellcheck</code> e <code>checkbashisms</code>; o que o <code>bash --posix</code> faz (e não faz).</li>
+  <li>O caso do macOS e quando escrever em POSIX ou em Bash.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Uma língua e seus sotaques</h2>
+<p>Pense no português: há a norma que todos entendem e há expressões regionais. Se você escreve só com a norma, qualquer pessoa entende. Se usa gírias locais, o texto fica mais expressivo, mas alguém de fora pode não entender.</p>
+<p>O <strong>POSIX</strong> (<em>Portable Operating System Interface</em>) é a "norma": um padrão que define como um shell <code>sh</code> deve se comportar. Todo shell sério (Bash, dash, zsh, ksh, o <code>ash</code> do BusyBox) entende POSIX. O Bash aceita tudo do POSIX e acrescenta muitas "gírias": <code>[[ ]]</code>, arrays, <code>{1..5}</code>, <code>$'…'</code>… Esses extras são os <strong>bashismos</strong>.</p>
+
+<h3>Quem é o <code>/bin/sh</code> na sua máquina?</h3>
+<p>Quando um script começa com <code>#!/bin/sh</code>, ou quando você roda <code>sh script.sh</code>, quem executa é o programa que estiver em <code>/bin/sh</code>. E isso muda de sistema para sistema:</p>
+
+<pre class="term">$ readlink -f /bin/sh
+/usr/bin/dash                      « na máquina da Ana: é o dash</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th><code>/bin/sh</code> é…</th><th>Bashismo num <code>#!/bin/sh</code>…</th></tr>
+<tr><td>Debian, Ubuntu, Mint</td><td><code>dash</code></td><td>Dá erro (ou resultado errado)</td></tr>
+<tr><td>Fedora, RHEL, Arch</td><td><code>bash</code> (em modo POSIX)</td><td>Quase sempre funciona: o erro fica escondido até o script ir para um Debian</td></tr>
+<tr><td>Alpine, contêineres pequenos</td><td><code>ash</code> do BusyBox</td><td>Dá erro (e o <code>bash</code> nem vem instalado)</td></tr>
+<tr><td>macOS</td><td>Um <code>sh</code> compatível com POSIX (por padrão, o Bash 3.2)</td><td>Depende do recurso</td></tr>
+</table>
+</div>
+
+<p>O <code>dash</code> (<em>Debian Almquist shell</em>) é pequeno e rápido. O Debian o escolheu para o <code>/bin/sh</code> porque o sistema roda milhares de scripts de inicialização e de instalação de pacotes; um shell mais leve deixa tudo mais rápido. O seu terminal continua sendo o Bash: o <code>dash</code> só entra em cena para quem pede <code>sh</code>.</p>
+
+<p>A consequência prática: um script com <code>#!/bin/sh</code> testado no Fedora (onde <code>sh</code> é o Bash) pode quebrar no Ubuntu. Por isso a regra deste guia é simples: <strong>se você usa recursos do Bash, escreva <code>#!/usr/bin/env bash</code></strong> (veja <a href="executar.html">Formas de Executar</a>).</p>
+
+<hr>
+
+<h2>Um script com bashismos, rodado no <code>sh</code></h2>
+<p>A Ana escreveu este script com <code>#!/bin/sh</code> no topo, mas com dois bashismos dentro:</p>
+
+<pre class="file" data-file="contar.sh">#!/bin/sh
+arquivo=${1:-frutas.txt}
+if [[ ! -f $arquivo ]]; then
+  echo "não achei $arquivo"
+  exit 1
+fi
+total=$(wc -l &lt; "$arquivo")
+echo -e "Arquivo:\t$arquivo"
+echo "Linhas: $total"
+</pre>
+
+<pre class="term">$ bash contar.sh
+Arquivo:	frutas.txt
+Linhas: 7
+$ ./contar.sh                      « o #!/bin/sh manda para o dash
+./contar.sh: 3: [[: not found
+-e Arquivo:	frutas.txt
+Linhas: 7
+$ echo $?
+0</pre>
+
+<p>Linha por linha do que o <code>dash</code> fez:</p>
+<ul>
+  <li><code>./contar.sh: 3: [[: not found</code>: as mensagens do <code>dash</code> são em inglês e têm o formato <code>arquivo: linha: problema</code>. Para ele, <code>[[</code> é só o nome de um comando que não existe ("não encontrado").</li>
+  <li>O <code>if</code> recebeu o código 127 (comando não encontrado), entendeu "falso" e <strong>pulou</strong> o bloco. O script seguiu como se o arquivo existisse.</li>
+  <li><code>-e Arquivo:</code>: o <code>echo</code> do <code>dash</code> não conhece a opção <code>-e</code> e imprimiu o <code>-e</code> como texto. (Ele já interpreta o <code>\t</code> sozinho, sem precisar de <code>-e</code>.)</li>
+  <li>O código de saída foi <strong>0</strong>. Nada avisou que algo deu errado.</li>
+</ul>
+
+<p>E o pior caso, com um arquivo que não existe:</p>
+
+<pre class="term">$ sh contar.sh nada.txt
+contar.sh: 3: [[: not found
+contar.sh: 7: cannot open nada.txt: No such file
+-e Arquivo:	nada.txt
+Linhas:
+$ echo $?
+0</pre>
+
+<p>O teste que deveria parar o script não funcionou, e ele seguiu adiante com dados errados. Num script de backup ou de limpeza, é assim que acontecem os estragos.</p>
+
+<h3>A versão POSIX</h3>
+
+<pre class="file" data-file="contar2.sh">#!/bin/sh
+arquivo=${1:-frutas.txt}
+if [ ! -f "$arquivo" ]; then
+  echo "não achei $arquivo"
+  exit 1
+fi
+total=$(wc -l &lt; "$arquivo")
+printf "Arquivo:\t%s\n" "$arquivo"
+echo "Linhas: $total"
+</pre>
+
+<ul>
+  <li><code>[[ ! -f $arquivo ]]</code> → <code>[ ! -f "$arquivo" ]</code>: o <code>[</code> é POSIX; nele, a variável <strong>precisa</strong> de aspas (veja <a href="testes.html">Testes</a>).</li>
+  <li><code>echo -e "…\t…"</code> → <code>printf "…\t%s\n" "…"</code>: o <code>printf</code> se comporta igual em todo shell (veja <a href="printf.html">printf e echo</a>).</li>
+  <li><code>${1:-frutas.txt}</code> e <code>$( )</code> já eram POSIX: podem ficar.</li>
+</ul>
+
+<pre class="term">$ sh contar2.sh
+Arquivo:	frutas.txt
+Linhas: 7</pre>
+
+<div class="tryscript" data-file="contar.sh" data-goal="src:if \[ !,src:printf,out:Linhas: 7">
+<p class="try-task"><strong>Missão:</strong> deixe o <code>contar.sh</code> portável: troque o <code>[[ ]]</code> por <code>[ ]</code> (com aspas na variável) e o <code>echo -e</code> por <code>printf</code>. A saída deve continuar mostrando <code>Linhas: 7</code>.</p>
+<pre class="script">#!/bin/sh
+arquivo=${1:-frutas.txt}
+if [[ ! -f $arquivo ]]; then
+  echo "não achei $arquivo"
+  exit 1
+fi
+total=$(wc -l &lt; "$arquivo")
+echo -e "Arquivo:\t$arquivo"
+echo "Linhas: $total"
+</pre>
+<pre class="solucao">#!/bin/sh
+arquivo=${1:-frutas.txt}
+if [ ! -f "$arquivo" ]; then
+  echo "não achei $arquivo"
+  exit 1
+fi
+total=$(wc -l &lt; "$arquivo")
+printf "Arquivo:\t%s\n" "$arquivo"
+echo "Linhas: $total"
+</pre>
+</div>
+
+<hr>
+
+<h2>Os bashismos mais comuns, no <code>dash</code></h2>
+<p>Cada sessão abaixo usa <code>sh -c '…'</code>: "rode este trecho no <code>sh</code>". As mensagens começam com <code>sh: 1:</code> (o nome do shell e a linha 1 do trecho).</p>
+
+<h3>Testes: <code>[[ ]]</code> e <code>==</code></h3>
+<pre class="term">$ sh -c '[[ a == a ]] &amp;&amp; echo sim'
+sh: 1: [[: not found
+$ sh -c '[ a == a ] &amp;&amp; echo sim'
+sh: 1: [: a: unexpected operator     « no [ do POSIX, a comparação é com um = só
+$ sh -c '[ a = a ] &amp;&amp; echo sim'
+sim</pre>
+
+<h3>Arrays</h3>
+<pre class="term">$ sh -c 'frutas=(banana uva); echo ${frutas[1]}'
+sh: 1: Syntax error: "(" unexpected</pre>
+<p>O POSIX sh <strong>não tem arrays</strong>. A única lista que existe é a dos parâmetros posicionais: <code>set -- banana uva; echo "$2"</code> (veja <a href="argumentos.html">Argumentos</a>). Se o script precisa de arrays de verdade, é sinal de que ele deve ser em Bash.</p>
+
+<h3>Chaves, <code>$'…'</code> e <code>echo -e</code></h3>
+<pre class="term">$ sh -c 'echo {1..5}'
+{1..5}                             « sem erro: só não expandiu
+$ sh -c 'echo -e "a\tb"'
+-e a	b                          « o -e virou texto</pre>
+
+<p>O <code>$'…'</code> fica mais fácil de ver num arquivo de uma linha só, <code>aspas.sh</code>, com <code>printf '[%s]\n' $'a\tb'</code>:</p>
+
+<pre class="term">$ sh aspas.sh
+[$a\tb]                           « o dash não entende $'…': sobraram o $ e o \t
+$ bash aspas.sh
+[a	b]                             « o Bash trocou o \t por um tab de verdade</pre>
+<p>Estes são os mais traiçoeiros: <strong>não dão erro</strong>. O resultado só sai diferente. No POSIX: <code>seq 1 5</code> (ou um <code>while</code> com contador) no lugar de <code>{1..5}</code>; <code>printf</code> no lugar de <code>$'…'</code> e de <code>echo -e</code>.</p>
+
+<h3><code>function</code>, <code>local</code>, <code>source</code></h3>
+<pre class="term">$ sh -c 'function ola { echo oi; }; ola'
+sh: 1: Syntax error: "}" unexpected
+$ sh -c 'f() { local x=1; echo $x; }; f'
+1                                  « o dash aceita local
+$ sh -c 'source ./.profile &amp;&amp; echo ok'
+sh: 1: source: not found
+$ sh -c '. ./.profile &amp;&amp; echo ok'
+ok</pre>
+<ul>
+  <li>A palavra <code>function</code> é do Bash (e do ksh). A forma POSIX é <code>ola() { …; }</code>, que funciona nos dois.</li>
+  <li><code>local</code> <strong>não</strong> está no POSIX, mas o <code>dash</code>, o <code>ash</code> e o Bash aceitam. É um bashismo "tolerado", que funciona na prática.</li>
+  <li><code>source</code> é um apelido do Bash para o <code>.</code> (ponto), que é o comando POSIX.</li>
+</ul>
+
+<h3>Redirecionamentos: <code>&lt;&lt;&lt;</code> e <code>&amp;&gt;</code></h3>
+<pre class="term">$ sh -c 'tr a-z A-Z &lt;&lt;&lt; oi'
+sh: 1: Syntax error: redirection unexpected
+$ sh -c 'echo oi | tr a-z A-Z'
+OI</pre>
+
+<p>O <code>&amp;&gt;</code> é ainda pior: no <code>dash</code>, <code>cmd &amp;&gt; arquivo</code> é lido como <code>cmd &amp;</code> (mandar para o segundo plano) seguido de <code>&gt; arquivo</code> (um redirecionamento vazio). O comando roda em <a href="jobs.html">segundo plano</a>, o erro aparece na tela e o código é 0:</p>
+
+<pre class="file" data-file="amb.sh">ls nada &amp;&gt; /dev/null
+echo "código: $?"
+sleep 0.3
+</pre>
+
+<pre class="term">$ sh amb.sh
+código: 0
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente</pre>
+
+<p>A forma POSIX é <code>&gt; /dev/null 2&gt;&amp;1</code> (veja <a href="redirecionamento.html">Redirecionamento</a>).</p>
+
+<h3>Expansões de parâmetro e contas</h3>
+<pre class="term">$ sh -c 'x=abc; echo ${x^^}'
+sh: 1: Bad substitution
+$ sh -c 'x=banana; echo ${x/an/AN}'
+sh: 1: Bad substitution
+$ sh -c 'x=banana; echo ${x:1:3}'
+sh: 1: Bad substitution
+$ sh -c 'echo $((2+3))'
+5                                  « a conta $(( )) é POSIX
+$ sh -c 'let x=1+1; echo $x'
+sh: 1: let: not found
+$ sh -c 'for ((i=0;i&lt;2;i++)); do echo $i; done'
+sh: 1: Syntax error: Bad for loop variable
+$ sh -c 'echo $RANDOM'
+                                   « vazio: não existe no POSIX</pre>
+
+<p>Do <code>${ }</code>, o POSIX tem <code>${x:-padrão}</code>, <code>${x:=…}</code>, <code>${x:?…}</code>, <code>${x:+…}</code>, <code>${#x}</code> e os cortes <code>${x#…}</code>, <code>${x##…}</code>, <code>${x%…}</code>, <code>${x%%…}</code>. Substituição (<code>/</code>), fatias (<code>:1:3</code>) e maiúsculas (<code>^^</code>, <code>,,</code>) são do Bash (veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>).</p>
+
+<h3>A tabela: bashismo → POSIX</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Bash</th><th>POSIX sh</th><th>No <code>dash</code>, sem trocar</th></tr>
+<tr><td><code>[[ $a == b ]]</code></td><td><code>[ "$a" = b ]</code></td><td><code>[[: not found</code></td></tr>
+<tr><td><code>[ "$a" == b ]</code></td><td><code>[ "$a" = b ]</code></td><td><code>unexpected operator</code></td></tr>
+<tr><td><code>[[ $x == *.txt ]]</code></td><td><code>case $x in *.txt) …;; esac</code></td><td><code>[[: not found</code></td></tr>
+<tr><td><code>[[ $x =~ regex ]]</code></td><td><code>printf '%s\n' "$x" | grep -Eq 'regex'</code></td><td><code>[[: not found</code></td></tr>
+<tr><td><code>lista=(a b)</code></td><td><code>set -- a b</code> (só uma lista)</td><td><code>Syntax error: "(" unexpected</code></td></tr>
+<tr><td><code>{1..5}</code></td><td><code>seq 1 5</code> ou <code>while</code></td><td>Sem erro: fica <code>{1..5}</code></td></tr>
+<tr><td><code>$'a\tb'</code></td><td><code>"$(printf 'a\tb')"</code></td><td>Sem erro: sobra um <code>$</code></td></tr>
+<tr><td><code>echo -e</code> / <code>echo -n</code></td><td><code>printf</code></td><td>Sem erro: imprime <code>-e</code></td></tr>
+<tr><td><code>function f { }</code></td><td><code>f() { }</code></td><td><code>Syntax error</code></td></tr>
+<tr><td><code>local x</code></td><td>Não é POSIX (mas o dash aceita)</td><td>Funciona</td></tr>
+<tr><td><code>source arq</code></td><td><code>. ./arq</code></td><td><code>source: not found</code></td></tr>
+<tr><td><code>$(( ))</code></td><td>Igual: é POSIX</td><td>Funciona</td></tr>
+<tr><td><code>let</code>, <code>(( ))</code>, <code>for ((;;))</code></td><td><code>x=$((x + 1))</code>, <code>while [ … ]</code></td><td><code>not found</code> / <code>Syntax error</code></td></tr>
+<tr><td><code>cmd &lt;&lt;&lt; "$x"</code></td><td><code>printf '%s\n' "$x" | cmd</code> ou here-doc</td><td><code>redirection unexpected</code></td></tr>
+<tr><td><code>cmd &amp;&gt; arq</code></td><td><code>cmd &gt; arq 2&gt;&amp;1</code></td><td>Sem erro: vira <code>cmd &amp;</code></td></tr>
+<tr><td><code>cmd |&amp; outro</code></td><td><code>cmd 2&gt;&amp;1 | outro</code></td><td><code>Syntax error</code></td></tr>
+<tr><td><code>${x/a/b}</code>, <code>${x:1:3}</code>, <code>${x^^}</code></td><td><code>sed</code>, <code>cut</code>, <code>tr</code></td><td><code>Bad substitution</code></td></tr>
+<tr><td><code>&lt;( cmd )</code></td><td>Arquivo temporário ou pipe</td><td><code>Syntax error</code></td></tr>
+<tr><td><code>$RANDOM</code>, <code>$BASH_VERSION</code>, <code>$EPOCHSECONDS</code></td><td>Não existem</td><td>Ficam vazios</td></tr>
+<tr><td><code>declare</code>, <code>mapfile</code>, <code>shopt</code>, <code>select</code></td><td>Não existem</td><td><code>not found</code> / <code>Syntax error</code></td></tr>
+</table>
+</div>
+
+<div class="try" data-setup="printf 'cor=azul\n' &gt; config.sh" data-goal="ran:^\s*\.\s,var:cor=azul" data-solucao=". ./config.sh">
+<p class="try-task"><strong>Missão:</strong> o arquivo <code>config.sh</code> define a variável <code>cor</code>. Carregue-o no shell atual usando o comando <strong>POSIX</strong> (aquele que funciona até no <code>dash</code>), e não o <code>source</code>. Depois confira com <code>echo "$cor"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Ferramentas para encontrar bashismos</h2>
+
+<h3>Rodar no <code>sh</code> de verdade</h3>
+<p>No Debian/Ubuntu, <code>sh script.sh</code> é o teste mais honesto: é o <code>dash</code> que roda. Se você está num Fedora ou Arch, instale o pacote <code>dash</code> e rode <code>dash script.sh</code>.</p>
+
+<h3><code>bash --posix</code> não é um detector</h3>
+<p>O modo POSIX do Bash (<code>bash --posix</code> ou <code>set -o posix</code>, veja <a href="shopt.html">Opções do Shell</a>) muda alguns comportamentos para seguir o padrão, mas <strong>continua aceitando os bashismos</strong>. É também o que acontece quando o Bash é chamado com o nome <code>sh</code>, como no Fedora:</p>
+
+<pre class="term">$ bash --posix -c 'frutas=(a b); echo ${frutas[1]}; [[ a == a ]] &amp;&amp; echo sim'
+b
+sim                                « arrays e [[ ]] funcionaram mesmo no modo POSIX</pre>
+
+<p>Por isso um script com <code>#!/bin/sh</code> "testado" num sistema onde <code>sh</code> é o Bash não está testado de verdade.</p>
+
+<h3>ShellCheck com <code>#!/bin/sh</code></h3>
+<p>O <a href="shellcheck.html">ShellCheck</a> lê a primeira linha. Com <code>#!/bin/sh</code>, ele confere o script contra o POSIX e aponta cada bashismo, com um código <code>SC3xxx</code>:</p>
+
+<pre class="term">$ shellcheck contar.sh
+
+In contar.sh line 3:
+if [[ ! -f $arquivo ]]; then
+   ^-----------------^ SC3010 (warning): In POSIX sh, [[ ]] is undefined.
+
+
+In contar.sh line 8:
+echo -e "Arquivo:\t$arquivo"
+     ^-- SC3037 (warning): In POSIX sh, echo flags are undefined.
+
+For more information:
+  https://www.shellcheck.net/wiki/SC3010 -- In POSIX sh, [[ ]] is undefined.
+  https://www.shellcheck.net/wiki/SC3037 -- In POSIX sh, echo flags are undef...
+$ shellcheck contar2.sh
+$ echo $?
+0                                  « a versão POSIX passou sem avisos</pre>
+
+<p>Se o script é para Bash, a correção é a primeira linha (<code>#!/usr/bin/env bash</code>), e não reescrever tudo. Para conferir um arquivo sem shebang, diga o shell: <code>shellcheck -s sh arquivo</code>.</p>
+
+<h3><code>checkbashisms</code> <span class="versao">programa à parte</span></h3>
+<p>O Debian tem um verificador próprio, o <code>checkbashisms</code>, no pacote <code>devscripts</code>. Ele não está no laboratório do guia, por isso aqui fica só o uso (ilustrativo): <code>checkbashisms contar.sh</code> lista cada linha com um bashismo, como o ShellCheck faz com os <code>SC3xxx</code>.</p>
+
+<hr>
+
+<h2>O caso do macOS</h2>
+<p>No macOS, a portabilidade vai além do shell. Os pontos que mais quebram scripts feitos no Linux (ilustrativo: o laboratório do guia é Linux):</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Diferença</th><th>No Linux (GNU)</th><th>No macOS</th></tr>
+<tr><td>Bash do sistema</td><td>5.2 ou 5.3</td><td><code>/bin/bash</code> 3.2: sem <code>declare -A</code>, <code>mapfile</code>, <code>${x,,}</code>, <code>|&amp;</code>, <code>;&amp;</code>, <code>globstar</code> (veja <a href="novidades.html">Novidades</a>)</td></tr>
+<tr><td>Shell padrão do terminal</td><td>bash</td><td>zsh (desde o macOS 10.15)</td></tr>
+<tr><td><code>sed -i</code></td><td><code>sed -i 's/a/b/' arq</code></td><td><code>sed -i '' 's/a/b/' arq</code> (o <code>-i</code> exige um sufixo de backup, mesmo vazio)</td></tr>
+<tr><td>Datas</td><td><code>date -d 'tomorrow'</code></td><td>Não existe <code>-d</code>; usa <code>date -v+1d</code> e <code>date -j -f</code></td></tr>
+<tr><td>Outros</td><td><code>readlink -f</code>, <code>grep -P</code>, <code>stat -c</code></td><td>Opções diferentes ou ausentes (ferramentas BSD)</td></tr>
+</table>
+</div>
+
+<p>O Bash é o menor problema: dá para instalar um Bash novo pelo Homebrew e usar <code>#!/usr/bin/env bash</code>, que acha o Bash do Homebrew pelo <a href="path.html">PATH</a>. As ferramentas BSD são o maior: um script portável para macOS evita opções exclusivas do GNU ou testa o sistema com <code>uname</code>.</p>
+
+<hr>
+
+<h2>Quando escrever POSIX, quando escrever Bash</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Escreva em</th><th>Primeira linha</th></tr>
+<tr><td>Script pessoal, de automação, de projeto, onde o Bash está instalado</td><td>Bash: aproveite arrays, <code>[[ ]]</code>, <code>local</code>…</td><td><code>#!/usr/bin/env bash</code></td></tr>
+<tr><td>Script de instalação que pode rodar em qualquer Unix (inclusive Alpine, BSD)</td><td>POSIX</td><td><code>#!/bin/sh</code></td></tr>
+<tr><td>Scripts do sistema no Debian (pacotes, inicialização)</td><td>POSIX (é a regra do Debian)</td><td><code>#!/bin/sh</code></td></tr>
+<tr><td>Imagens Docker mínimas</td><td>POSIX (o <code>bash</code> pode nem existir)</td><td><code>#!/bin/sh</code></td></tr>
+<tr><td>Precisa de arrays, arrays associativos, regex, <code>mapfile</code></td><td>Bash, sem dúvida</td><td><code>#!/usr/bin/env bash</code></td></tr>
+</table>
+</div>
+
+<p>O erro não é usar bashismos. O erro é <strong>usar bashismos com <code>#!/bin/sh</code></strong>. Escolha um dos dois e seja coerente; o ShellCheck confere por você.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"[[: not found" ou "Syntax error: "(" unexpected"</strong>
+<pre class="term">$ ./contar.sh
+./contar.sh: 3: [[: not found</pre>
+<p><strong>O que aconteceu:</strong> o script tem bashismos, mas foi rodado pelo <code>dash</code>, por causa do <code>#!/bin/sh</code> ou porque você digitou <code>sh script.sh</code>.</p>
+<p><strong>Como confirmar:</strong> <code>head -1 script.sh</code>. Mensagens em inglês com <code>arquivo: número:</code> no começo são do <code>dash</code>; as do Bash vêm em português com "linha N".</p>
+<p><strong>Como resolver:</strong> troque a primeira linha para <code>#!/usr/bin/env bash</code> e rode com <code>./script.sh</code> ou <code>bash script.sh</code>; ou reescreva em POSIX seguindo a tabela.</p>
+</div>
+
+<div class="cenario">
+<strong>"Bad substitution"</strong>
+<pre class="term">$ sh -c 'x=abc; echo ${x^^}'
+sh: 1: Bad substitution</pre>
+<p><strong>O que aconteceu:</strong> uma expansão <code>${ }</code> que só o Bash conhece. <strong>Como resolver:</strong> use Bash, ou troque por <code>tr</code>/<code>sed</code>/<code>cut</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Funciona no Fedora e quebra no Ubuntu</strong>
+<p><strong>O que aconteceu:</strong> no Fedora, <code>/bin/sh</code> é o Bash e aceitou os bashismos; no Ubuntu, é o <code>dash</code>.</p>
+<p><strong>Como resolver:</strong> rode <code>shellcheck</code> (ele usa a primeira linha) e teste com <code>dash script.sh</code> antes de distribuir.</p>
+</div>
+
+<div class="cenario">
+<strong>Não deu erro, mas apareceu "-e" ou "{1..5}" na saída</strong>
+<p><strong>O que aconteceu:</strong> bashismos que o <code>dash</code> não entende, mas também não rejeita: <code>echo -e</code>, <code>{1..5}</code>, <code>$'…'</code>, <code>$RANDOM</code>, <code>&amp;&gt;</code>.</p>
+<p><strong>Como resolver:</strong> <code>printf</code>, <code>seq</code>, <code>&gt; arq 2&gt;&amp;1</code>; ou mude para Bash.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Para quê</th></tr>
+<tr><td><code>readlink -f /bin/sh</code></td><td>Ver quem é o <code>sh</code> do sistema</td></tr>
+<tr><td><code>sh script.sh</code> / <code>dash script.sh</code></td><td>Rodar no shell POSIX</td></tr>
+<tr><td><code>sh -c 'trecho'</code></td><td>Testar um trecho no <code>sh</code></td></tr>
+<tr><td><code>shellcheck script.sh</code> / <code>shellcheck -s sh arq</code></td><td>Apontar bashismos (avisos SC3xxx)</td></tr>
+<tr><td><code>checkbashisms script.sh</code></td><td>Verificador do Debian (pacote devscripts)</td></tr>
+<tr><td><code>bash --posix</code></td><td>Bash mais perto do padrão (mas ainda aceita bashismos)</td></tr>
+<tr><td><code>[ -n "$BASH_VERSION" ]</code></td><td>Saber, em qualquer shell, se está rodando no Bash</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Comparação POSIX</h3>
+<p>Complete o teste para funcionar no <code>dash</code>:</p>
+<div class="ex-code">[ "$resp" <input data-answer="=" aria-label="operador" style="width:2em"> sim ] &amp;&amp; echo ok</div>
+</div>
+
+<div class="exercise">
+<h3>2. Carregar um arquivo</h3>
+<p>Qual comando POSIX faz o mesmo que <code>source config.sh</code>?</p>
+<div class="ex-code"><input data-answer=". config.sh|. ./config.sh" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Juntar saída e erro</h3>
+<p>Complete a forma POSIX de <code>cmd &amp;&gt; log.txt</code>:</p>
+<div class="ex-code">cmd &gt; log.txt <input data-answer="2&gt;&amp;1" aria-label="redirecionamento"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. No Ubuntu, um script com <code>#!/bin/sh</code> usa <code>[[ -f $arq ]]</code>. O que acontece ao rodar <code>./script.sh</code>?</p>
+<label><input type="radio" name="q4"> Funciona, porque o <code>sh</code> do Ubuntu é o Bash.</label>
+<label><input type="radio" name="q4"> O <code>dash</code> diz <code>[[: not found</code>, o <code>if</code> vira "falso" e o script continua.</label>
+<label><input type="radio" name="q4"> O script para na hora com código 2.</label>
+<label><input type="radio" name="q4"> O <code>dash</code> converte para <code>[ ]</code> sozinho.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Por que testar com <code>bash --posix</code> não basta para garantir que o script roda no <code>dash</code>?</p>
+<label><input type="radio" name="q5"> Porque o <code>--posix</code> não existe.</label>
+<label><input type="radio" name="q5"> Porque o <code>--posix</code> desliga o <code>if</code>.</label>
+<label><input type="radio" name="q5"> Porque o <code>dash</code> é mais novo que o POSIX.</label>
+<label><input type="radio" name="q5"> Porque, mesmo no modo POSIX, o Bash continua aceitando arrays, <code>[[ ]]</code> e outros bashismos.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Seu script usa arrays associativos e <code>mapfile</code>. Qual a primeira linha certa?</p>
+<label><input type="radio" name="q6"> <code>#!/usr/bin/env bash</code></label>
+<label><input type="radio" name="q6"> <code>#!/bin/sh</code></label>
+<label><input type="radio" name="q6"> <code>#!/bin/dash</code></label>
+<label><input type="radio" name="q6"> Nenhuma: arrays só funcionam digitados no terminal.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>POSIX sh é o padrão comum; bashismos são os extras do Bash. No Debian/Ubuntu, <code>/bin/sh</code> é o <code>dash</code>; no Fedora/Arch, o Bash.</li>
+  <li>Os bashismos mais comuns: <code>[[ ]]</code>, <code>==</code> no <code>[</code>, arrays, <code>{1..5}</code>, <code>$'…'</code>, <code>echo -e</code>, <code>function</code>, <code>source</code>, <code>&lt;&lt;&lt;</code>, <code>&amp;&gt;</code>, <code>${x/a/b}</code>.</li>
+  <li>Alguns dão erro; outros (<code>echo -e</code>, <code>{1..5}</code>, <code>&amp;&gt;</code>) só dão resultado errado, com código 0.</li>
+  <li>Teste com <code>sh</code>/<code>dash</code> e com <code>shellcheck</code>; <code>bash --posix</code> não detecta bashismos.</li>
+  <li>Usou recursos do Bash? <code>#!/usr/bin/env bash</code>. Precisa rodar em qualquer lugar? POSIX e <code>#!/bin/sh</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
