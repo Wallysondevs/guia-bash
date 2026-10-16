@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Atalhos do Teclado — readline (emacs e vi), terminal, bind e inputrc | Guia Bash</title>
+<meta name="description" content="Referência dos atalhos do Bash: edição de linha do readline no modo emacs (padrão), histórico, completar, atalhos do terminal (Ctrl+C, Ctrl+Z, Ctrl+D, Ctrl+S), modo vi, expansões com ! e como configurar com bind e ~/.inputrc.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Atalhos do Teclado</span></h1>
+
+<p class="intro">Quem edita a linha que você digita no Bash é o <strong>readline</strong>, uma biblioteca que também é usada por outros programas (o <code>python</code> interativo, o <code>gdb</code>, o <code>psql</code>). Por padrão ele usa atalhos no estilo do editor Emacs. Esta página reúne os atalhos que valem a pena, os do próprio terminal, o modo vi e como mudar tudo com <code>bind</code> e o <code>~/.inputrc</code>. Para aprender com calma, veja <a href="editar-linha.html">Editar a Linha</a>.</p>
+
+<div class="note">
+<strong>Como ler as teclas</strong>
+<ul>
+  <li><kbd>Ctrl</kbd>+<kbd>A</kbd>: segure Ctrl e aperte A. Nos arquivos de configuração, aparece como <code>\C-a</code>.</li>
+  <li><kbd>Alt</kbd>+<kbd>B</kbd>: segure Alt e aperte B (<code>\eb</code>). Se o Alt não funcionar (macOS, alguns terminais), aperte e solte <kbd>Esc</kbd> e depois a tecla: o efeito é o mesmo.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd>: duas combinações em sequência.</li>
+  <li>Todos os atalhos do readline foram conferidos com <code>bind -p</code> no Bash 5.3 (modo emacs, o padrão).</li>
+</ul>
+</div>
+
+<p class="indice-letras"><a href="#mover">Mover</a> · <a href="#apagar">Apagar e colar</a> · <a href="#editar">Editar</a> · <a href="#historico">Histórico</a> · <a href="#completar">Completar</a> · <a href="#terminal">Terminal</a> · <a href="#exclamacao">Expansões com !</a> · <a href="#vi">Modo vi</a> · <a href="#configurar">bind e inputrc</a></p>
+
+<hr>
+
+<h2 id="mover">Mover o cursor</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Faz</th><th>Lembrete</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Home</kbd></td><td>Início da linha</td><td><em>A</em>, a primeira letra</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd> / <kbd>End</kbd></td><td>Fim da linha</td><td><em>End</em></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>←</kbd></td><td>Um caractere para trás</td><td><em>back</em></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd> / <kbd>→</kbd></td><td>Um caractere para frente</td><td><em>forward</em></td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>B</kbd> / <kbd>Ctrl</kbd>+<kbd>←</kbd></td><td>Uma palavra para trás</td><td></td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>F</kbd> / <kbd>Ctrl</kbd>+<kbd>→</kbd></td><td>Uma palavra para frente</td><td></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>]</kbd> <kbd>x</kbd></td><td>Pula para o próximo caractere <code>x</code></td><td><code>character-search</code></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Alterna entre o cursor e a marca (posta com <kbd>Ctrl</kbd>+<kbd>Espaço</kbd>)</td><td></td></tr>
+</table>
+</div>
+
+<h2 id="apagar">Apagar, recortar e colar</h2>
+<p>O readline guarda o que você apaga com os comandos "kill" num <strong>anel</strong> (uma área de transferência própria, separada da do sistema), de onde <kbd>Ctrl</kbd>+<kbd>Y</kbd> cola de volta.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Recorta do cursor até o <strong>início</strong> da linha (ótimo para apagar uma senha digitada errada)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Recorta do cursor até o <strong>fim</strong> da linha</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>Recorta a palavra antes do cursor (até o espaço anterior)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Backspace</kbd></td><td>Recorta a palavra antes do cursor (para em <code>/</code> e <code>.</code>: bom para caminhos)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>D</kbd> / <kbd>Ctrl</kbd>+<kbd>Del</kbd></td><td>Recorta a palavra depois do cursor</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Cola o último recorte (<em>yank</em>)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Y</kbd></td><td>Logo depois de um <kbd>Ctrl</kbd>+<kbd>Y</kbd>: troca pelo recorte anterior do anel</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd> / <kbd>Del</kbd></td><td>Apaga o caractere sob o cursor (com a linha vazia, <kbd>Ctrl</kbd>+<kbd>D</kbd> fecha o shell!)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>H</kbd> / <kbd>Backspace</kbd></td><td>Apaga o caractere antes do cursor</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>\</kbd></td><td>Apaga os espaços em volta do cursor</td></tr>
+</table>
+</div>
+
+<h2 id="editar">Editar e transformar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>_</kbd> / <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Desfaz (repita para desfazer mais)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>R</kbd></td><td>Desfaz tudo: volta a linha ao que era (útil numa linha trazida do histórico)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td>Troca os dois caracteres em volta do cursor (<code>sl</code> → <code>ls</code>)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>T</kbd></td><td>Troca as duas palavras em volta do cursor</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>U</kbd> / <kbd>Alt</kbd>+<kbd>L</kbd> / <kbd>Alt</kbd>+<kbd>C</kbd></td><td>Palavra em MAIÚSCULAS / minúsculas / Primeira maiúscula</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Abre a linha no seu editor (<code>$EDITOR</code>); ao salvar e sair, ela é executada. Ótimo para comandos longos</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>#</kbd></td><td>Transforma a linha em comentário e a guarda no histórico sem executar ("anota para depois")</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd> <kbd>Tab</kbd></td><td>Insere a próxima tecla literalmente (um TAB de verdade, por exemplo)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Expande a linha no lugar (variáveis, <code>$( )</code>, aliases, histórico) sem executar: mostra o que o Bash vai rodar</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>*</kbd></td><td>Expande o curinga sob o cursor (<code>*.txt</code> vira a lista de arquivos)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>&amp;</kbd></td><td>Expande o til (<code>~/x</code> → <code>/home/ana/x</code>)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Limpa a tela, mantendo a linha atual (<kbd>Alt</kbd>+<kbd>Ctrl</kbd>+<kbd>L</kbd> limpa também o histórico de rolagem)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>0</kbd>…<kbd>9</kbd></td><td>Repetição: <kbd>Alt</kbd>+<kbd>3</kbd> <kbd>Ctrl</kbd>+<kbd>W</kbd> apaga 3 palavras</td></tr>
+</table>
+</div>
+
+<h2 id="historico">Histórico</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Faz</th></tr>
+<tr><td><kbd>↑</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Comando anterior (<em>previous</em>)</td></tr>
+<tr><td><kbd>↓</kbd> / <kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Próximo comando (<em>next</em>)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Busca para trás enquanto você digita (<code>(reverse-i-search)</code>). <kbd>Ctrl</kbd>+<kbd>R</kbd> de novo: o anterior que casa. <kbd>Enter</kbd> executa; <kbd>→</kbd> ou <kbd>Esc</kbd> deixa editar; <kbd>Ctrl</kbd>+<kbd>G</kbd> desiste</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Busca para frente (só funciona depois de <code>stty -ixon</code>; veja a seção do terminal)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>.</kbd> / <kbd>Alt</kbd>+<kbd>_</kbd></td><td>Insere o <strong>último argumento</strong> do comando anterior; repita para ir aos anteriores. <code>mkdir projetos/novo</code> e depois <code>cd </code> + <kbd>Alt</kbd>+<kbd>.</kbd></td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Insere o primeiro argumento do comando anterior</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Executa a linha do histórico e já traz a seguinte (para repetir uma sequência de comandos)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>&lt;</kbd> / <kbd>Alt</kbd>+<kbd>&gt;</kbd></td><td>Primeiro / último comando do histórico</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>P</kbd> / <kbd>Alt</kbd>+<kbd>N</kbd></td><td>Busca não incremental (digita o texto todo e aperta Enter)</td></tr>
+<tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Em Debian e Ubuntu (pelo <code>/etc/inputrc</code>): busca no histórico pelo começo já digitado</td></tr>
+</table>
+</div>
+<p>Veja <a href="historico.html">Histórico</a>.</p>
+
+<h2 id="completar">Completar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Faz</th></tr>
+<tr><td><kbd>Tab</kbd></td><td>Completa comando, arquivo, variável (<code>$HO</code>), usuário (<code>~an</code>)… conforme a posição</td></tr>
+<tr><td><kbd>Tab</kbd> <kbd>Tab</kbd></td><td>Lista as possibilidades quando há mais de uma</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>?</kbd> / <kbd>Alt</kbd>+<kbd>=</kbd></td><td>Lista as possibilidades (como o 2º Tab)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>*</kbd></td><td>Insere <strong>todas</strong> as possibilidades na linha</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>/</kbd></td><td>Completa como nome de arquivo (ignorando a completação programável)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>!</kbd> / <kbd>Alt</kbd>+<kbd>$</kbd> / <kbd>Alt</kbd>+<kbd>~</kbd></td><td>Completa como comando / variável / usuário</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>{</kbd></td><td>Completa e junta as opções em chaves: <code>arq{1,2,3}.txt</code></td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Tab</kbd></td><td>Completa com palavras do histórico</td></tr>
+</table>
+</div>
+<p>Veja <a href="completar.html">Completar com Tab</a> e <a href="complete.html">Completar Programável</a>.</p>
+
+<h2 id="terminal">Do terminal (não do Bash)</h2>
+<p>Estes são tratados pelo <strong>terminal</strong> (o "driver de terminal" do sistema), não pelo readline, e funcionam também dentro de outros programas. <code>stty -a</code> mostra a lista:</p>
+<pre class="term">$ stty -a | head -4
+speed 38400 baud; rows 0; columns 0; line = 0;
+intr = ^C; quit = ^\; erase = ^?; kill = ^U; eof = ^D; eol = &lt;undef&gt;;
+eol2 = &lt;undef&gt;; swtch = &lt;undef&gt;; start = ^Q; stop = ^S; susp = ^Z; rprnt = ^R;
+werase = ^W; lnext = ^V; discard = ^O; min = 1; time = 0;</pre>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Nome no <code>stty</code></th><th>Faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td><code>intr</code></td><td>Interrompe o programa (manda o sinal SIGINT). Na linha de comando, descarta a linha. Veja <a href="trap.html">trap e Sinais</a></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td><code>susp</code></td><td>Pausa o programa e devolve o prompt (<code>fg</code> retoma, <code>bg</code> continua em segundo plano). Veja <a href="jobs.html">Jobs</a></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td><code>eof</code></td><td>"Fim da entrada": termina um <code>cat</code> ou <code>read</code> esperando texto; na linha vazia do Bash, fecha o shell</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>\</kbd></td><td><code>quit</code></td><td>Interrompe com mais força (SIGQUIT), quando o <kbd>Ctrl</kbd>+<kbd>C</kbd> é ignorado</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>Q</kbd></td><td><code>stop</code> / <code>start</code></td><td><strong>Congela</strong> / descongela a saída do terminal. Se o terminal "travou" do nada, tente <kbd>Ctrl</kbd>+<kbd>Q</kbd>. <code>stty -ixon</code> desliga isso e libera o <kbd>Ctrl</kbd>+<kbd>S</kbd> para a busca do histórico</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td><code>lnext</code></td><td>A próxima tecla entra literal</td></tr>
+</table>
+</div>
+
+<h3>Atalhos da janela do terminal</h3>
+<p>Dependem do programa de terminal (GNOME Terminal, Konsole, Windows Terminal, iTerm2…); estes são os mais comuns no Linux:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td>Copiar / colar (o <kbd>Ctrl</kbd>+<kbd>C</kbd> sozinho interrompe!). No macOS: <kbd>Cmd</kbd>+<kbd>C</kbd> / <kbd>Cmd</kbd>+<kbd>V</kbd></td></tr>
+<tr><td>Selecionar com o mouse + clique do meio</td><td>Copia e cola sem teclado (Linux)</td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Rola a tela para ver saídas antigas</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>Nova aba / nova janela</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Aumenta / diminui / volta o tamanho da letra</td></tr>
+</table>
+</div>
+
+<h2 id="exclamacao">Expansões do histórico com <code>!</code></h2>
+<p>Não são teclas, mas cumprem o mesmo papel: reaproveitar o que você já digitou. O Bash mostra a linha expandida antes de executá-la. Veja <a href="historico.html">Histórico</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Vira</th><th>Exemplo</th></tr>
+<tr><td><code>!!</code></td><td>O comando anterior inteiro</td><td><code>sudo !!</code> (repete com sudo)</td></tr>
+<tr><td><code>!$</code></td><td>O último argumento do comando anterior</td><td><code>mkdir novo</code> e <code>cd !$</code></td></tr>
+<tr><td><code>!^</code> / <code>!*</code></td><td>O primeiro / todos os argumentos do anterior</td><td><code>ls a b</code> e <code>rm !*</code></td></tr>
+<tr><td><code>!n</code> / <code>!-n</code></td><td>O comando número n / o n-ésimo para trás</td><td><code>!42</code>, <code>!-2</code></td></tr>
+<tr><td><code>!texto</code></td><td>O último comando que começa com <code>texto</code></td><td><code>!git</code></td></tr>
+<tr><td><code>^velho^novo</code></td><td>O anterior, trocando <code>velho</code> por <code>novo</code></td><td><code>cat notsa.txt</code> e <code>^ts^ta</code></td></tr>
+<tr><td><code>…:p</code></td><td>Só mostra, sem executar</td><td><code>!git:p</code></td></tr>
+</table>
+</div>
+<p>Por causa disso, <code>!</code> dentro de aspas duplas pode dar erro no terminal (a mensagem sai em inglês mesmo):</p>
+<pre class="term">$ echo "oi!xyz"
+bash: !xyz: event not found</pre>
+<p>Use aspas simples em textos com <code>!</code>, ou desligue a expansão com <code>set +H</code>. Em scripts ela já vem desligada.</p>
+
+<h2 id="vi">Modo vi</h2>
+<p>Se você usa o Vim, o readline pode funcionar como ele: <code>set -o vi</code> (volte com <code>set -o emacs</code>). Você começa no modo de <strong>inserção</strong> (digitando normalmente); <kbd>Esc</kbd> passa ao modo de <strong>comando</strong>, onde as letras são comandos.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>No modo de comando</th><th>Faz</th></tr>
+<tr><td><kbd>h</kbd> <kbd>l</kbd> / <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd></td><td>Caractere à esquerda/direita / próxima palavra, palavra anterior, fim da palavra</td></tr>
+<tr><td><kbd>0</kbd> / <kbd>$</kbd> / <kbd>^</kbd></td><td>Início / fim da linha / primeiro caractere não branco</td></tr>
+<tr><td><kbd>i</kbd> <kbd>a</kbd> / <kbd>I</kbd> <kbd>A</kbd></td><td>Volta a inserir antes/depois do cursor / no início/fim da linha</td></tr>
+<tr><td><kbd>x</kbd> / <kbd>dw</kbd> / <kbd>dd</kbd> / <kbd>D</kbd></td><td>Apaga caractere / palavra / linha inteira / até o fim</td></tr>
+<tr><td><kbd>cw</kbd> / <kbd>cc</kbd></td><td>Troca a palavra / a linha (apaga e entra em inserção)</td></tr>
+<tr><td><kbd>u</kbd> / <kbd>p</kbd></td><td>Desfaz / cola</td></tr>
+<tr><td><kbd>k</kbd> <kbd>j</kbd></td><td>Comando anterior / próximo do histórico</td></tr>
+<tr><td><kbd>/</kbd>texto <kbd>Enter</kbd>, depois <kbd>n</kbd></td><td>Busca no histórico; próxima ocorrência</td></tr>
+<tr><td><kbd>v</kbd></td><td>Abre a linha no editor (como o <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd>)</td></tr>
+</table>
+</div>
+<p>No <code>~/.inputrc</code>, <code>set editing-mode vi</code> liga o modo vi em todos os programas que usam readline, e <code>set show-mode-in-prompt on</code> mostra no prompt em qual modo você está.</p>
+
+<h2 id="configurar">Ver e mudar os atalhos: <code>bind</code> e <code>~/.inputrc</code></h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>bind -p</code></td><td>Lista todos os atalhos (formato do inputrc)</td></tr>
+<tr><td><code>bind -P</code></td><td>Lista as funções e as teclas de cada uma, em texto</td></tr>
+<tr><td><code>bind -q função</code></td><td>Quais teclas chamam a função</td></tr>
+<tr><td><code>bind -v</code></td><td>Lista as variáveis do readline (<code>set …</code>)</td></tr>
+<tr><td><code>bind '"\C-x\C-r": re-read-init-file'</code></td><td>Cria um atalho na hora (só neste terminal)</td></tr>
+<tr><td><code>bind -x '"\C-xd": date'</code></td><td>Atalho que roda um comando do shell</td></tr>
+<tr><td><code>bind -f ~/.inputrc</code> ou <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Relê o inputrc</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bind -q forward-search-history
+forward-search-history pode ser chamado via "\C-s".
+$ bind -p | grep -E 'yank-last-arg|unix-word-rubout'
+"\C-w": unix-word-rubout
+# vi-unix-word-rubout (not bound)
+"\e.": yank-last-arg
+"\e_": yank-last-arg</pre>
+
+<p>Para descobrir o código que uma tecla manda, aperte <kbd>Ctrl</kbd>+<kbd>V</kbd> e depois a tecla: a seta para cima aparece como <code>^[[A</code> (o <code>^[</code> é o ESC, escrito <code>\e</code> no inputrc).</p>
+
+<h3>Um <code>~/.inputrc</code> recomendado</h3>
+<pre class="file" data-file="~/.inputrc"># Mantém as configurações do sistema (Page Up/Down, Home/End…)
+$include /etc/inputrc
+
+# ↑ e ↓ buscam no histórico pelo que já foi digitado
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+
+set completion-ignore-case on      # Tab ignora maiúsculas/minúsculas
+set show-all-if-ambiguous on       # um Tab só já lista as opções
+set colored-stats on               # cores na lista do Tab, como no ls
+set mark-symlinked-directories on  # links para pastas ganham / no Tab</pre>
+<p>Com ele, digite <code>git</code> e aperte <kbd>↑</kbd>: só aparecem os comandos anteriores que começam com <code>git</code>. Conferido no Bash 5.3:</p>
+<pre class="term">$ bind -p | grep history-search
+"\e[5~": history-search-backward
+"\e[A": history-search-backward
+"\e[6~": history-search-forward
+"\e[B": history-search-forward</pre>
+<p>O arquivo é lido quando o terminal abre; para aplicar agora, <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>R</kbd>. Ele faz parte do projeto <a href="projeto-dotfiles.html">Seus Dotfiles</a>.</p>
+
+<div class="try" data-goal="ran:bind" data-solucao="bind -p | grep yank-last-arg">
+<p class="try-task"><strong>Missão:</strong> use o <code>bind -p</code> com um <code>grep</code> para descobrir qual tecla chama a função <code>yank-last-arg</code>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. Você digitou uma senha na linha de comando por engano, antes de apertar Enter. Qual atalho apaga tudo do cursor até o início?</p>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>K</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>L</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>U</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>D</kbd></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. O terminal parou de mostrar o que você digita, logo depois de você apertar <kbd>Ctrl</kbd>+<kbd>S</kbd>. O que fazer?</p>
+<label><input type="radio" name="q2"> Fechar o terminal.</label>
+<label><input type="radio" name="q2"> Apertar <kbd>Ctrl</kbd>+<kbd>Q</kbd> para descongelar a saída.</label>
+<label><input type="radio" name="q2"> Apertar <kbd>Ctrl</kbd>+<kbd>C</kbd> várias vezes.</label>
+<label><input type="radio" name="q2"> Rodar <code>reset</code> às cegas.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">3. Você rodou <code>mkdir -p projetos/site/css</code>. Qual atalho insere <code>projetos/site/css</code> depois de você digitar <code>cd </code>?</p>
+<label><input type="radio" name="q3"> <kbd>Ctrl</kbd>+<kbd>R</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Tab</kbd> <kbd>Tab</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Ctrl</kbd>+<kbd>Y</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Alt</kbd>+<kbd>.</kbd></label>
+</div>
+
+<div class="exercise">
+<h3>4. Modo vi</h3>
+<p>Complete o comando que liga a edição no estilo vi:</p>
+<div class="ex-code">set -o <input data-answer="vi" aria-label="modo"></div>
+</div>
+
+<div class="exercise">
+<h3>5. Recarregar a configuração</h3>
+<p>Complete para o readline reler o seu inputrc:</p>
+<div class="ex-code">bind <input data-answer="-f ~/.inputrc|-f $HOME/.inputrc" aria-label="opção e arquivo"></div>
+</div>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
