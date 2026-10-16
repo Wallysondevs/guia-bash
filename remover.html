@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash rm e rmdir — apagar com segurança | Guia Bash</title>
+<meta name="description" content="Aprenda a apagar arquivos e pastas no terminal com rm e rmdir, sem acidentes: -i, -I, -r, -f, a armadilha da variável vazia em rm -rf, ${var:?}, set -u, o -- para nomes com hífen e alternativas com lixeira.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Apagar com Segurança</span></h1>
+
+<p class="intro">O <code>rm</code> apaga arquivos e o <code>rmdir</code> apaga pastas vazias. Eles são simples, rápidos e <strong>não têm volta</strong>: no terminal não existe lixeira. Esta aula ensina a usá-los e, principalmente, a não se machucar com eles, entendendo o que o Bash faz com a linha antes de o <code>rm</code> receber a lista de nomes.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Apagar arquivos (<code>rm</code>), pastas vazias (<code>rmdir</code>) e pastas cheias (<code>rm -r</code>).</li>
+  <li>As opções que pedem confirmação (<code>-i</code>, <code>-I</code>) e a que cala tudo (<code>-f</code>).</li>
+  <li>Por que <code>rm -rf "$pasta/"</code> com a variável vazia é perigoso, e como <code>${pasta:?}</code> e <code>set -u</code> protegem você.</li>
+  <li>Como apagar um arquivo que começa com <code>-</code>, e o papel do <code>--</code>.</li>
+  <li>Alternativas com lixeira e os prós e contras do alias <code>rm -i</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Por que não existe lixeira?</h2>
+<p>A lixeira que você conhece é um recurso do <strong>gerenciador de arquivos</strong> (o app "Arquivos", o Explorer do Windows, o Finder). Quando você "apaga" por lá, o arquivo é apenas <strong>movido</strong> para uma pasta escondida, como <code>~/.local/share/Trash</code>.</p>
+<p>O <code>rm</code> é mais antigo e mais direto. Ele pede ao sistema para desligar o nome do arquivo do seu conteúdo; o espaço em disco fica marcado como livre e será reaproveitado. Não há "desfazer", nem pergunta, nem aviso. Em troca, ele é previsível e funciona igual em qualquer sistema, inclusive em servidores sem interface gráfica.</p>
+<p>Por isso, a regra desta aula é: <strong>confira antes de apagar</strong>. O Bash dá ferramentas ótimas para isso, a principal delas é o <code>echo</code>.</p>
+
+<hr>
+
+<h2>rm: apagar arquivos</h2>
+<p><code>rm</code> vem de <em>remove</em>, "remover".</p>
+
+<dl class="anatomy">
+  <dt>rm</dt><dd>O programa (<code>/usr/bin/rm</code>, não é um comando interno do Bash).</dd>
+  <dt>lixo.txt</dt><dd>O arquivo a apagar. Pode haver vários, separados por espaço.</dd>
+</dl>
+
+<pre class="term">$ cp frutas.txt lixo.txt
+$ rm lixo.txt
+$ echo $?
+0                                       « 0 = apagou
+$ ls lixo.txt
+ls: não foi possível acessar 'lixo.txt': Arquivo ou diretório inexistente</pre>
+
+<p>Como os outros programas de arquivos, o <code>rm</code> fica em silêncio quando dá certo. Quem conta o resultado é o código de saída, em <code>$?</code> (veja <a href="codigo-saida.html">Código de Saída</a>). Tente apagar de novo o que já não existe:</p>
+
+<pre class="term">$ rm lixo.txt
+rm: não foi possível remover 'lixo.txt': Arquivo ou diretório inexistente
+$ echo $?
+1                                       « 1 = deu errado</pre>
+
+<h3>Vários arquivos e <code>-v</code></h3>
+<p>Com <code>-v</code> (<em>verbose</em>, "detalhado"), o <code>rm</code> conta cada arquivo que apagou:</p>
+
+<pre class="term">$ touch a.txt b.txt c.txt
+$ rm -v a.txt b.txt c.txt
+removido 'a.txt'
+removido 'b.txt'
+removido 'c.txt'</pre>
+
+<h3>Com curinga: ensaie com <code>echo</code></h3>
+<p>No comando <code>rm *.bak</code>, o <code>rm</code> nunca vê o <code>*</code>. Quem troca <code>*.bak</code> pelos nomes que existem é o <strong>Bash</strong>, antes de chamar o programa. Então você pode ver exatamente o que vai ser apagado trocando <code>rm</code> por <code>echo</code>:</p>
+
+<pre class="term">$ cp frutas.txt{,.bak}
+$ cp frutas.txt frutas-velho.bak
+$ echo rm *.bak
+rm frutas.txt.bak frutas-velho.bak      « é esta a lista que o rm vai receber
+$ rm -v *.bak
+removido 'frutas.txt.bak'
+removido 'frutas-velho.bak'</pre>
+
+<p>Esse ensaio é o hábito mais valioso desta aula. Gaste dois segundos com o <code>echo</code> antes de qualquer <code>rm</code> com curinga. Os curingas são explicados em <a href="curingas.html">Curingas (*, ?, [ ])</a>.</p>
+
+<p>Quando o padrão não casa com nenhum arquivo, o Bash o deixa como está, e o <code>rm</code> procura um arquivo chamado literalmente <code>*.xyz</code>:</p>
+
+<pre class="term">$ rm *.xyz
+rm: não foi possível remover '*.xyz': Arquivo ou diretório inexistente</pre>
+
+<h3>Nomes com espaço: o rm pode apagar a coisa errada</h3>
+<p>O Bash separa as palavras nos espaços. Veja o que acontece quando existem as pastas <code>Fotos</code> e <code>Fotos Antigas</code>, e a Ana quer apagar só a segunda:</p>
+
+<pre class="term">$ ls -d Fotos*
+ Fotos  'Fotos Antigas'
+$ rm -r Fotos Antigas
+rm: não foi possível remover 'Antigas': Arquivo ou diretório inexistente
+$ ls -d Fotos*
+'Fotos Antigas'                         « sobrou a errada: a pasta Fotos foi apagada!</pre>
+
+<p>O <code>rm</code> recebeu duas palavras, <code>Fotos</code> e <code>Antigas</code>. A primeira existia e foi apagada; a segunda deu erro. Com aspas, o Bash entrega um nome só: <code>rm -r "Fotos Antigas"</code>. Use a tecla <kbd>Tab</kbd> para completar nomes; ela coloca as barras e aspas sozinha (veja <a href="completar.html">Completar com Tab</a> e <a href="aspas.html">Aspas e Escapes</a>).</p>
+
+<hr>
+
+<h2>Apagar pastas: <code>rmdir</code>, <code>rm -d</code> e <code>rm -r</code></h2>
+<p>Sem opções, o <code>rm</code> se recusa a apagar pastas:</p>
+
+<pre class="term">$ rm Documentos
+rm: não foi possível remover 'Documentos': É um diretório
+$ echo $?
+1</pre>
+
+<h3><code>rmdir</code>: só pastas vazias</h3>
+<p><code>rmdir</code> vem de <em>remove directory</em>. Ele é o jeito mais seguro, porque <strong>só apaga pastas vazias</strong>. Se houver algo dentro, ele recusa e nada se perde:</p>
+
+<pre class="term">$ mkdir -p arquivo/{2024,2025}
+$ touch arquivo/2025/notas.txt
+$ rmdir arquivo/2024
+$ echo $?
+0
+$ rmdir arquivo/2025
+rmdir: falhou em remover 'arquivo/2025': Diretório não vazio
+$ echo $?
+1</pre>
+
+<p>Com <code>-p</code>, ele apaga também as pastas "pais" que ficarem vazias. É o contrário de <code>mkdir -p</code>:</p>
+
+<pre class="term">$ mkdir -p a/b/c
+$ rmdir -pv a/b/c
+rmdir: removendo o diretório 'a/b/c'
+rmdir: removendo o diretório 'a/b'
+rmdir: removendo o diretório 'a'</pre>
+
+<p><code>rm -d</code> faz o mesmo que <code>rmdir</code> (apaga pasta vazia), útil quando você quer apagar arquivos e pastas vazias no mesmo comando.</p>
+
+<h3><code>rm -r</code>: a pasta com tudo dentro</h3>
+<p><code>-r</code> (de <em>recursive</em>, "recursivo") entra em cada pasta, apaga o conteúdo e depois a pasta. Com <code>-v</code>, você vê a ordem: de dentro para fora.</p>
+
+<pre class="term">$ cp -r Documentos/projetos velho
+$ rm -rv velho
+removido 'velho/site/index.html'
+removido 'velho/site/style.css'
+foi removido o diretório: 'velho/site'
+removido 'velho/backup.sh'
+foi removido o diretório: 'velho'</pre>
+
+<div class="warning">
+<strong><code>rm -r</code> não pede confirmação</strong>
+<p>Uma pasta com dez mil arquivos some num instante. Antes de um <code>rm -r</code>, confira o caminho com <code>ls</code> e, se ele tiver curinga ou variável, ensaie com <code>echo</code>.</p>
+</div>
+
+<hr>
+
+<h2>Perguntar antes: <code>-i</code> e <code>-I</code></h2>
+
+<h3><code>-i</code>: uma pergunta por arquivo</h3>
+<p><code>-i</code> vem de <em>interactive</em>. Antes de cada arquivo, o <code>rm</code> pergunta. Responda <code>s</code> para apagar; qualquer outra resposta mantém o arquivo.</p>
+
+<pre class="term">$ rm -i Documentos/notas.txt
+rm: remover regular file 'Documentos/notas.txt'? n
+$ echo $?
+0                                       « recusar não é erro para o rm</pre>
+
+<p>A pergunta mistura português e inglês ("regular file" = arquivo comum) porque a tradução do coreutils está incompleta. Com <code>-ri</code>, ele pergunta até para entrar em cada pasta. Aqui, <code>velho</code> tem o arquivo <code>a</code> e a subpasta <code>sub</code> com o arquivo <code>b</code>, todos vazios:</p>
+
+<pre class="term">$ rm -ri velho
+rm: entrar no diretório 'velho'? s
+rm: remover regular empty file 'velho/a'? s
+rm: entrar no diretório 'velho/sub'? s
+rm: remover regular empty file 'velho/sub/b'? s
+rm: remover directory 'velho/sub'? s
+rm: remover directory 'velho'? s</pre>
+
+<h3><code>-I</code>: uma pergunta só</h3>
+<p>Perguntar arquivo por arquivo cansa, e quem se cansa começa a responder <code>s</code> sem ler. O <code>-I</code> (i maiúsculo) pergunta <strong>uma vez</strong>, e só quando o risco é maior: mais de três arquivos, ou apagar com <code>-r</code>.</p>
+
+<pre class="term">$ rm -I 1.txt 2.txt 3.txt 4.txt
+rm: remover 4 argumentos? n
+$ rm -rI velho
+rm: remover 1 argumento recursivamente? n
+$ rm -I 1.txt 2.txt                     « só dois arquivos: apaga sem perguntar</pre>
+
+<h3>O <code>rm</code> pergunta sozinho, às vezes</h3>
+<p>Se um arquivo está protegido contra escrita (sem a permissão <code>w</code>), o <code>rm</code> pergunta mesmo sem <code>-i</code>, desde que você esteja num terminal:</p>
+
+<pre class="term">$ chmod 444 protegido.txt
+$ rm protegido.txt
+rm: remover regular empty file 'protegido.txt' protegido contra escrita? n</pre>
+
+<hr>
+
+<h2>Calar tudo: <code>-f</code></h2>
+<p><code>-f</code> vem de <em>force</em>, "forçar". Ele muda três coisas:</p>
+<ul>
+  <li>não pergunta nada (nem nos arquivos protegidos, nem com <code>-i</code> antes dele);</li>
+  <li>não reclama de arquivos que não existem;</li>
+  <li>devolve <code>0</code> nesse caso.</li>
+</ul>
+
+<pre class="term">$ rm lixo.txt
+rm: não foi possível remover 'lixo.txt': Arquivo ou diretório inexistente
+$ rm -f lixo.txt
+$ echo $?
+0                                       « "não existe" = "já está apagado": sucesso</pre>
+
+<p>Isso é útil em scripts, quando o objetivo é "garantir que o arquivo não exista". Mas o <code>-f</code> não é um superpoder: ele <strong>não</strong> passa por cima de permissões.</p>
+
+<pre class="term">$ rm -f trancada/a.txt
+rm: não foi possível remover 'trancada/a.txt': Permissão negada
+$ echo $?
+1</pre>
+
+<p>Juntos, <code>rm -rf</code> apagam uma pasta inteira sem perguntar e sem reclamar. É o comando mais perigoso do dia a dia, e a próxima seção mostra por quê.</p>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer apagar…</th><th>Use</th><th>Por quê</th></tr>
+<tr><td>Um ou poucos arquivos</td><td><code>rm arq</code></td><td>Simples; confira o nome com <kbd>Tab</kbd></td></tr>
+<tr><td>Arquivos por padrão</td><td><code>echo rm *.tmp</code>, depois <code>rm *.tmp</code></td><td>Você vê a lista antes</td></tr>
+<tr><td>Uma pasta que deveria estar vazia</td><td><code>rmdir pasta</code></td><td>Recusa se tiver algo dentro: nada se perde</td></tr>
+<tr><td>Uma pasta com conteúdo</td><td><code>rm -r pasta</code> (ou <code>rm -rI</code>)</td><td><code>-I</code> confirma uma vez</td></tr>
+<tr><td>Muitos arquivos, com uma confirmação</td><td><code>rm -I</code></td><td>Uma pergunta, que você vai ler de verdade</td></tr>
+<tr><td>Num script, "garanta que não exista"</td><td><code>rm -f arq</code></td><td>Não falha se já não existir</td></tr>
+<tr><td>Algo que talvez você queira de volta</td><td><code>gio trash arq</code></td><td>Vai para a lixeira do desktop</td></tr>
+</table>
+</div>
+
+<div class="try" data-setup="mkdir -p limpeza/velho;;touch limpeza/a.tmp limpeza/b.tmp limpeza/manter.txt limpeza/velho/x.log;;touch -- limpeza/-lixo.txt;;cd limpeza" data-goal="absent:~/limpeza/a.tmp,absent:~/limpeza/b.tmp,absent:~/limpeza/velho,absent:~/limpeza/-lixo.txt,file:~/limpeza/manter.txt" data-solucao="rm *.tmp;;rm -r velho;;rm -- -lixo.txt">
+<p class="try-task"><strong>Missão:</strong> você está em <code>~/limpeza</code>. Apague os arquivos <code>.tmp</code> (ensaie com <code>echo</code> antes), a pasta <code>velho</code> com o que tem dentro e o arquivo <code>-lixo.txt</code>. O <code>manter.txt</code> tem que sobreviver. Dica para o último: leia a seção sobre o <code>--</code> logo abaixo.</p>
+</div>
+
+<hr>
+
+<h2>O perigo da variável vazia</h2>
+<p>Em scripts, é comum guardar um caminho numa <strong>variável</strong> e apagar o conteúdo dela. O problema: se a variável estiver vazia (ou com o nome digitado errado), o Bash a troca por <strong>nada</strong>, e o que sobra pode ser a raiz do sistema.</p>
+
+<p>Veja com <code>echo</code>, que é seguro, o que o Bash monta:</p>
+
+<pre class="term">$ pasta=""
+$ echo rm -rf "$pasta/"
+rm -rf /                                « a pasta "nada" + "/" = a raiz do sistema
+$ echo rm -rf "$pasta/"*
+rm -rf /bin /boot /dev /etc /home /lib /lib64 /media /mnt /opt /proc /root /run /sbin /srv /sys /tmp /usr /var</pre>
+<p>(A segunda lista foi encurtada; ela depende do sistema.) Contra a primeira forma, o GNU <code>rm</code> tem uma trava, a <em>preserve-root</em>:</p>
+
+<pre class="term">$ rm -rf "$pasta/"
+rm: é perigoso operar recursivamente em '/'
+rm: use --no-preserve-root para contornar esta segurança
+$ echo $?
+1</pre>
+
+<p>Mas a segunda forma, com <code>/*</code>, <strong>não</strong> é barrada: o <code>rm</code> recebe <code>/bin</code>, <code>/home</code>… como nomes comuns e tenta apagar um por um. Tudo o que for seu, inclusive a sua pasta pessoal, vai embora.</p>
+
+<p>O caso real costuma ser um erro de digitação num script:</p>
+
+<pre class="file" data-file="limpa.sh">#!/usr/bin/env bash
+pasta_temp="$HOME/temp-relatorios"
+rm -rfv "$pasta_tmp/"*          # tmp em vez de temp: a variável não existe!
+echo "limpeza concluída"
+</pre>
+
+<p>Variável que não existe vale vazio, sem erro nenhum (veja <a href="variaveis-intro.html">Variáveis: o Básico</a>). A linha 3 vira <code>rm -rfv /*</code>. <strong>Não rode este script.</strong> Há três proteções, e você pode usar todas.</p>
+
+<h3>Proteção 1: <code>${pasta:?}</code></h3>
+<p>Escrever a variável como <code>${pasta_tmp:?}</code> diz ao Bash: "se ela estiver vazia ou não existir, pare com erro, e não rode o comando".</p>
+
+<dl class="anatomy">
+  <dt>${</dt><dd>Início da forma longa de usar uma variável.</dd>
+  <dt>pasta_tmp</dt><dd>O nome da variável.</dd>
+  <dt>:?</dt><dd>"Se estiver vazia ou não definida, é erro." Depois do <code>?</code> você pode escrever a mensagem: <code>${pasta:?informe a pasta}</code>.</dd>
+  <dt>}</dt><dd>Fim.</dd>
+</dl>
+
+<pre class="file" data-file="limpa.sh">#!/usr/bin/env bash
+pasta_temp="$HOME/temp-relatorios"
+rm -rfv "${pasta_tmp:?}/"*
+echo "limpeza concluída"
+</pre>
+
+<pre class="term">$ bash limpa.sh
+limpa.sh: linha 3: pasta_tmp: parâmetro nulo ou não inicializado
+$ echo $?
+1
+$ ls temp-relatorios
+r1.txt  r2.txt                          « nada foi apagado</pre>
+
+<p>O Bash parou o script inteiro na linha 3: nem o <code>rm</code> nem o <code>echo</code> da linha 4 rodaram. No terminal, a mesma coisa aparece sem o nome do script: <code>bash: pasta: parâmetro nulo ou não inicializado</code>. Essa e outras formas <code>${…}</code> estão em <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</p>
+
+<h3>Proteção 2: <code>set -u</code></h3>
+<p><code>set -u</code> no começo do script faz o Bash tratar <strong>qualquer</strong> variável não definida como erro. Ela pega o erro de digitação mesmo onde você esqueceu o <code>:?</code>:</p>
+
+<pre class="file" data-file="limpa2.sh">#!/usr/bin/env bash
+set -u
+pasta_temp="$HOME/temp-relatorios"
+rm -rfv "$pasta_tmp/"*
+echo "limpeza concluída"
+</pre>
+
+<pre class="term">$ bash limpa2.sh
+limpa2.sh: linha 4: pasta_tmp: variável não associada
+$ echo $?
+1</pre>
+
+<p>"Variável não associada" é a tradução de <em>unbound variable</em>: o nome não tem valor nenhum. Repare que o <code>set -u</code> não pega uma variável que existe <strong>vazia</strong> (<code>pasta=""</code>); o <code>:?</code> pega as duas. Por isso o ideal é usar os dois. O <code>set -u</code> faz parte do "modo estrito", tema de <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+
+<h3>Proteção 3: com o nome certo, tudo funciona</h3>
+<pre class="file" data-file="limpa3.sh">#!/usr/bin/env bash
+set -u
+pasta_temp="$HOME/temp-relatorios"
+rm -rfv "${pasta_temp:?}/"*
+echo "limpeza concluída"
+</pre>
+
+<pre class="term">$ bash limpa3.sh
+removido '/home/ana/temp-relatorios/r1.txt'
+removido '/home/ana/temp-relatorios/r2.txt'
+limpeza concluída</pre>
+
+<p>E sempre: <strong>aspas em volta da variável</strong> (<code>"$pasta"</code>), para um nome com espaço não virar duas palavras, como no caso das <code>Fotos Antigas</code>.</p>
+
+<hr>
+
+<h2>Arquivos que começam com <code>-</code> e o <code>--</code></h2>
+<p>Para o <code>rm</code>, tudo o que começa com hífen é uma <strong>opção</strong>. Um arquivo chamado <code>-lixo.txt</code> confunde o programa:</p>
+
+<pre class="term">$ rm -lixo.txt
+rm: opção inválida -- “l”
+Tente "rm ./-lixo.txt" para remover o arquivo '-lixo.txt'.
+Tente "rm --help" para mais informações.</pre>
+
+<p>O próprio <code>rm</code> sugere a solução. Há duas:</p>
+
+<dl class="anatomy">
+  <dt>rm -- -lixo.txt</dt><dd>O <code>--</code> (dois hífens sozinhos) quer dizer "acabaram as opções": tudo o que vier depois é nome de arquivo. Funciona em quase todos os comandos.</dd>
+  <dt>rm ./-lixo.txt</dt><dd>O <code>./</code> ("na pasta atual") faz o nome começar com ponto, e não com hífen.</dd>
+</dl>
+
+<h3>Quando o curinga vira opção</h3>
+<p>O perigo maior aparece com curingas. O Bash expande <code>*</code> em todos os nomes da pasta, <strong>inclusive os que começam com hífen</strong>, e o <code>rm</code> não sabe que eles vieram de um curinga. Veja uma pasta com <code>a.txt</code>, <code>b.txt</code> e um arquivo chamado <code>-v</code>:</p>
+
+<pre class="term" data-cwd="~/teste">$ echo rm *
+rm a.txt b.txt -v
+$ rm *
+removido 'a.txt'                        « o arquivo "-v" virou a opção -v!
+removido 'b.txt'
+$ ls
+-v                                      « e ele próprio não foi apagado</pre>
+
+<p>Aqui o estrago foi pequeno. Um arquivo chamado <code>-rf</code> numa pasta com subpastas seria bem pior. A defesa é a mesma: <code>rm -- *</code> ou <code>rm ./*</code>. Com <code>./*</code>, todos os nomes começam com <code>./</code> e nunca parecem opções.</p>
+
+<hr>
+
+<h2>Alternativas com lixeira</h2>
+<p>Se você quer o "desfazer", use um comando que <strong>move</strong> para a lixeira do desktop em vez de apagar.</p>
+
+<h3><code>gio trash</code></h3>
+<p>Vem instalado na maioria dos desktops Linux (GNOME e derivados). O arquivo vai para a mesma lixeira do app Arquivos:</p>
+
+<pre class="term">$ gio trash frutas.txt
+$ ls ~/.local/share/Trash/files
+frutas.txt                              « está na lixeira, não apagado</pre>
+
+<p>Num desktop com sessão gráfica, <code>gio trash --list</code> lista a lixeira e <code>gio trash --empty</code> a esvazia; para restaurar, o mais simples é o app Arquivos. Fora de uma sessão gráfica (num servidor, por exemplo), essas duas opções podem responder <code>Operação sem suporte</code>.</p>
+
+<h3><code>trash-cli</code></h3>
+<p>Um pacote à parte (<code>trash-cli</code>), feito para o terminal. A saída abaixo é <strong>ilustrativa</strong>: o pacote não vem instalado e não existe no laboratório nem no simulador.</p>
+
+<pre class="term">$ trash-put relatorio-velho.txt
+$ trash-list
+2026-10-15 10:30:12 /home/ana/relatorio-velho.txt
+$ trash-restore
+   0 2026-10-15 10:30:12 /home/ana/relatorio-velho.txt
+What file to restore [0..0]: 0</pre>
+
+<p>Lembre: lixeira ocupa espaço até ser esvaziada, e scripts devem usar <code>rm</code>, que existe em todo lugar.</p>
+
+<hr>
+
+<h2>O alias <code>rm -i</code>: prós e contras</h2>
+<p>Muita gente coloca no <code>~/.bashrc</code> a linha <code>alias rm='rm -i'</code>, para que todo <code>rm</code> pergunte antes. Um <strong>alias</strong> é um apelido: o Bash troca a primeira palavra do comando pelo texto do apelido (veja <a href="alias.html">alias</a>).</p>
+
+<pre class="term">$ alias rm='rm -i'
+$ type rm
+rm está apelidada para `rm -i'</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>A favor</th><th>Contra</th></tr>
+<tr><td>Uma chance de desistir no terminal do dia a dia.</td><td>Você se acostuma a responder <code>s</code> sem ler, e a proteção some.</td></tr>
+<tr><td>Bom para quem está começando.</td><td>Aliases não valem dentro de scripts, nem em outra máquina: você fica sem rede onde mais precisa.</td></tr>
+<tr><td></td><td><code>rm -f</code> passa por cima do <code>-i</code> (a última opção vence), e <code>\rm</code> ou <code>command rm</code> ignoram o alias.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ rm -f x.txt                           « vira "rm -i -f": o -f vence, sem pergunta
+$ echo $?
+0
+$ \rm y.txt                             « a barra invertida desliga o alias
+$ command rm z.txt                      « command também</pre>
+
+<p>Uma opção mais equilibrada é <code>alias rm='rm -I'</code>: pergunta só nos casos arriscados, e por isso você continua lendo a pergunta.</p>
+
+<div class="try" data-setup="mkdir -p Downloads/antigos/vazia;;touch Downloads/antigos/x.zip" data-goal="absent:~/Downloads/antigos/vazia,file:~/Downloads/antigos/x.zip,ran:rmdir" data-solucao="rmdir Downloads/antigos/vazia">
+<p class="try-task"><strong>Missão:</strong> apague a pasta vazia <code>Downloads/antigos/vazia</code> com o comando que <strong>só</strong> apaga pastas vazias. Depois tente o mesmo comando em <code>Downloads/antigos</code>, veja a mensagem e o <code>echo $?</code>: o <code>x.zip</code> tem que continuar lá.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"É um diretório"</strong>
+<pre class="term">$ rm Documentos
+rm: não foi possível remover 'Documentos': É um diretório</pre>
+<p><strong>O que aconteceu:</strong> o <code>rm</code> sem opções só apaga arquivos.</p>
+<p><strong>Como resolver:</strong> se a pasta está vazia, <code>rmdir</code>. Se tem conteúdo e você tem certeza, <code>ls Documentos</code> para ver o que há e então <code>rm -r</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Diretório não vazio"</strong>
+<pre class="term">$ rmdir Documentos
+rmdir: falhou em remover 'Documentos': Diretório não vazio
+$ rm -d Documentos
+rm: não foi possível remover 'Documentos': Diretório não vazio</pre>
+<p><strong>O que aconteceu:</strong> o <code>rmdir</code> (e o <code>rm -d</code>) estão fazendo o trabalho deles: protegendo o conteúdo. Às vezes a pasta parece vazia, mas tem arquivos ocultos.</p>
+<p><strong>Como confirmar:</strong> <code>ls -A Documentos</code> mostra também os nomes que começam com ponto.</p>
+</div>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ rm Área de trabalho
+rm: não foi possível remover 'Área': Arquivo ou diretório inexistente
+rm: não foi possível remover 'de': Arquivo ou diretório inexistente
+rm: não foi possível remover 'trabalho': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> três erros para um comando só denunciam um nome com espaço sem aspas: o Bash entregou três palavras. (Aqui foi sorte que nenhuma delas existia.) Outra causa: um curinga que não casou com nada, como <code>*.xyz</code>, ou um erro de digitação.</p>
+<p><strong>Como resolver:</strong> aspas (<code>"Área de trabalho"</code>) ou <kbd>Tab</kbd>. E repare: mesmo com aspas, aquela é uma pasta, então seria <code>rm -r</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"opção inválida"</strong>
+<pre class="term">$ rm -lixo.txt
+rm: opção inválida -- “l”
+Tente "rm ./-lixo.txt" para remover o arquivo '-lixo.txt'.</pre>
+<p><strong>O que aconteceu:</strong> o nome começa com hífen e foi lido como opção.</p>
+<p><strong>Como resolver:</strong> <code>rm -- -lixo.txt</code> ou <code>rm ./-lixo.txt</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada"</strong>
+<pre class="term">$ rm trancada/a.txt
+rm: não foi possível remover 'trancada/a.txt': Permissão negada
+$ ls -ld trancada
+dr-xr-xr-x 2 ana ana 4096 out 15 10:30 trancada</pre>
+<p><strong>O que aconteceu:</strong> para apagar um arquivo, você precisa poder escrever na <strong>pasta</strong> onde ele está (apagar é tirar um nome da lista da pasta). A pasta <code>trancada</code> não tem <code>w</code>. Nem o <code>-f</code> resolve.</p>
+<p><strong>Como resolver:</strong> se a pasta é sua, devolva a permissão (<code>chmod u+w trancada</code>). Se é do sistema, provavelmente você não deveria apagar esse arquivo.</p>
+</div>
+
+<div class="cenario">
+<strong>"falta operando"</strong>
+<pre class="term">$ rm
+rm: falta operando
+Tente "rm --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> o <code>rm</code> não recebeu nenhum nome. Num script, isso costuma ser uma variável vazia sem aspas (<code>rm $arquivo</code>). Com <code>-f</code>, nem esse aviso aparece: <code>rm -f</code> sem nomes devolve <code>0</code> em silêncio.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada… apagou?</strong>
+<p><strong>O que aconteceu:</strong> silêncio é sucesso. Com <code>-f</code>, silêncio também pode significar "não havia nada para apagar".</p>
+<p><strong>Como confirmar:</strong> <code>echo $?</code> e <code>ls</code> no nome. Da próxima vez, use <code>-v</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando / opção</th><th>O que faz</th></tr>
+<tr><td><code>rm arq…</code></td><td>Apaga arquivos</td></tr>
+<tr><td><code>rm -v</code></td><td>Mostra cada item apagado</td></tr>
+<tr><td><code>rm -i</code></td><td>Pergunta antes de cada item</td></tr>
+<tr><td><code>rm -I</code></td><td>Pergunta uma vez, se forem mais de 3 itens ou com <code>-r</code></td></tr>
+<tr><td><code>rm -r</code></td><td>Apaga pastas com todo o conteúdo</td></tr>
+<tr><td><code>rm -f</code></td><td>Não pergunta, não reclama de inexistentes, devolve 0</td></tr>
+<tr><td><code>rm -d</code></td><td>Apaga pastas vazias também</td></tr>
+<tr><td><code>rm -- nome</code></td><td>Fim das opções: nomes que começam com <code>-</code></td></tr>
+<tr><td><code>rmdir pasta</code></td><td>Apaga pasta vazia (recusa se tiver conteúdo)</td></tr>
+<tr><td><code>rmdir -p a/b/c</code></td><td>Apaga a pasta e os pais que ficarem vazios</td></tr>
+<tr><td><code>${var:?}</code></td><td>Para com erro se a variável estiver vazia ou não definida</td></tr>
+<tr><td><code>set -u</code></td><td>Variável não definida vira erro no script inteiro</td></tr>
+<tr><td><code>gio trash arq</code></td><td>Move para a lixeira do desktop</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ensaio antes de apagar</h3>
+<p>Complete para ver, sem apagar nada, quais arquivos <code>rm *.log</code> apagaria:</p>
+<div class="ex-code"><input data-answer="echo" aria-label="comando"> rm *.log</div>
+</div>
+
+<div class="exercise">
+<h3>2. O arquivo com hífen</h3>
+<p>Complete para apagar o arquivo chamado <code>-velho.txt</code>:</p>
+<div class="ex-code">rm <input data-answer="--|-f --|-v --" aria-label="separador"> -velho.txt</div>
+</div>
+
+<div class="exercise">
+<h3>3. A variável protegida</h3>
+<p>Complete para o Bash parar com erro se <code>destino</code> estiver vazia:</p>
+<div class="ex-code">rm -rf "${destino<input data-answer=":?" aria-label="operador">}/"*</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Qual comando apaga a pasta <code>fotos</code> <strong>somente se</strong> ela estiver vazia?</p>
+<label><input type="radio" name="q4"> <code>rm fotos</code></label>
+<label><input type="radio" name="q4"> <code>rmdir fotos</code></label>
+<label><input type="radio" name="q4"> <code>rm -r fotos</code></label>
+<label><input type="radio" name="q4"> <code>rm -f fotos</code></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Num script, <code>arq=""</code> e depois <code>rm -rf "$arq/"*</code>. O que o <code>rm</code> recebe?</p>
+<label><input type="radio" name="q5"> Nada: o Bash percebe que a variável está vazia e pula a linha.</label>
+<label><input type="radio" name="q5"> O texto <code>$arq/*</code>, literalmente.</label>
+<label><input type="radio" name="q5"> Os nomes da raiz: <code>/bin /boot /dev /etc /home</code>…</label>
+<label><input type="radio" name="q5"> Os arquivos da pasta atual.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Depois de <code>rm -f naoexiste.txt</code>, quanto vale <code>$?</code>?</p>
+<label><input type="radio" name="q6"> 0</label>
+<label><input type="radio" name="q6"> 1</label>
+<label><input type="radio" name="q6"> 2</label>
+<label><input type="radio" name="q6"> Nada: <code>$?</code> fica vazio.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>rm</code> apaga de verdade; não há lixeira no terminal.</li>
+  <li><code>rmdir</code> só apaga pastas vazias; <code>rm -r</code> apaga pastas com tudo dentro.</li>
+  <li><code>-i</code> pergunta sempre, <code>-I</code> pergunta uma vez, <code>-f</code> nunca pergunta (mas não vence permissões).</li>
+  <li>Quem expande <code>*</code>, variáveis e espaços é o Bash: ensaie com <code>echo</code> antes de apagar.</li>
+  <li>Em scripts: <code>"${pasta:?}"</code> e <code>set -u</code> contra a variável vazia.</li>
+  <li>Nomes com hífen: <code>rm -- nome</code> ou <code>rm ./nome</code>; prefira <code>rm ./*</code> a <code>rm *</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
