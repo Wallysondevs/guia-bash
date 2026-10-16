@@ -51,7 +51,7 @@
 
 <div class="note">
 <strong>No terminal simulado deste guia</strong>
-<p>O simulador entende <kbd>↑</kbd> <kbd>↓</kbd> (histórico), <kbd>←</kbd> <kbd>→</kbd>, <kbd>Tab</kbd>, <kbd>Ctrl</kbd>+<kbd>L</kbd> e <kbd>Ctrl</kbd>+<kbd>C</kbd>. Os outros atalhos desta aula são do Bash de verdade: pratique-os no terminal do seu computador. Vários deles (como <kbd>Ctrl</kbd>+<kbd>W</kbd>) fecham a aba no navegador, por isso não estão no simulador.</p>
+<p>O simulador entende <kbd>↑</kbd> <kbd>↓</kbd> (histórico), <kbd>←</kbd> <kbd>→</kbd>, <kbd>Tab</kbd>, <kbd>Ctrl</kbd>+<kbd>A</kbd>/<kbd>E</kbd>/<kbd>U</kbd>/<kbd>K</kbd>/<kbd>Y</kbd>/<kbd>L</kbd>/<kbd>C</kbd>/<kbd>D</kbd>/<kbd>R</kbd> e <kbd>Alt</kbd>+<kbd>B</kbd>/<kbd>F</kbd>/<kbd>D</kbd> (a tabela no fim da aula diz quais). Os outros são do Bash de verdade: pratique-os no terminal do seu computador. Atenção ao <kbd>Ctrl</kbd>+<kbd>W</kbd>: no navegador ele costuma <strong>fechar a aba</strong> antes de a página recebê-lo; no simulador, prefira <kbd>Ctrl</kbd>+<kbd>U</kbd>.</p>
 </div>
 
 <hr>
@@ -286,21 +286,21 @@ edit-and-execute-command pode ser chamado via "\C-x\C-e".</pre>
 <div class="table-wrap">
 <table class="ref">
 <tr><th>Para…</th><th>Atalho</th><th>No simulador?</th></tr>
-<tr><td>Começo / fim da linha</td><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>não</td></tr>
-<tr><td>Palavra para trás / frente</td><td><kbd>Alt</kbd>+<kbd>B</kbd> / <kbd>Alt</kbd>+<kbd>F</kbd> (ou <kbd>Ctrl</kbd>+<kbd>←</kbd>/<kbd>→</kbd>)</td><td>não</td></tr>
+<tr><td>Começo / fim da linha</td><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>sim</td></tr>
+<tr><td>Palavra para trás / frente</td><td><kbd>Alt</kbd>+<kbd>B</kbd> / <kbd>Alt</kbd>+<kbd>F</kbd> (ou <kbd>Ctrl</kbd>+<kbd>←</kbd>/<kbd>→</kbd>)</td><td>sim (em alguns navegadores o <kbd>Alt</kbd>+<kbd>F</kbd> abre o menu)</td></tr>
 <tr><td>Letra para trás / frente</td><td><kbd>←</kbd> / <kbd>→</kbd></td><td>sim</td></tr>
-<tr><td>Apagar palavra anterior</td><td><kbd>Ctrl</kbd>+<kbd>W</kbd> (até espaço), <kbd>Alt</kbd>+<kbd>Backspace</kbd> (até sinal)</td><td>não</td></tr>
-<tr><td>Apagar palavra seguinte</td><td><kbd>Alt</kbd>+<kbd>D</kbd></td><td>não</td></tr>
-<tr><td>Apagar até o começo / fim</td><td><kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>não</td></tr>
-<tr><td>Colar o que foi apagado</td><td><kbd>Ctrl</kbd>+<kbd>Y</kbd> (e <kbd>Alt</kbd>+<kbd>Y</kbd>)</td><td>não</td></tr>
+<tr><td>Apagar palavra anterior</td><td><kbd>Ctrl</kbd>+<kbd>W</kbd> (até espaço), <kbd>Alt</kbd>+<kbd>Backspace</kbd> (até sinal)</td><td>só o <kbd>Ctrl</kbd>+<kbd>W</kbd>, e cuidado: em vários navegadores ele <strong>fecha a aba</strong> antes de a página receber a tecla</td></tr>
+<tr><td>Apagar palavra seguinte</td><td><kbd>Alt</kbd>+<kbd>D</kbd></td><td>sim</td></tr>
+<tr><td>Apagar até o começo / fim</td><td><kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>sim</td></tr>
+<tr><td>Colar o que foi apagado</td><td><kbd>Ctrl</kbd>+<kbd>Y</kbd> (e <kbd>Alt</kbd>+<kbd>Y</kbd>)</td><td>só o <kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
 <tr><td>Desfazer</td><td><kbd>Ctrl</kbd>+<kbd>_</kbd> ou <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>não</td></tr>
 <tr><td>Trocar letras / palavras</td><td><kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Alt</kbd>+<kbd>T</kbd></td><td>não</td></tr>
 <tr><td>Limpar a tela</td><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>sim</td></tr>
 <tr><td>Descartar a linha / interromper</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>sim</td></tr>
-<tr><td>Sair do shell (linha vazia)</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>não</td></tr>
+<tr><td>Sair do shell (linha vazia)</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>sim</td></tr>
 <tr><td>Pausar o programa</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>não</td></tr>
 <tr><td>Histórico anterior / seguinte</td><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>sim</td></tr>
-<tr><td>Buscar no histórico</td><td><kbd>Ctrl</kbd>+<kbd>R</kbd> (<a href="historico.html">Histórico</a>)</td><td>não</td></tr>
+<tr><td>Buscar no histórico</td><td><kbd>Ctrl</kbd>+<kbd>R</kbd> (<a href="historico.html">Histórico</a>)</td><td>sim</td></tr>
 <tr><td>Completar</td><td><kbd>Tab</kbd> (<a href="completar.html">Completar</a>)</td><td>sim</td></tr>
 <tr><td>Abrir a linha no editor</td><td><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>não</td></tr>
 <tr><td>Modo vi / emacs</td><td><code>set -o vi</code> / <code>set -o emacs</code></td><td>não</td></tr>

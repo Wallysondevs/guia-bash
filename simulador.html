@@ -54,7 +54,12 @@
 <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Move o cursor dentro da linha.</td></tr>
 <tr><td><kbd>Tab</kbd></td><td>Completa nomes de comandos, pastas, arquivos e variáveis (<a href="completar.html">Completar com Tab</a>).</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Limpa a tela (o comando <code>clear</code> também).</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Desiste da linha atual, inclusive de um <code>&gt;</code> de continuação.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Desiste da linha atual, inclusive de um <code>&gt;</code> de continuação, e interrompe um comando que está rodando (um laço sem fim, por exemplo).</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Vai para o começo / o fim da linha.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>K</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Apaga até o começo / até o fim / cola de volta o que foi apagado.</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>B</kbd> / <kbd>Alt</kbd>+<kbd>F</kbd> / <kbd>Alt</kbd>+<kbd>D</kbd></td><td>Uma palavra para trás / para frente / apaga a palavra seguinte.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Busca no histórico daquela caixa (<a href="historico.html">Histórico</a>).</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Numa linha vazia, encerra o shell, como o <code>exit</code> (Reiniciar traz de volta). Durante um <code>read</code>, termina a entrada.</td></tr>
 </table>
 </div>
 
@@ -225,7 +230,7 @@ $ cat Documentos/acesso.log
 <tr><td><code>apt</code>, <code>dnf</code>, <code>brew</code>, <code>sudo</code></td><td>Não há pacotes para instalar nem administrador.</td></tr>
 <tr><td><code>nano</code>, <code>vim</code>, <code>man</code>, <code>top</code></td><td>São programas de tela cheia. <code>less</code> e <code>more</code> mostram tudo de uma vez.</td></tr>
 <tr><td><code>cron</code>, <code>systemctl</code></td><td>Não há serviços rodando.</td></tr>
-<tr><td>A maioria dos atalhos de edição</td><td><kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>W</kbd>, <kbd>Ctrl</kbd>+<kbd>A</kbd>… são do navegador ou não foram incluídos (veja <a href="editar-linha.html">Editar a Linha</a>).</td></tr>
+<tr><td>Alguns atalhos de edição</td><td>Desfazer (<kbd>Ctrl</kbd>+<kbd>_</kbd>), trocar letras (<kbd>Ctrl</kbd>+<kbd>T</kbd>), modo vi e <kbd>Ctrl</kbd>+<kbd>Z</kbd> não existem aqui; o <kbd>Ctrl</kbd>+<kbd>W</kbd> costuma fechar a aba do navegador. A lista do que funciona está em <a href="editar-linha.html">Editar a Linha</a>.</td></tr>
 </table>
 </div>
 
@@ -369,7 +374,7 @@ A primeira linha é: Comprar café</pre>
 <h2>Resumo</h2>
 <ul>
   <li>O simulador roda na página: nada afeta o seu computador; <strong>Reiniciar</strong> volta ao começo.</li>
-  <li>No terminal: <kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Tab</kbd>, <kbd>Ctrl</kbd>+<kbd>L</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd> e linhas <code>&gt;</code> de continuação.</li>
+  <li>No terminal: <kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Tab</kbd>, <kbd>Ctrl</kbd>+<kbd>L</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>R</kbd>, os atalhos de edição da linha e linhas <code>&gt;</code> de continuação.</li>
   <li>No editor: <strong>Rodar</strong> mostra saída e código de saída; <strong>Restaurar</strong> desfaz; argumentos e entrada têm campos próprios.</li>
   <li>A máquina é sempre a mesma: <code>ana@notebook</code>, 15/10/2026 10:30, com <code>frutas.txt</code>, <code>notas.txt</code>, <code>alunos.csv</code> e <code>acesso.log</code>.</li>
   <li>Sem rede, pacotes, editores de tela cheia ou serviços: para esses, use o terminal do seu computador.</li>
