@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Arrays — listas de valores numa só variável | Guia Bash</title>
+<meta name="description" content="Aprenda arrays no Bash: criar, ler por índice, ${a[@]} × ${a[*]} com e sem aspas, contar, acrescentar, remover, fatias, percorrer, passar para funções e ordenar, com saídas reais explicadas.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Arrays</span></h1>
+
+<p class="intro">Uma variável comum guarda <strong>um</strong> valor. Um <strong>array</strong> (em português, "vetor" ou "lista") guarda <strong>vários</strong> valores, cada um numa posição numerada. Com ele, você mantém uma lista de arquivos, de nomes ou de cidades sem se preocupar com espaços dentro dos itens.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como criar um array, ler um item pelo índice e contar os itens.</li>
+  <li>A diferença entre <code>"${a[@]}"</code> e <code>"${a[*]}"</code>, com e sem aspas (a parte mais importante da aula).</li>
+  <li>Como acrescentar, remover (e o "buraco" que fica), pegar fatias e percorrer.</li>
+  <li>Por que <code>a=($(comando))</code> quebra seus dados, e o que usar no lugar.</li>
+  <li>Como passar um array para uma função, aplicar uma expansão em todos os itens e ordenar.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema que o array resolve</h2>
+<p>A Ana quer guardar a lista de cidades dos alunos numa variável. A primeira ideia é separar por espaço:</p>
+
+<pre class="term">$ cidades="Recife Curitiba Porto Alegre"
+$ for c in $cidades; do echo "[$c]"; done
+[Recife]
+[Curitiba]
+[Porto]           « "Porto Alegre" virou duas cidades
+[Alegre]</pre>
+
+<p>Uma variável comum é só um texto. O Bash não sabe onde termina um item e começa o outro: ele corta onde houver espaço (a <a href="aspas.html">separação de palavras</a>). O array resolve isso: cada item fica guardado <strong>separado</strong>, numa posição própria, e continua inteiro mesmo que tenha espaços.</p>
+
+<pre class="syntax">  índice →    0          1           2
+            ┌────────┬──────────┬──────────────┐
+  cidades   │ Recife │ Curitiba │ Porto Alegre │
+            └────────┴──────────┴──────────────┘</pre>
+
+<p>As posições são chamadas de <strong>índices</strong> (do inglês <em>index</em>) e começam em <strong>0</strong>, não em 1. Esse tipo de array, com índices numéricos, é o <strong>array indexado</strong>. Existe também o array com nomes no lugar dos números, o <a href="arrays-associativos.html">array associativo</a>, assunto da próxima aula.</p>
+
+<hr>
+
+<h2>Criar um array</h2>
+<p>Você cria um array com parênteses depois do <code>=</code>. Os itens ficam separados por espaço.</p>
+
+<dl class="anatomy">
+  <dt>frutas</dt><dd>O nome do array. Mesmas regras de nome de qualquer variável.</dd>
+  <dt>=</dt><dd>Atribuição, <strong>sem espaço</strong> dos lados (como em toda variável).</dd>
+  <dt>(banana maçã uva)</dt><dd>Os itens entre parênteses, separados por espaço. O primeiro vai para o índice 0, o segundo para o 1…</dd>
+</dl>
+
+<pre class="term">$ frutas=(banana maçã uva)
+$ declare -p frutas
+declare -a frutas=([0]="banana" [1]="maçã" [2]="uva")</pre>
+
+<p>A criação não mostra nada (e devolve código 0). Para conferir o que ficou guardado, use <code>declare -p</code> (<em>print</em>), que mostra a variável do jeito que o Bash a enxerga:</p>
+<ul>
+  <li><code>-a</code> diz que é um array indexado (<em>array</em>).</li>
+  <li>Cada item aparece como <code>[índice]="valor"</code>. Ótimo para ver exatamente o que está em cada posição.</li>
+</ul>
+
+<p>Itens com espaço vão entre aspas, como em qualquer comando:</p>
+
+<pre class="term">$ cidades=("Porto Alegre" Recife "Rio de Janeiro")
+$ echo ${#cidades[@]}
+3                       « três itens, não seis</pre>
+
+<h3>Outras formas de criar</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>vazio=()</code></td><td>Cria um array sem nenhum item (útil antes de um laço que vai enchendo a lista).</td></tr>
+<tr><td><code>frutas[0]=banana</code></td><td>Grava um item numa posição. Se o array não existia, passa a existir.</td></tr>
+<tr><td><code>notas=([0]=9.5 [3]=7.0)</code></td><td>Escolhe os índices na criação. As posições 1 e 2 simplesmente não existem.</td></tr>
+<tr><td><code>declare -a lista</code></td><td>Declara um array indexado vazio. Opcional para arrays indexados (obrigatório só para os <a href="arrays-associativos.html">associativos</a>).</td></tr>
+<tr><td><code>arqs=(*.txt)</code></td><td>Os <a href="curingas.html">curingas</a> funcionam dentro dos parênteses: cada arquivo vira um item, mesmo com espaços no nome.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Ler um item: <code>${frutas[0]}</code></h2>
+
+<dl class="anatomy">
+  <dt>$</dt><dd>"Troque pelo valor de…"</dd>
+  <dt>{</dt><dd>As chaves são <strong>obrigatórias</strong> com arrays.</dd>
+  <dt>frutas</dt><dd>O nome do array.</dd>
+  <dt>[0]</dt><dd>O índice, entre colchetes.</dd>
+  <dt>}</dt><dd>Fecha.</dd>
+</dl>
+
+<pre class="term">$ echo ${frutas[0]}
+banana
+$ echo ${frutas[2]}
+uva
+$ echo ${frutas[-1]}
+uva                     « índice negativo conta do fim: -1 é o último
+$ echo ${frutas[3]}
+                        « não existe índice 3: sai vazio, sem erro</pre>
+
+<p>Pedir um índice que não existe <strong>não é erro</strong>: o resultado é vazio, como uma variável que não foi criada. O índice também aceita contas e variáveis, sem precisar de <code>$</code>: <code>${frutas[i+1]}</code>.</p>
+
+<h3>As chaves não são opcionais</h3>
+<pre class="term">$ echo $frutas[1]
+banana[1]               « o Bash leu $frutas e colou "[1]" como texto
+$ echo $frutas
+banana                  « o nome sozinho é o item 0</pre>
+<p>Sem chaves, o Bash entende <code>$frutas</code> (que vale o item 0) seguido do texto <code>[1]</code>. Escreva sempre <code>${frutas[1]}</code>.</p>
+
+<hr>
+
+<h2>Todos os itens, contar e listar índices</h2>
+
+<pre class="term">$ echo ${frutas[@]}
+banana maçã uva         « todos os itens
+$ echo ${#frutas[@]}
+3                       « quantos itens
+$ echo ${!frutas[@]}
+0 1 2                   « quais índices existem
+$ echo ${#frutas[1]}
+4                       « tamanho do item 1 ("maçã" tem 4 letras)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrita</th><th>Lê-se</th><th>Resultado</th></tr>
+<tr><td><code>${frutas[@]}</code></td><td>"todos os itens" (<code>@</code> = <em>at</em>, "em todos")</td><td><code>banana maçã uva</code></td></tr>
+<tr><td><code>${#frutas[@]}</code></td><td>"quantos itens" (<code>#</code> = número)</td><td><code>3</code></td></tr>
+<tr><td><code>${!frutas[@]}</code></td><td>"quais índices" (<code>!</code> = as chaves, não os valores)</td><td><code>0 1 2</code></td></tr>
+<tr><td><code>${#frutas[1]}</code></td><td>"tamanho do item 1"</td><td><code>4</code></td></tr>
+<tr><td><code>${#frutas}</code></td><td>"tamanho do item 0" (pegadinha!)</td><td><code>6</code> ("banana")</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong><code>${#frutas}</code> não conta os itens</strong>
+<p>Sem o <code>[@]</code>, o nome do array vale o item 0. Por isso <code>${#frutas}</code> devolve 6, o tamanho de "banana". Para contar itens, é sempre <code>${#frutas[@]}</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>"${a[@]}"</code> × <code>"${a[*]}"</code>: com e sem aspas</h2>
+<p>Esta é a parte mais importante da aula. Existem dois jeitos de pedir "todos os itens", e cada um se comporta de forma diferente com e sem aspas. Vamos usar um array com espaços dentro dos itens e o <code>printf '[%s]\n'</code>, que mostra cada palavra recebida entre colchetes, numa linha:</p>
+
+<pre class="term">$ cidades=("Porto Alegre" Recife "Rio de Janeiro")
+$ printf '[%s]\n' "${cidades[@]}"
+[Porto Alegre]          « cada item virou UMA palavra, inteira
+[Recife]
+[Rio de Janeiro]
+$ printf '[%s]\n' "${cidades[*]}"
+[Porto Alegre Recife Rio de Janeiro]      « tudo colado numa palavra só
+$ printf '[%s]\n' ${cidades[*]}
+[Porto]                 « sem aspas: cortado em cada espaço
+[Alegre]
+[Recife]
+[Rio]
+[de]
+[Janeiro]</pre>
+
+<p>E <code>${cidades[@]}</code> sem aspas dá o mesmo estrago da última forma. O resumo:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Vira</th><th>Quando usar</th></tr>
+<tr><td><code>"${a[@]}"</code></td><td>Uma palavra por item, preservando espaços e itens vazios.</td><td><strong>Quase sempre.</strong> Laços, passar para comandos e funções, copiar arrays.</td></tr>
+<tr><td><code>"${a[*]}"</code></td><td>Uma palavra só, com os itens unidos pelo primeiro caractere de <code>IFS</code> (normalmente um espaço).</td><td>Para montar um texto: mensagens, juntar com vírgula.</td></tr>
+<tr><td><code>${a[@]}</code> e <code>${a[*]}</code> sem aspas</td><td>Os itens são cortados em cada espaço e passam pelos curingas.</td><td>Praticamente nunca. É a origem de muitos bugs.</td></tr>
+</table>
+</div>
+
+<p>A mesma regra vale para <code>"$@"</code> e <code>"$*"</code> dos <a href="argumentos.html">argumentos de um script</a>: os argumentos são, na prática, um array.</p>
+
+<h3>Juntar com vírgula: o <code>*</code> e o <code>IFS</code></h3>
+<p>O <code>"${a[*]}"</code> usa o primeiro caractere da variável <code>IFS</code> como "cola". Trocando o <code>IFS</code>, você junta com outro separador:</p>
+
+<pre class="term">$ IFS=,; echo "${cidades[*]}"; unset IFS
+Porto Alegre,Recife,Rio de Janeiro</pre>
+
+<dl class="anatomy">
+  <dt>IFS=,</dt><dd>Muda o separador para vírgula.</dd>
+  <dt>echo "${cidades[*]}"</dt><dd>Junta os itens numa palavra só, colando com a vírgula.</dd>
+  <dt>unset IFS</dt><dd>Devolve o <code>IFS</code> ao comportamento padrão. Não esqueça: um <code>IFS</code> trocado muda o resto da sessão.</dd>
+</dl>
+<p>Mais receitas de juntar e dividir texto estão em <a href="strings.html">Manipular Strings</a>.</p>
+
+<hr>
+
+<h2>Acrescentar e alterar itens</h2>
+
+<pre class="term">$ frutas=(banana maçã uva)
+$ frutas+=(kiwi)                 « += com parênteses: acrescenta no fim
+$ frutas[10]=limão               « grava direto no índice 10
+$ declare -p frutas
+declare -a frutas=([0]="banana" [1]="maçã" [2]="uva" [3]="kiwi" [10]="limão")
+$ echo ${#frutas[@]}
+5</pre>
+
+<p>Repare: os índices pularam de 3 para 10, e o array tem 5 itens, não 11. No Bash, um array pode ter <strong>buracos</strong> (o nome técnico é array <em>esparso</em>). As posições de 4 a 9 não existem.</p>
+
+<dl class="anatomy">
+  <dt>frutas</dt><dd>O array.</dd>
+  <dt>+=</dt><dd>"Acrescente". Sem espaço dos lados.</dd>
+  <dt>(kiwi "pão de queijo")</dt><dd>Os novos itens, <strong>entre parênteses</strong>. Pode ser mais de um.</dd>
+</dl>
+
+<div class="warning">
+<strong>Esqueceu os parênteses?</strong>
+<pre class="term">$ frutas=(banana maçã uva)
+$ frutas+=laranja
+$ declare -p frutas
+declare -a frutas=([0]="bananalaranja" [1]="maçã" [2]="uva")</pre>
+<p>Sem parênteses, o <code>+=</code> trata <code>frutas</code> como texto comum e cola "laranja" no fim do <strong>item 0</strong>. Para acrescentar um item, é <code>frutas+=(laranja)</code>.</p>
+</div>
+
+<p>Para trocar um item, basta gravar no índice: <code>frutas[1]=pera</code>.</p>
+
+<div class="tryscript" data-file="compras.sh" data-goal="out:Itens: 4,out:- pão de queijo,src:compras\+=\(">
+<p class="try-task"><strong>Missão:</strong> acrescente o item <code>pão de queijo</code> (com espaços!) ao array <code>compras</code> usando <code>+=</code>, sem mexer na linha que cria o array. A saída deve dizer <code>Itens: 4</code> e listar <code>- pão de queijo</code> numa linha só.</p>
+<pre class="script">#!/usr/bin/env bash
+compras=(arroz feijão café)
+
+echo "Itens: ${#compras[@]}"
+for item in "${compras[@]}"; do
+  echo "- $item"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+compras=(arroz feijão café)
+compras+=("pão de queijo")
+echo "Itens: ${#compras[@]}"
+for item in "${compras[@]}"; do
+  echo "- $item"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Remover: <code>unset</code> e o buraco que fica</h2>
+
+<pre class="term">$ cores=(azul verde vermelho)
+$ unset 'cores[1]'
+$ declare -p cores
+declare -a cores=([0]="azul" [2]="vermelho")      « o 1 sumiu; o vermelho NÃO foi para o 1
+$ echo ${#cores[@]}
+2
+$ echo ${cores[1]}
+                         « vazio
+$ echo "${!cores[@]}"
+0 2</pre>
+
+<dl class="anatomy">
+  <dt>unset</dt><dd>Apaga uma variável ou, com índice, um item.</dd>
+  <dt>'cores[1]'</dt><dd>O item a apagar. As aspas simples protegem os colchetes (veja o porquê em "Quando não funciona").</dd>
+</dl>
+
+<p>O <code>unset</code> remove o item, mas <strong>não renumera</strong> os outros. Fica um buraco no índice 1. Isso é importante na hora de percorrer, como você vai ver já já. Para "fechar os buracos", recrie o array a partir dele mesmo:</p>
+
+<pre class="term">$ cores=("${cores[@]}")
+$ declare -p cores
+declare -a cores=([0]="azul" [1]="vermelho")</pre>
+
+<p>Para apagar o array inteiro: <code>unset cores</code>. Para esvaziá-lo, mantendo a variável: <code>cores=()</code>.</p>
+
+<div class="try" data-goal="ran:unset,outre:\[0\]=&quot;azul&quot; \[2\]=&quot;vermelho&quot;" data-solucao="cores=(azul verde vermelho);;unset 'cores[1]';;declare -p cores">
+<p class="try-task"><strong>Missão:</strong> crie o array <code>cores</code> com <code>azul verde vermelho</code>, remova o <code>verde</code> com <code>unset</code> e confira com <code>declare -p cores</code> que o <code>vermelho</code> continuou no índice 2.</p>
+</div>
+
+<hr>
+
+<h2>Fatias: <code>${a[@]:início:quantos}</code></h2>
+<p>Igual ao recorte de texto de <a href="expansao-parametros.html">expansão de parâmetros</a>, mas aplicado a itens:</p>
+
+<pre class="term">$ nums=(10 20 30 40 50)
+$ echo "${nums[@]:1:2}"
+20 30                    « a partir do índice 1, pegue 2 itens
+$ echo "${nums[@]:2}"
+30 40 50                 « do índice 2 até o fim
+$ echo "${nums[@]: -2}"
+40 50                    « os 2 últimos (repare no espaço antes do -)</pre>
+
+<dl class="anatomy">
+  <dt>nums[@]</dt><dd>Todos os itens.</dd>
+  <dt>:1</dt><dd>Comece no índice 1.</dd>
+  <dt>:2</dt><dd>Pegue 2 itens (opcional: sem ele, vai até o fim).</dd>
+</dl>
+
+<div class="warning">
+<strong>O espaço antes do número negativo</strong>
+<pre class="term">$ echo "${nums[@]:-2}"
+10 20 30 40 50</pre>
+<p>Sem o espaço, <code>:-</code> vira outra coisa: "valor padrão se estiver vazio". Como o array não está vazio, o Bash mostra tudo. Escreva <code>${nums[@]: -2}</code>.</p>
+</div>
+
+<p>Uma fatia também serve para criar outro array: <code>primeiros=("${nums[@]:0:3}")</code>.</p>
+
+<hr>
+
+<h2>Percorrer um array</h2>
+
+<h3>Pelos valores (o mais comum)</h3>
+<pre class="term">$ for c in "${cidades[@]}"; do echo "[$c]"; done
+[Porto Alegre]
+[Recife]
+[Rio de Janeiro]</pre>
+<p>Com as aspas, cada volta do <a href="for.html">for</a> recebe um item inteiro. É a forma que você vai usar 90% das vezes.</p>
+
+<h3>Pelos índices: quando você precisa da posição</h3>
+<pre class="term">$ nums=(10 20 30 40 50)
+$ for i in "${!nums[@]}"; do echo "$i -&gt; ${nums[i]}"; done
+0 -&gt; 10
+1 -&gt; 20
+2 -&gt; 30
+3 -&gt; 40
+4 -&gt; 50</pre>
+<p><code>"${!nums[@]}"</code> devolve os índices que <strong>existem</strong>, então funciona até com buracos.</p>
+
+<h3>Com contador (cuidado com os buracos)</h3>
+<p>Quem vem de outras linguagens escreve o laço clássico com contador. Ele funciona em arrays sem buracos, mas falha depois de um <code>unset</code>:</p>
+
+<pre class="term">$ cores=(azul verde vermelho)
+$ unset 'cores[1]'
+$ for ((i = 0; i &lt; ${#cores[@]}; i++)); do echo "$i: ${cores[i]}"; done
+0: azul
+1:                       « o 1 não existe, e o vermelho (índice 2) nunca foi visitado
+$ for i in "${!cores[@]}"; do echo "$i: ${cores[i]}"; done
+0: azul
+2: vermelho</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Laço</th><th>Exemplo</th><th>Qual usar?</th></tr>
+<tr><td>Pelos valores</td><td><code>for x in "${a[@]}"</code></td><td>Quando só importa o item. É o padrão.</td></tr>
+<tr><td>Pelos índices</td><td><code>for i in "${!a[@]}"</code></td><td>Quando você precisa da posição (numerar, comparar com outro array, alterar o item).</td></tr>
+<tr><td>Contador</td><td><code>for ((i=0; i&lt;${#a[@]}; i++))</code></td><td>Só se o array não tem buracos. Prefira o anterior.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="numerar.sh" data-goal="out:1. arroz,out:3. café,src:\$\{!compras">
+<p class="try-task"><strong>Missão:</strong> mude o laço para percorrer os <strong>índices</strong> (<code>"${!compras[@]}"</code>) e mostrar a lista numerada a partir de 1: <code>1. arroz</code>, <code>2. feijão</code>, <code>3. café</code>. Dica: <code>$((i + 1))</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+compras=(arroz feijão café)
+for item in "${compras[@]}"; do
+  echo "- $item"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+compras=(arroz feijão café)
+for i in "${!compras[@]}"; do
+  echo "$((i + 1)). ${compras[i]}"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Array a partir de um comando ou arquivo</h2>
+<p>A tentação é usar <code>a=($(comando))</code>. Veja o que acontece com a lista de tarefas da Ana, que tem uma tarefa por linha:</p>
+
+<pre class="term">$ cat Documentos/notas.txt
+Comprar café
+Ligar para o João
+Estudar Bash
+Fazer backup das fotos
+$ tarefas=($(cat Documentos/notas.txt))
+$ echo ${#tarefas[@]}
+12                       « eram 4 tarefas!
+$ declare -p tarefas
+declare -a tarefas=([0]="Comprar" [1]="café" [2]="Ligar" [3]="para" [4]="o" [5]="João" [6]="Estudar" [7]="Bash" [8]="Fazer" [9]="backup" [10]="das" [11]="fotos")</pre>
+
+<p>A <a href="substituicao-comando.html">substituição de comando</a> sem aspas é cortada em <strong>cada espaço</strong>, não em cada linha. E é pior: cada pedaço ainda passa pelos curingas. Uma linha com um <code>*</code> vira a lista de arquivos da pasta:</p>
+
+<pre class="term">$ echo 'nota: 5 * 2' &gt; conta.txt
+$ itens=($(cat conta.txt))
+$ declare -p itens
+declare -a itens=([0]="nota:" [1]="5" [2]="Área de trabalho" [3]="conta.txt" [4]="Documentos" [5]="Downloads" [6]="frutas.txt" [7]="Imagens" [8]="Modelos" [9]="Música" [10]="Público" [11]="Vídeos" [12]="2")</pre>
+
+<p>O jeito certo de ler <strong>uma linha por item</strong> é o <code>mapfile</code>:</p>
+
+<pre class="term">$ mapfile -t tarefas &lt; Documentos/notas.txt
+$ declare -p tarefas
+declare -a tarefas=([0]="Comprar café" [1]="Ligar para o João" [2]="Estudar Bash" [3]="Fazer backup das fotos")</pre>
+
+<p>Ele tem uma aula só para ele: <a href="mapfile.html">mapfile e readarray</a>. Para dividir <strong>uma linha</strong> em palavras, use <code>read -ra</code>:</p>
+
+<pre class="term">$ read -ra partes &lt;&lt;&lt; "ana bruno carla"
+$ declare -p partes
+declare -a partes=([0]="ana" [1]="bruno" [2]="carla")</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer…</th><th>Use</th><th>Evite</th></tr>
+<tr><td>Uma linha do arquivo por item</td><td><code>mapfile -t a &lt; arq</code></td><td><code>a=($(cat arq))</code></td></tr>
+<tr><td>Uma linha de saída de comando por item</td><td><code>mapfile -t a &lt; &lt;(comando)</code></td><td><code>a=($(comando))</code></td></tr>
+<tr><td>As palavras de uma linha</td><td><code>read -ra a &lt;&lt;&lt; "$linha"</code></td><td><code>a=($linha)</code> (passa pelos curingas)</td></tr>
+<tr><td>Uma lista de arquivos</td><td><code>a=(*.txt)</code></td><td><code>a=($(ls *.txt))</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passar um array para uma função</h2>
+<p>Uma <a href="funcoes.html">função</a> recebe argumentos, não variáveis. O jeito mais simples é "espalhar" o array com <code>"${a[@]}"</code>: cada item vira um argumento, e lá dentro a função lê <code>"$@"</code>.</p>
+
+<pre class="file" data-file="listar.sh">#!/usr/bin/env bash
+listar() {
+  local titulo=$1
+  shift
+  echo "$titulo ($# itens):"
+  printf "  - %s\n" "$@"
+}
+cidades=("Porto Alegre" Recife Manaus)
+listar "Cidades" "${cidades[@]}"
+</pre>
+
+<pre class="term">$ bash listar.sh
+Cidades (3 itens):
+  - Porto Alegre
+  - Recife
+  - Manaus</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>local titulo=$1</code></td><td>Guarda o primeiro argumento, o título.</td></tr>
+<tr><td><code>shift</code></td><td>Descarta o <code>$1</code>. Agora <code>"$@"</code> tem só os itens do array.</td></tr>
+<tr><td><code>printf "  - %s\n" "$@"</code></td><td>O <code>printf</code> repete o formato para cada argumento: um item por linha.</td></tr>
+<tr><td><code>listar "Cidades" "${cidades[@]}"</code></td><td>Chama a função com o título e os 3 itens (com aspas, "Porto Alegre" chega inteiro).</td></tr>
+</table>
+</div>
+
+<p>Esse jeito entrega uma <strong>cópia</strong> dos itens. Se a função precisa <strong>alterar</strong> o array de quem chamou, passe o <strong>nome</strong> e use uma referência (<code>local -n</code>, o <em>nameref</em>):</p>
+
+<pre class="file" data-file="ref.sh">#!/usr/bin/env bash
+acrescentar() {
+  local -n lista=$1      # "lista" passa a ser outro nome para o array recebido
+  lista+=("$2")
+}
+cidades=(Recife Manaus)
+acrescentar cidades Salvador
+declare -p cidades
+</pre>
+
+<pre class="term">$ bash ref.sh
+declare -a cidades=([0]="Recife" [1]="Manaus" [2]="Salvador")</pre>
+
+<p>O <code>local -n</code> existe desde o bash 4.3. Os detalhes (e a armadilha de usar o mesmo nome dentro e fora) estão em <a href="eval-indirecao.html">eval, Indireção e nameref</a>.</p>
+
+<hr>
+
+<h2>Uma expansão em todos os itens</h2>
+<p>Quase todas as operações de <a href="expansao-parametros.html">expansão de parâmetros</a> funcionam com <code>[@]</code>, e são aplicadas a <strong>cada item</strong> de uma vez, sem laço:</p>
+
+<pre class="term">$ arqs=(relatorio notas backup)
+$ echo "${arqs[@]/%/.txt}"
+relatorio.txt notas.txt backup.txt         « /% com nada antes = acrescenta no fim
+$ echo "${arqs[@]/#/old_}"
+old_relatorio old_notas old_backup         « /# = acrescenta no começo
+$ echo "${arqs[@]^^}"
+RELATORIO NOTAS BACKUP                     « tudo maiúsculo
+$ echo "${arqs[@]/o/0}"
+relat0rio n0tas backup                     « troca o primeiro "o" de cada item</pre>
+
+<dl class="anatomy">
+  <dt>arqs[@]</dt><dd>Cada item do array, separadamente.</dd>
+  <dt>/%</dt><dd>"Troque no <strong>fim</strong> do item…" (<code>%</code> = fim, como em <code>${x%.txt}</code>).</dd>
+  <dt>/</dt><dd>Separa o que procurar (aqui, nada) do que colocar.</dd>
+  <dt>.txt</dt><dd>…por ".txt". Trocar "nada no fim" por ".txt" = acrescentar.</dd>
+</dl>
+
+<p>Com aspas e <code>[@]</code>, o resultado continua sendo uma palavra por item, então dá para usar num laço ou passar para um comando: <code>cp "${arqs[@]/%/.txt}" backup/</code>.</p>
+
+<div class="tryscript" data-file="fotos.sh" data-goal="out:ferias.jpg,out:viagem.jpg,src:/%/">
+<p class="try-task"><strong>Missão:</strong> o laço mostra só os nomes. Sem mudar a linha que cria o array, faça o <code>for</code> percorrer os nomes já com <code>.jpg</code> no fim, usando <code>${fotos[@]/%/.jpg}</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+fotos=(ferias perfil viagem)
+for f in "${fotos[@]}"; do
+  echo "$f"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+fotos=(ferias perfil viagem)
+for f in "${fotos[@]/%/.jpg}"; do
+  echo "$f"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Ordenar um array</h2>
+<p>O Bash não tem um comando interno para ordenar. O caminho é: imprimir um item por linha, passar pelo <code>sort</code> e ler de volta com <code>mapfile</code>.</p>
+
+<pre class="term">$ frutas=(uva banana maçã laranja)
+$ mapfile -t ordenadas &lt; &lt;(printf '%s\n' "${frutas[@]}" | sort)
+$ declare -p ordenadas
+declare -a ordenadas=([0]="banana" [1]="laranja" [2]="maçã" [3]="uva")</pre>
+
+<dl class="anatomy">
+  <dt>printf '%s\n' "${frutas[@]}"</dt><dd>Um item por linha.</dd>
+  <dt>| sort</dt><dd>Ordena as linhas (use <code>sort -n</code> para números, <code>sort -r</code> para inverter).</dd>
+  <dt>&lt;(…)</dt><dd><a href="substituicao-processo.html">Substituição de processo</a>: a saída vira um "arquivo" que o <code>mapfile</code> pode ler.</dd>
+  <dt>mapfile -t ordenadas &lt;</dt><dd>Lê uma linha por item no novo array.</dd>
+</dl>
+
+<p>Para números, lembre do <code>-n</code>: sem ele, <code>100</code> vem antes de <code>9</code>, porque a comparação é letra a letra.</p>
+
+<pre class="term">$ nums=(10 9 100 2)
+$ printf '%s\n' "${nums[@]}" | sort -n | tr '\n' ' '; echo
+2 9 10 100</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado `('"</strong>
+<pre class="term">$ frutas = (a b)
+bash: erro de sintaxe próximo ao token inesperado `('</pre>
+<p><strong>O que aconteceu:</strong> espaços em volta do <code>=</code>. O Bash leu <code>frutas</code> como um comando, e parênteses no meio de argumentos são proibidos.</p>
+<p><strong>Como resolver:</strong> <code>frutas=(a b)</code>, tudo junto.</p>
+</div>
+
+<div class="cenario">
+<strong>Os itens ficaram com vírgula</strong>
+<pre class="term">$ nums=(1, 2, 3)
+$ declare -p nums
+declare -a nums=([0]="1," [1]="2," [2]="3")</pre>
+<p><strong>O que aconteceu:</strong> no Bash, quem separa os itens é o espaço. A vírgula virou parte do texto.</p>
+<p><strong>Como resolver:</strong> <code>nums=(1 2 3)</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu <code>banana[1]</code> em vez de <code>maçã</code></strong>
+<p><strong>O que aconteceu:</strong> faltaram as chaves: <code>$frutas[1]</code>. Confirme: o texto <code>[1]</code> aparece colado no resultado.</p>
+<p><strong>Como resolver:</strong> <code>${frutas[1]}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>unset</code> não apagou nada</strong>
+<pre class="term">$ frutas=(banana maçã uva)
+$ touch frutas1                  « um arquivo qualquer com esse nome na pasta
+$ unset frutas[1]
+$ declare -p frutas
+declare -a frutas=([0]="banana" [1]="maçã" [2]="uva")      « a maçã continua lá</pre>
+<p><strong>O que aconteceu:</strong> sem aspas, <code>frutas[1]</code> é um <a href="curingas.html">curinga</a>: "frutas seguido de um caractere da lista [1]". Como existe um arquivo <code>frutas1</code> na pasta, o Bash trocou o curinga pelo nome do arquivo e rodou <code>unset frutas1</code>, uma variável que nem existia. Sem esse arquivo, o comando funcionaria, o que torna o erro ainda mais traiçoeiro.</p>
+<p><strong>Como resolver:</strong> sempre <code>unset 'frutas[1]'</code>, com aspas simples.</p>
+</div>
+
+<div class="cenario">
+<strong>"subscrito de array incorreto"</strong>
+<pre class="term">$ echo ${frutas[-10]}
+bash: frutas: subscrito de array incorreto
+                         « o echo ainda rodou, com o valor vazio</pre>
+<p><strong>O que aconteceu:</strong> um índice negativo maior que o tamanho do array (só há 3 itens; -10 não aponta para lugar nenhum). Índices positivos inexistentes dão vazio em silêncio; negativos fora do array dão este aviso. Gravar num índice assim (<code>frutas[-10]=x</code>) também falha, com <code>bash: frutas[-10]: subscrito de array incorreto</code>.</p>
+<p><strong>Como resolver:</strong> confira o tamanho com <code>${#frutas[@]}</code> antes, ou use índices positivos.</p>
+</div>
+
+<div class="cenario">
+<strong>"Porto Alegre" virou duas cidades</strong>
+<p><strong>O que aconteceu:</strong> faltaram as aspas em <code>${cidades[@]}</code> (num <code>for</code>, num comando ou ao chamar uma função). Confirme com <code>printf '[%s]\n' ${cidades[@]}</code>.</p>
+<p><strong>Como resolver:</strong> <code>"${cidades[@]}"</code>, sempre com aspas duplas. O <a href="shellcheck.html">ShellCheck</a> avisa esse erro (SC2068).</p>
+</div>
+
+<div class="cenario">
+<strong>O array tem mais itens do que linhas no arquivo</strong>
+<p><strong>O que aconteceu:</strong> você usou <code>a=($(cat arquivo))</code>, que corta em espaços e expande curingas.</p>
+<p><strong>Como resolver:</strong> <code>mapfile -t a &lt; arquivo</code>. Veja <a href="mapfile.html">mapfile</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo de resultado</th></tr>
+<tr><td><code>a=(x y z)</code></td><td>Cria o array</td><td></td></tr>
+<tr><td><code>a=()</code></td><td>Cria vazio / esvazia</td><td></td></tr>
+<tr><td><code>${a[0]}</code>, <code>${a[-1]}</code></td><td>Um item (primeiro, último)</td><td><code>x</code>, <code>z</code></td></tr>
+<tr><td><code>"${a[@]}"</code></td><td>Todos, uma palavra por item</td><td><code>x</code> <code>y</code> <code>z</code></td></tr>
+<tr><td><code>"${a[*]}"</code></td><td>Todos numa palavra, unidos pelo 1º caractere do <code>IFS</code></td><td><code>x y z</code></td></tr>
+<tr><td><code>${#a[@]}</code></td><td>Quantidade de itens</td><td><code>3</code></td></tr>
+<tr><td><code>${!a[@]}</code></td><td>Índices existentes</td><td><code>0 1 2</code></td></tr>
+<tr><td><code>${#a[i]}</code></td><td>Tamanho do item i</td><td></td></tr>
+<tr><td><code>a+=(w)</code></td><td>Acrescenta no fim</td><td></td></tr>
+<tr><td><code>a[5]=v</code></td><td>Grava no índice 5</td><td></td></tr>
+<tr><td><code>unset 'a[1]'</code></td><td>Remove o item 1 (deixa buraco)</td><td></td></tr>
+<tr><td><code>a=("${a[@]}")</code></td><td>Renumera (fecha os buracos)</td><td></td></tr>
+<tr><td><code>"${a[@]:1:2}"</code></td><td>Fatia: 2 itens a partir do 1</td><td><code>y z</code></td></tr>
+<tr><td><code>"${a[@]/%/.txt}"</code></td><td>Expansão aplicada a cada item</td><td><code>x.txt y.txt z.txt</code></td></tr>
+<tr><td><code>declare -p a</code></td><td>Mostra o array com os índices</td><td><code>declare -a a=([0]="x" …)</code></td></tr>
+<tr><td><code>mapfile -t a &lt; arq</code></td><td>Uma linha do arquivo por item</td><td></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Quantos itens?</h3>
+<p>Complete para mostrar quantos itens tem o array <code>alunos</code>:</p>
+<div class="ex-code">echo <input data-answer="${#alunos[@]}|${#alunos[*]}" aria-label="expansão"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Acrescentar</h3>
+<p>Complete para acrescentar "Rio de Janeiro" no fim do array <code>cidades</code>:</p>
+<div class="ex-code">cidades<input data-answer="+=(&quot;Rio de Janeiro&quot;)|+=('Rio de Janeiro')" aria-label="acréscimo"></div>
+</div>
+
+<div class="exercise">
+<h3>3. O último item</h3>
+<p>Complete para mostrar o último item de <code>frutas</code>, seja qual for o tamanho:</p>
+<div class="ex-code">echo "<input data-answer="${frutas[-1]}" aria-label="último item">"</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Com <code>cidades=("Porto Alegre" Recife)</code>, quantas vezes o corpo de <code>for c in ${cidades[@]}; do …; done</code> (sem aspas) é executado?</p>
+<label><input type="radio" name="q4"> 1</label>
+<label><input type="radio" name="q4"> 2</label>
+<label><input type="radio" name="q4"> 3</label>
+<label><input type="radio" name="q4"> 0</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Depois de <code>a=(x y z)</code> e <code>unset 'a[0]'</code>, o que mostra <code>echo "${!a[@]}"</code>?</p>
+<label><input type="radio" name="q5"> <code>0 1</code></label>
+<label><input type="radio" name="q5"> <code>1 2</code></label>
+<label><input type="radio" name="q5"> <code>y z</code></label>
+<label><input type="radio" name="q5"> <code>0 1 2</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Qual é a melhor forma de colocar cada linha de <code>notas.txt</code> num item do array <code>t</code>?</p>
+<label><input type="radio" name="q6"> <code>t=($(cat notas.txt))</code></label>
+<label><input type="radio" name="q6"> <code>t="$(cat notas.txt)"</code></label>
+<label><input type="radio" name="q6"> <code>read -ra t &lt; notas.txt</code></label>
+<label><input type="radio" name="q6"> <code>mapfile -t t &lt; notas.txt</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Crie com <code>a=(x y "com espaço")</code>; os índices começam em 0; leia com <code>${a[i]}</code>, sempre com chaves.</li>
+  <li><code>"${a[@]}"</code> (com aspas) é "um item por palavra" e é o que você quer quase sempre; <code>"${a[*]}"</code> junta tudo num texto.</li>
+  <li><code>${#a[@]}</code> conta, <code>${!a[@]}</code> lista os índices, <code>declare -p a</code> mostra tudo.</li>
+  <li><code>a+=(novo)</code> acrescenta; <code>unset 'a[i]'</code> remove e deixa buraco; percorra com <code>"${!a[@]}"</code> quando precisar da posição.</li>
+  <li>Nunca <code>a=($(comando))</code>: use <code>mapfile -t</code>. Para passar a uma função, <code>"${a[@]}"</code> (cópia) ou <code>local -n</code> (referência).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
