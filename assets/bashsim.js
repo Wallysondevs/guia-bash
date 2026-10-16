@@ -5938,7 +5938,14 @@
       if (/^[0-7]{3}$/.test(c)) return String.fromCharCode(parseInt(c, 8));
       return m;
     });
-    if (this.shopt.promptvars) r = this.expandirPromptSimples(r);
+    if (this.shopt.promptvars && /[$`]/.test(r)) {
+      try {
+        var w = new Parser(r, {}).lerAte(null, "hd"), self2 = this;
+        var g = (function* () { return yield* self2.expandirStr(w, {}); })();
+        var v = this.k.rodarGeradorSync(g);
+        if (typeof v === "string") r = v;
+      } catch (e) { if (!(e instanceof SyntaxErr || e instanceof Incomplete || e instanceof CmdErr)) throw e; r = this.expandirPromptSimples(r); }
+    }
     return r;
   };
   // Expansão de histórico (!!, !n, !-n, !texto, !?texto?, !$, !^, !*, ^a^b, :p)
@@ -9838,6 +9845,27 @@
     return st;
   };
   KP.capturarAninhado = function (sh, cmd) { return this.rodarAninhado(sh, cmd, null, true); };
+  // roda um generator até o fim, deixando os outros processos andarem quando ele espera
+  KP.rodarGeradorSync = function (g) {
+    var k = this, cur = k.cur, val, r, guarda = 0;
+    while (true) {
+      r = g.next(val); val = undefined;
+      if (r.done) { k.cur = cur; return r.value; }
+      var y = r.value || {};
+      if (y.t === "sleep") { k.clock += y.ms; continue; }
+      if (y.t === "in") { val = null; continue; }
+      if (y.t === "block") {
+        while (!y.cond()) {
+          var l = k.prontos(false).filter(function (p) { return p !== cur; });
+          if (!l.length) { var dorm = k.procs.filter(function (p) { return p.state === "sleep" && !p.done && p !== cur; }); if (!dorm.length) break; k.clock = Math.min.apply(null, dorm.map(function (p) { return p.wake; })); continue; }
+          l.forEach(function (p) { if (!p.done) k.passoProc(p); });
+          k.cur = cur;
+          if (++guarda > 100000) break;
+        }
+      }
+      if (++guarda > 1000000) { k.cur = cur; return undefined; }
+    }
+  };
 
   /* ---------- find ---------- */
   EXT.find = function* (args, io) {
@@ -10284,6 +10312,12 @@
       if (!txt) return;
       if (/\x1b\[H\x1b\[2J/.test(txt)) { out.innerHTML = ""; linhaAtual = null; txt = txt.split(/\x1b\[H\x1b\[2J(?:\x1b\[3J)?/).pop(); if (!txt) return; }
       var partes = txt.split("\n");
+      if (partes.length > 1500) {
+        var omitidas = partes.length - 1000;
+        partes = partes.slice(-1000);
+        out.appendChild(el("div", { "class": "sim-info" }, "(simulador) … " + omitidas + " linhas omitidas na tela …"));
+        linhaAtual = null;
+      }
       partes.forEach(function (p, i) {
         if (p === "" && i === partes.length - 1) return;
         if (!linhaAtual) { linhaAtual = el("div", { "class": classe || "" }); linhaAtual._txt = ""; out.appendChild(linhaAtual); }
@@ -10296,8 +10330,24 @@
       if (out.childNodes.length > 2000) { while (out.childNodes.length > 1500) out.removeChild(out.firstChild); }
     }
     function escreverLinhaCmd(html) { linhaAtual = null; var d = el("div", { "class": "sim-cmd" }, html); out.appendChild(d); }
+    // junta pedaços do mesmo tipo e corta saídas enormes (mostra só o fim)
+    function compactar(lista) {
+      var r = [];
+      lista.forEach(function (c) { var u = r[r.length - 1]; if (u && u.s === c.s) u.t += c.t; else r.push({ s: c.s, t: c.t }); });
+      var total = 0; r.forEach(function (c) { total += (c.t.match(/\n/g) || []).length; });
+      if (total <= 1500) return r;
+      var manter = 1000, res = [], omit = total - manter;
+      for (var i = r.length - 1; i >= 0 && manter > 0; i--) {
+        var ls = r[i].t.split("\n"), n = ls.length - 1;
+        if (n <= manter) { res.unshift(r[i]); manter -= n; }
+        else { res.unshift({ s: r[i].s, t: ls.slice(ls.length - 1 - manter).join("\n") }); manter = 0; }
+      }
+      res.unshift({ s: "info", t: "(simulador) … " + omit + " linhas omitidas na tela …\n" });
+      return res;
+    }
     function despejar() {
-      s.k.tirarSaida().forEach(function (c) {
+      compactar(s.k.tirarSaida()).forEach(function (c) {
+        if (c.s === "info") { escrever(c.t, "sim-info"); return; }
         if (c.s === "err" || c.s === "prompt") erroCmd += semCor(c.t); else saidaCmd += semCor(c.t);
         escrever(c.t, c.s === "err" ? "sim-err" : "");
       });
@@ -10515,7 +10565,7 @@
         if (i < arr.length - 1) linhaAtual = null;
       });
     }
-    function despejar() { s.k.tirarSaida().forEach(function (c) { if (c.s === "err" || c.s === "prompt") erroTxt += semCor(c.t); else saidaTxt += semCor(c.t); escrever(c.t, c.s === "err" ? "sim-err" : ""); }); tela.scrollTop = tela.scrollHeight; }
+    function despejar() { var lst = s.k.tirarSaida(); if (lst.length > 50) { var tot = ""; lst.forEach(function (c) { tot += c.t; }); var ls0 = tot.split("\n"); if (ls0.length > 1500) { escrever("(simulador) … " + (ls0.length - 1000) + " linhas omitidas na tela …\n", "sim-info"); lst = [{ s: "out", t: ls0.slice(-1001).join("\n") }]; } } lst.forEach(function (c) { if (c.s === "err" || c.s === "prompt") erroTxt += semCor(c.t); else saidaTxt += semCor(c.t); escrever(c.t, c.s === "err" ? "sim-err" : ""); }); tela.scrollTop = tela.scrollHeight; }
     function fim() {
       rodando = false; btn.disabled = false; btn.textContent = "▶ Rodar";
       despejar();
