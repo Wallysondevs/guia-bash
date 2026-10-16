@@ -5892,7 +5892,7 @@
       case "group": s = "{ \n" + imprimirLista(c.body, n + 1) + "\n" + ind(n) + "}"; break;
       case "sub":
         if (comoCorpo) return "{ \n" + ind(n + 1) + "( " + imprimirListaLinha(c.body) + " )" + red + "\n" + ind(n) + "}";
-        s = "( " + imprimirListaLinha(c.body) + " )"; break;
+        s = "( " + imprimirLista(c.body, n).replace(/^ +/, "") + " )"; break;
       case "if": {
         var ifs = function (k, nn) {
           var t = "if " + imprimirListaLinha(c.conds[k]) + "; then\n" + imprimirLista(c.bodies[k], nn + 1) + ";\n";
@@ -5912,7 +5912,7 @@
         }).join("\n") + "\n" + ind(n) + "esac"; break;
       case "arith": s = "((" + c.raw + "))"; break;
       case "cond": s = "[[ " + imprimirCond(c.e) + " ]]"; break;
-      case "func": s = c.name + " () \n" + ind(n) + imprimirCmd(c.body, n, true); return s;
+      case "func": s = (n > 0 ? "function " : "") + c.name + " () \n" + ind(n) + imprimirCmd(c.body, n, true); return s;
     }
     if (comoCorpo && c.k !== "group") return "{ \n" + ind(n + 1) + s + red + "\n" + ind(n) + "}";
     return s + red;
