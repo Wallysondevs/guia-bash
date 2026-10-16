@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash pwd e cd — navegar entre pastas | Guia Bash</title>
+<meta name="description" content="Aprenda a navegar entre pastas no Bash: pwd, cd com caminhos absolutos e relativos, .., ~ e -, as variáveis PWD e OLDPWD, pushd, popd, dirs, CDPATH, nomes com espaço e os erros reais do cd.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">pwd e cd</span></h1>
+
+<p class="intro">O terminal está sempre "dentro" de uma pasta. <code>pwd</code> diz qual é, e <code>cd</code> muda de pasta. São os dois comandos que você mais vai digitar na vida, e os dois são <strong>comandos internos do Bash</strong>: nesta aula você também vai entender por que eles precisam ser.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é a "pasta atual" e como o <code>pwd</code> e o prompt mostram onde você está.</li>
+  <li>Caminhos absolutos e relativos, e os atalhos <code>..</code>, <code>.</code>, <code>~</code> e <code>-</code>.</li>
+  <li>As variáveis <code>$PWD</code> e <code>$OLDPWD</code>, e a pilha de pastas com <code>pushd</code>, <code>popd</code> e <code>dirs</code>.</li>
+  <li>Como entrar em pastas com espaço no nome, como "Área de trabalho".</li>
+  <li>O que fazer com "Arquivo ou diretório inexistente", "Não é um diretório" e "Permissão negada".</li>
+</ul>
+</div>
+
+<p>Todos os exemplos acontecem na máquina fictícia <strong>notebook</strong>, com a usuária <strong>ana</strong>. Você pode repetir cada um no simulador desta página.</p>
+
+<hr>
+
+<h2>Conceito: pastas dentro de pastas</h2>
+<p>No Linux, todos os arquivos ficam numa única <strong>árvore</strong> de pastas. O tronco é a pasta <code>/</code> (lê-se "barra"), chamada de <strong>raiz</strong>. Dentro dela há outras pastas, dentro delas outras, e assim por diante. Veja um pedaço da árvore da Ana:</p>
+
+<pre class="syntax">/                         « a raiz: o começo de tudo
+├── etc/
+├── usr/
+└── home/
+    └── ana/              « a pasta pessoal da Ana (~)
+        ├── Área de trabalho/
+        ├── Documentos/
+        │   ├── notas.txt
+        │   └── projetos/
+        │       ├── backup.sh
+        │       └── site/
+        │           ├── index.html
+        │           └── style.css
+        ├── Downloads/
+        ├── Imagens/
+        └── frutas.txt</pre>
+
+<p>Pense num prédio: a raiz é a portaria, cada pasta é um andar ou um apartamento. Em cada momento, o terminal "está" em um lugar desse prédio. Esse lugar se chama <strong>pasta atual</strong> (ou <strong>diretório de trabalho</strong>, <em>working directory</em>). Quando você digita <code>ls</code> sem dizer qual pasta, ou <code>cat notas.txt</code> sem dizer onde está o arquivo, o comando procura <strong>na pasta atual</strong>.</p>
+
+<div class="tip">
+<strong>Pasta ou diretório?</strong>
+<p>São a mesma coisa. "Diretório" (<em>directory</em>) é o nome técnico, e é o que aparece nas mensagens de erro. "Pasta" é o nome do dia a dia. Nesta aula usamos os dois.</p>
+</div>
+
+<hr>
+
+<h2>pwd: onde estou?</h2>
+<p><code>pwd</code> vem de <em>print working directory</em>, "mostre o diretório de trabalho". Ele não recebe nada e responde com o caminho completo da pasta atual.</p>
+
+<dl class="anatomy">
+  <dt>pwd</dt><dd>O comando inteiro. Não precisa de argumentos.</dd>
+</dl>
+
+<pre class="term">$ pwd
+/home/ana                       « a pasta pessoal da Ana
+$ echo $?
+0                               « código de saída 0: deu certo</pre>
+
+<p>A resposta <code>/home/ana</code> se lê assim: começando da raiz <code>/</code>, entre em <code>home</code> e depois em <code>ana</code>. Cada <code>/</code> no meio separa um nível da árvore.</p>
+
+<h3>O prompt também mostra</h3>
+<p>Repare no prompt: <code>ana@notebook:~$</code>. O pedaço entre <code>:</code> e <code>$</code> é a pasta atual. O Bash escreve <code>~</code> (til) no lugar de <code>/home/ana</code> para economizar espaço. Quando você muda de pasta, o prompt muda junto, como você vai ver logo abaixo. (Quem monta o prompt é a variável <code>PS1</code>; veja <a href="prompt.html">Lendo o Prompt</a>.)</p>
+
+<hr>
+
+<h2>cd: mudar de pasta</h2>
+<p><code>cd</code> vem de <em>change directory</em>, "mudar de diretório". Você diz para onde quer ir, e ele leva o terminal até lá.</p>
+
+<dl class="anatomy">
+  <dt>cd</dt><dd>O comando: mude a pasta atual…</dd>
+  <dt>Documentos</dt><dd>…para esta. É o <strong>argumento</strong>: o destino.</dd>
+</dl>
+
+<pre class="term">$ cd Documentos
+$ pwd
+/home/ana/Documentos            « o pwd confirma
+$ ls
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt</pre>
+
+<p>Três coisas para notar:</p>
+<ul>
+  <li>O <code>cd</code> <strong>não mostrou nada</strong>. No terminal, silêncio quer dizer sucesso. Se quiser a prova, <code>echo $?</code> mostra <code>0</code>.</li>
+  <li>O prompt mudou de <code>~</code> para <code>~/Documentos</code>.</li>
+  <li>O <code>ls</code> sem argumentos agora lista a pasta <code>Documentos</code>, porque ela virou a pasta atual.</li>
+</ul>
+
+<p>Você pode descer vários níveis de uma vez, separando as pastas com <code>/</code>:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ cd projetos/site
+$ pwd
+/home/ana/Documentos/projetos/site
+$ ls
+index.html  style.css</pre>
+
+<hr>
+
+<h2>Caminho absoluto × caminho relativo</h2>
+<p>Há dois jeitos de dizer onde fica uma pasta, como há dois jeitos de dar um endereço:</p>
+<ul>
+  <li><strong>Absoluto</strong>: o endereço completo, a partir da raiz. Começa sempre com <code>/</code>. Funciona de qualquer lugar. É como "Rua das Flores, 10, apartamento 302".</li>
+  <li><strong>Relativo</strong>: o caminho a partir de onde você está. <strong>Não</strong> começa com <code>/</code>. Só funciona se você estiver no lugar certo. É como "suba um andar e é a segunda porta".</li>
+</ul>
+
+<pre class="term" data-cwd="~/Imagens">$ cd /home/ana/Documentos/projetos       « absoluto: começa com /
+$ pwd
+/home/ana/Documentos/projetos
+$ cd site                                « relativo: "site, aqui dentro"
+$ pwd
+/home/ana/Documentos/projetos/site</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Absoluto</th><th>Relativo</th></tr>
+<tr><td>Começa com</td><td><code>/</code> (ou <code>~</code>, que o Bash troca por <code>/home/ana</code>)</td><td>Qualquer outra coisa: um nome, <code>.</code> ou <code>..</code></td></tr>
+<tr><td>Exemplo</td><td><code>/home/ana/Documentos</code></td><td><code>Documentos</code>, <code>../Downloads</code></td></tr>
+<tr><td>Funciona de qualquer pasta?</td><td>Sim</td><td>Não: depende de onde você está</td></tr>
+<tr><td>Melhor para</td><td>Scripts, caminhos fixos do sistema (<code>/etc</code>)</td><td>Andar por perto, digitar menos</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Os atalhos: <code>..</code>, <code>.</code>, <code>~</code> e <code>-</code></h2>
+
+<h3><code>..</code>: a pasta de cima</h3>
+<p>Dois pontos significam "a pasta que contém esta", a pasta-mãe. Toda pasta tem um <code>..</code> (menos a raiz, onde <code>..</code> é a própria raiz).</p>
+
+<pre class="term" data-cwd="~/Documentos/projetos/site">$ cd ..
+$ pwd
+/home/ana/Documentos/projetos            « subiu um nível
+$ cd ../..
+$ pwd
+/home/ana                                « subiu mais dois de uma vez</pre>
+
+<p>Você pode misturar <code>..</code> com nomes. <code>../Downloads</code> quer dizer "suba um nível e entre em Downloads": é o jeito de ir para uma pasta "vizinha".</p>
+
+<pre class="term" data-cwd="~/Documentos">$ cd ../Downloads
+$ pwd
+/home/ana/Downloads
+$ ls ..
+'Área de trabalho'   Downloads    Imagens   Música    Vídeos
+ Documentos          frutas.txt   Modelos   Público</pre>
+
+<p>O <code>..</code> funciona com qualquer comando, não só com o <code>cd</code>: o <code>ls ..</code> acima listou a pasta de cima sem sair do lugar.</p>
+
+<h3><code>.</code>: esta pasta</h3>
+<p>Um ponto só significa "a pasta atual". <code>cd .</code> não muda nada. O <code>.</code> aparece muito em outros lugares: <code>./script.sh</code> ("o script.sh que está aqui", veja <a href="executar.html">Formas de Executar</a>) e <code>cp arquivo .</code> ("copie para cá", veja <a href="criar-copiar.html">Criar, Copiar e Mover</a>).</p>
+
+<h3><code>~</code>: a sua pasta pessoal</h3>
+<p>O til é trocado pelo Bash pelo caminho da sua pasta pessoal, <code>/home/ana</code>. Isso se chama <strong>expansão do til</strong>, e acontece <strong>antes</strong> de o comando rodar: o <code>cd</code> nunca vê o <code>~</code>, ele já recebe <code>/home/ana/Imagens</code>. Você pode ver a troca com <code>echo</code>, que só repete o que recebeu:</p>
+
+<pre class="term" data-cwd="~/Downloads">$ echo ~/Imagens
+/home/ana/Imagens                        « o Bash trocou o ~ antes do echo rodar
+$ cd ~/Imagens
+$ pwd
+/home/ana/Imagens</pre>
+
+<p>Como <code>~/Imagens</code> vira um caminho que começa com <code>/</code>, ele é <strong>absoluto</strong>: funciona de qualquer pasta. <code>~ana</code> (til + nome de usuário) é a pasta pessoal de outra pessoa; <code>~maria</code> daria erro se não existisse a usuária maria.</p>
+
+<h3><code>cd</code> sozinho: volta para casa</h3>
+<p>Sem argumento, o <code>cd</code> vai para a pasta pessoal. É o mesmo que <code>cd ~</code>, só que mais curto. Quando você se perder, digite <code>cd</code> e Enter.</p>
+
+<pre class="term" data-cwd="/usr/share/doc">$ cd
+$ pwd
+/home/ana</pre>
+
+<h3><code>cd -</code>: volta para onde você estava</h3>
+<p>O hífen quer dizer "a pasta anterior". É como o botão "voltar" do controle remoto: alterna entre os dois últimos lugares. Diferente dos outros, o <code>cd -</code> <strong>mostra</strong> o caminho para onde foi, para você não se perder.</p>
+
+<dl class="anatomy">
+  <dt>cd</dt><dd>Mude de pasta…</dd>
+  <dt>-</dt><dd>…para a anterior (o valor da variável <code>OLDPWD</code>, que você vai ver daqui a pouco).</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Downloads">$ cd ~/Imagens
+$ cd -
+/home/ana/Downloads                      « voltou e avisou para onde</pre>
+
+<pre class="term" data-cwd="~/Downloads">$ cd -
+/home/ana/Imagens                        « de novo: alterna entre as duas</pre>
+
+<div class="try" data-setup="cd Documentos/projetos/site;;cd /etc" data-goal="cwd:~/Documentos/projetos/site,ran:^\s*cd\s+-\s*$" data-solucao="cd -">
+<p class="try-task"><strong>Missão:</strong> a Ana estava trabalhando em <code>~/Documentos/projetos/site</code> e foi espiar a pasta <code>/etc</code>. Volte para a pasta do site digitando <strong>só</strong> <code>cd</code> e mais um caractere. Confira com <code>pwd</code>.</p>
+</div>
+
+<div class="try" data-goal="cwd:~/Documentos/projetos/site,ran:^\s*cd\s*$,ran:^\s*cd\s+~/" data-solucao="cd Documentos/projetos/site;;cd;;cd ~/Documentos/projetos/site">
+<p class="try-task"><strong>Missão:</strong> você está na pasta pessoal. Entre na pasta <code>site</code>, que fica em <code>Documentos/projetos</code>, com <strong>um único</strong> <code>cd</code>. Depois volte para a pasta pessoal do jeito mais curto que você aprendeu e entre de novo usando um caminho que comece com <code>~</code>.</p>
+</div>
+
+<hr>
+
+<h2>Por que o <code>cd</code> é um comando do próprio Bash?</h2>
+<p>A maioria dos comandos que você usa, como <code>ls</code> e <code>cat</code>, são <strong>programas separados</strong>, arquivos em <code>/usr/bin</code>. O <code>cd</code> não: ele é um <strong>comando interno</strong> (<em>builtin</em>) do Bash. Pergunte ao <code>type</code>:</p>
+
+<pre class="term">$ type cd pwd
+cd é um comando interno do shell
+pwd é um comando interno do shell</pre>
+
+<p>O motivo: cada programa roda num <strong>processo</strong> separado, e cada processo tem a sua própria pasta atual. Se o <code>cd</code> fosse um programa, ele mudaria a pasta dele mesmo e terminaria; o Bash continuaria onde estava. Por isso só o próprio Bash pode mudar a pasta do Bash.</p>
+
+<p>Você pode ver esse efeito com um script. O script roda em <strong>outro</strong> Bash, então o <code>cd</code> lá dentro não afeta o seu terminal:</p>
+
+<pre class="term">$ printf 'cd /etc\npwd\n' &gt; vai.sh
+$ bash vai.sh
+/etc                                     « dentro do script, mudou
+$ pwd
+/home/ana                                « no seu terminal, nada mudou</pre>
+
+<p>Isso confunde muita gente que escreve o primeiro script com <code>cd</code>. A explicação completa está em <a href="executar.html">Formas de Executar</a> (lá você vê o <code>source</code>, que roda o script no seu próprio Bash).</p>
+
+<hr>
+
+<h2>As variáveis <code>PWD</code> e <code>OLDPWD</code></h2>
+<p>O Bash guarda a pasta atual numa <strong>variável</strong> chamada <code>PWD</code>, e a anterior em <code>OLDPWD</code>. Toda vez que o <code>cd</code> dá certo, ele atualiza as duas. Para ler uma variável, ponha <code>$</code> na frente do nome (veja <a href="variaveis-intro.html">Variáveis: o Básico</a>).</p>
+
+<pre class="term">$ echo $PWD
+/home/ana
+$ cd /etc
+$ echo "Estou em $PWD e antes estava em $OLDPWD"
+Estou em /etc e antes estava em /home/ana</pre>
+
+<dl class="anatomy">
+  <dt>$PWD</dt><dd>A pasta atual. É o que o <code>pwd</code> mostra.</dd>
+  <dt>$OLDPWD</dt><dd>A pasta anterior. É para onde o <code>cd -</code> vai.</dd>
+</dl>
+
+<p>Em scripts, <code>"$PWD"</code> é mais rápido que chamar <code>pwd</code>, e é muito usado para montar caminhos: <code>echo "Salvando em $PWD/backup"</code>.</p>
+
+<div class="note">
+<strong>Logo que o terminal abre, não existe "pasta anterior"</strong>
+<p>Num terminal novo, antes de qualquer <code>cd</code>, a variável <code>OLDPWD</code> está vazia, e o <code>cd -</code> reclama: <code>bash: cd: OLDPWD não definida</code>. Depois do primeiro <code>cd</code>, ele passa a funcionar.</p>
+</div>
+
+<hr>
+
+<h2>Pastas com espaço no nome</h2>
+<p>A Ana tem a pasta <code>Área de trabalho</code>. Veja o que acontece se ela digitar o nome sem cuidado:</p>
+
+<pre class="term">$ cd Área de trabalho
+bash: cd: número excessivo de argumentos
+$ echo $?
+2</pre>
+
+<p>O <strong>Bash separa as palavras nos espaços</strong> antes de chamar o comando. O <code>cd</code> recebeu <strong>três</strong> argumentos: <code>Área</code>, <code>de</code> e <code>trabalho</code>. Como ele só aceita um destino, reclamou. O código <code>2</code> indica "uso errado do comando".</p>
+
+<p>A solução é dizer ao Bash que o espaço faz parte do nome. Há três formas, e as três entregam ao <code>cd</code> um único argumento, <code>Área de trabalho</code>:</p>
+
+<pre class="term">$ cd 'Área de trabalho'                « aspas simples
+$ pwd
+/home/ana/Área de trabalho
+$ cd ..
+$ cd "Área de trabalho"                « aspas duplas
+$ cd ..
+$ cd Área\ de\ trabalho                « barra invertida antes de cada espaço</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td>Aspas simples</td><td><code>cd 'Área de trabalho'</code></td><td>O nome é fixo, sem variáveis.</td></tr>
+<tr><td>Aspas duplas</td><td><code>cd "$HOME/Área de trabalho"</code></td><td>O caminho tem uma variável (<code>$HOME</code>, <code>$pasta</code>).</td></tr>
+<tr><td>Barra invertida</td><td><code>cd Área\ de\ trabalho</code></td><td>É o que a tecla <kbd>Tab</kbd> escreve para você.</td></tr>
+<tr><td>Tecla Tab</td><td><code>cd Ár</code> + <kbd>Tab</kbd></td><td>Sempre que puder: completa o nome e já põe as barras. Veja <a href="completar.html">Completar com Tab</a>.</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>O til não funciona dentro de aspas</strong>
+<p>Entre aspas, o <code>~</code> é só um til. <code>cd "~/Documentos"</code> procura uma pasta chamada literalmente <code>~</code>, e dá erro. Deixe o til de fora das aspas: <code>cd ~/"Área de trabalho"</code>, ou use a variável <code>HOME</code>: <code>cd "$HOME/Área de trabalho"</code>.</p>
+</div>
+
+<p>O mesmo vale para variáveis. Se o nome da pasta está numa variável, ponha a variável entre aspas duplas, senão o Bash separa o valor nos espaços de novo:</p>
+
+<pre class="term">$ pasta="Área de trabalho"
+$ cd $pasta
+bash: cd: número excessivo de argumentos
+$ cd "$pasta" &amp;&amp; pwd
+/home/ana/Área de trabalho                « com aspas, deu certo</pre>
+
+<p>O <code>&amp;&amp;</code> no último comando quer dizer "se o <code>cd</code> deu certo, rode o <code>pwd</code>". Ele é explicado em <a href="operadores.html">; &amp;&amp; ||</a>.</p>
+
+<p>Aspas são o assunto de uma aula inteira: <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<div class="try" data-goal="cwd:~/Área de trabalho" data-solucao="cd 'Área de trabalho'">
+<p class="try-task"><strong>Missão:</strong> entre na pasta <code>Área de trabalho</code>. Primeiro tente sem aspas e leia o erro; depois faça do jeito certo e confira com <code>pwd</code>.</p>
+</div>
+
+<hr>
+
+<h2>A pilha de pastas: <code>pushd</code>, <code>popd</code> e <code>dirs</code></h2>
+<p>O <code>cd -</code> só lembra <strong>uma</strong> pasta. Quando você vai e volta entre várias, o Bash oferece uma <strong>pilha</strong>: uma lista em que você empilha pastas e depois desempilha na ordem contrária, como uma pilha de pratos.</p>
+
+<dl class="anatomy">
+  <dt>pushd PASTA</dt><dd><em>push directory</em>, "empurre a pasta": vai para <code>PASTA</code> e guarda a atual na pilha.</dd>
+  <dt>popd</dt><dd><em>pop directory</em>, "tire da pilha": volta para a pasta do topo da pilha.</dd>
+  <dt>dirs</dt><dd><em>directories</em>: mostra a pilha. A primeira é sempre a pasta atual.</dd>
+</dl>
+
+<pre class="term">$ pushd Documentos
+~/Documentos ~                                  « a pilha: atual primeiro, depois as guardadas
+$ pushd ~/Downloads
+~/Downloads ~/Documentos ~
+$ pushd /etc
+/etc ~/Downloads ~/Documentos ~
+$ dirs -v
+ 0  /etc                                         « -v: uma por linha, numeradas
+ 1  ~/Downloads
+ 2  ~/Documentos
+ 3  ~</pre>
+
+<p>Cada <code>pushd</code> mudou de pasta <strong>e</strong> mostrou a pilha inteira. Agora a Ana desempilha:</p>
+
+<pre class="term" data-cwd="/etc">$ popd
+~/Downloads ~/Documentos ~                       « voltou para Downloads
+$ popd
+~/Documentos ~
+$ popd
+~                                                « de volta em casa
+$ popd
+bash: popd: pilha de diretórios está vazia
+$ echo $?
+1</pre>
+
+<p>O prompt deste guia não acompanha o <code>pushd</code>/<code>popd</code>, mas no seu terminal ele acompanha: depois de cada <code>popd</code> você está na pasta que aparece primeiro na lista.</p>
+
+<p>Um truque útil: <code>pushd</code> sem argumento <strong>troca</strong> as duas primeiras pastas da pilha, como um <code>cd -</code> que não esquece o resto.</p>
+
+<p>Em scripts, a pilha impressa a cada comando atrapalha. Mande a saída para <code>/dev/null</code> (veja <a href="redirecionamento.html">Redirecionamento</a>):</p>
+
+<pre class="term">$ pushd ~/Documentos &gt; /dev/null
+$ dirs
+~/Documentos ~</pre>
+
+<div class="try" data-setup="cd Downloads" data-goal="cwd:~/Downloads,ran:^\s*pushd\b,ran:^\s*popd\b" data-solucao="pushd ~/Documentos/projetos;;popd">
+<p class="try-task"><strong>Missão:</strong> você está em <code>Downloads</code>. Use <code>pushd</code> para ir até <code>~/Documentos/projetos</code>, olhe o que tem lá com <code>ls</code>, e volte para <code>Downloads</code> com <code>popd</code>.</p>
+</div>
+
+<hr>
+
+<h2>CDPATH: atalhos para as pastas que você mais usa</h2>
+<p>A variável <code>CDPATH</code> é uma lista de pastas, separadas por <code>:</code>, onde o <code>cd</code> procura quando você dá um nome <strong>relativo</strong> que não existe na pasta atual. É como dizer ao <code>cd</code>: "se não achar aqui, procure também ali".</p>
+
+<pre class="term">$ CDPATH=:~/Documentos/projetos
+$ cd site
+/home/ana/Documentos/projetos/site               « achou pelo CDPATH, e avisou</pre>
+
+<dl class="anatomy">
+  <dt>CDPATH=</dt><dd>Cria a variável (sem espaços em volta do <code>=</code>).</dd>
+  <dt>:</dt><dd>Um item vazio no começo da lista quer dizer "a pasta atual". Assim o <code>cd</code> continua achando primeiro o que está aqui.</dd>
+  <dt>~/Documentos/projetos</dt><dd>Onde mais procurar.</dd>
+</dl>
+
+<p>Quando o <code>cd</code> encontra a pasta por meio do <code>CDPATH</code>, ele mostra o caminho completo, como o <code>cd -</code>, para você saber onde caiu. Para desligar, use <code>unset CDPATH</code>.</p>
+
+<div class="warning">
+<strong>Use só no terminal, nunca em scripts</strong>
+<p>Com <code>CDPATH</code> ligado, <code>cd site</code> pode levar a um lugar que você não esperava, e ainda imprime o caminho na tela. Se você colocar no <code>~/.bashrc</code>, não use <code>export</code>: assim ele vale só para o terminal e não "vaza" para os scripts. Caminhos que começam com <code>/</code>, <code>./</code> ou <code>../</code> ignoram o <code>CDPATH</code>.</p>
+</div>
+
+<hr>
+
+<h2>Formas de voltar: qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Para onde vai</th><th>Melhor quando…</th></tr>
+<tr><td><code>cd</code> ou <code>cd ~</code></td><td>A pasta pessoal</td><td>Você se perdeu ou quer "voltar para casa".</td></tr>
+<tr><td><code>cd ..</code></td><td>A pasta de cima</td><td>Subir um nível na árvore.</td></tr>
+<tr><td><code>cd -</code></td><td>A pasta anterior</td><td>Alternar entre duas pastas.</td></tr>
+<tr><td><code>pushd</code> / <code>popd</code></td><td>A pasta guardada na pilha</td><td>Visitar várias pastas e voltar na ordem.</td></tr>
+<tr><td><code>cd /caminho/completo</code></td><td>Exatamente aquele lugar</td><td>Scripts, ou quando você não sabe onde está.</td></tr>
+<tr><td><code>cd ~/pasta</code></td><td>Uma pasta dentro da sua pasta pessoal</td><td>Ir direto, de qualquer lugar.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ cd Documento
+bash: cd: Documento: Arquivo ou diretório inexistente</pre>
+<pre class="term">$ echo $?
+1                                        « 1: falhou, e você continua na mesma pasta</pre>
+<p><strong>O que aconteceu:</strong> não existe pasta com esse nome <strong>a partir de onde você está</strong>. As três causas mais comuns: erro de digitação (<code>Documento</code> sem o "s"), maiúscula/minúscula trocada (<code>documentos</code> e <code>Documentos</code> são nomes diferentes no Linux), ou você está em outra pasta e o caminho relativo não vale dali. Um acento esquecido também conta: <code>Musica</code> não é <code>Música</code>.</p>
+<p><strong>Como confirmar:</strong> rode <code>pwd</code> para ver onde está, e <code>ls</code> para ver os nomes exatos que existem aqui.</p>
+<p><strong>Como resolver:</strong> corrija o nome, use um caminho absoluto (<code>cd ~/Documentos</code>), ou digite as primeiras letras e aperte <kbd>Tab</kbd>: se a tecla não completar, o nome está errado.</p>
+</div>
+
+<div class="cenario">
+<strong>"Não é um diretório"</strong>
+<pre class="term">$ cd frutas.txt
+bash: cd: frutas.txt: Não é um diretório</pre>
+<pre class="term">$ cd ~/Documentos/projetos/backup.sh
+bash: cd: /home/ana/Documentos/projetos/backup.sh: Não é um diretório</pre>
+<p><strong>O que aconteceu:</strong> o nome existe, mas é um <strong>arquivo</strong>, não uma pasta. Não dá para "entrar" num arquivo. Repare que, no segundo exemplo, a mensagem mostra o caminho já com o <code>~</code> trocado: é o que o <code>cd</code> recebeu do Bash.</p>
+<p><strong>Como resolver:</strong> para ver o conteúdo de um arquivo, use <code>cat</code> ou <code>less</code> (veja <a href="ver-arquivos.html">Ver Arquivos</a>). Para saber se um nome é pasta ou arquivo, use <code>ls -l</code>: pastas começam com <code>d</code> (veja <a href="ls.html">Listar</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada"</strong>
+<pre class="term">$ cd /root
+bash: cd: /root: Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> a pasta existe, mas a Ana não tem permissão para entrar nela (o código de saída é <code>1</code>). <code>/root</code> é a pasta pessoal do administrador.</p>
+<p><strong>Como confirmar:</strong> <code>ls -ld /root</code> mostra as permissões da pasta (sem o <code>-d</code>, o <code>ls</code> tentaria listar o conteúdo e daria o mesmo erro).</p>
+<p><strong>Como resolver:</strong> se a pasta é sua e você tirou a permissão sem querer, devolva com <code>chmod u+x pasta</code> (o "x" numa pasta é a permissão de entrar). Se é do sistema, você provavelmente não precisa entrar nela.</p>
+</div>
+
+<div class="cenario">
+<strong>"número excessivo de argumentos"</strong>
+<pre class="term">$ cd Documentos Downloads
+bash: cd: número excessivo de argumentos
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> o <code>cd</code> recebeu mais de um destino. Quase sempre é um nome com espaço sem aspas (<code>cd Área de trabalho</code>) ou uma variável sem aspas (<code>cd $pasta</code>).</p>
+<p><strong>Como resolver:</strong> ponha o nome entre aspas: <code>cd "Área de trabalho"</code>, <code>cd "$pasta"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O til entre aspas</strong>
+<pre class="term">$ cd "~/Documentos"
+bash: cd: ~/Documentos: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o Bash só troca o <code>~</code> por <code>/home/ana</code> quando ele está <strong>fora</strong> das aspas. O <code>cd</code> recebeu o til literal.</p>
+<p><strong>Como resolver:</strong> <code>cd ~/Documentos</code> (sem aspas) ou <code>cd "$HOME/Documentos"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"diretório nulo" e a variável vazia</strong>
+<pre class="term" data-cwd="~/Documentos">$ pasta=
+$ cd "$pasta"
+bash: cd: diretório nulo</pre>
+<pre class="term" data-cwd="~/Documentos">$ cd $pasta &amp;&amp; pwd
+/home/ana                                « sem aspas, o cd não recebeu nada e foi para casa</pre>
+<p><strong>O que aconteceu:</strong> a variável estava vazia. Com aspas, o <code>cd</code> recebeu um argumento vazio e recusou. Sem aspas, o argumento vazio <strong>sumiu</strong>, o <code>cd</code> rodou sem argumento e foi para a pasta pessoal, sem avisar nada.</p>
+<p><strong>Como resolver:</strong> confira a variável com <code>echo "[$pasta]"</code>. Esse tipo de surpresa é perigoso com comandos que apagam arquivos; veja <a href="remover.html">Apagar com Segurança</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"OLDPWD não definida" e "pilha de diretórios está vazia"</strong>
+<pre class="term">$ cd -
+bash: cd: OLDPWD não definida
+$ popd
+bash: popd: pilha de diretórios está vazia</pre>
+<p><strong>O que aconteceu:</strong> no primeiro caso, você ainda não tinha mudado de pasta nesse terminal, então não existe "anterior". No segundo, você deu mais <code>popd</code> do que <code>pushd</code>.</p>
+<p><strong>Como resolver:</strong> nada a corrigir; use <code>cd</code> com um caminho. Para ver a pilha antes de desempilhar, use <code>dirs -v</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Não apareceu nada"</strong>
+<p>O <code>cd</code> que dá certo é silencioso (menos <code>cd -</code> e o <code>cd</code> que usa o <code>CDPATH</code>). Se você não tem certeza de que funcionou, olhe o prompt, rode <code>pwd</code> ou confira <code>echo $?</code> logo depois: <code>0</code> quer dizer que deu certo.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>pwd</code></td><td>Mostra a pasta atual (caminho absoluto)</td></tr>
+<tr><td><code>pwd -P</code></td><td>Mostra o caminho "físico", resolvendo atalhos (links simbólicos)</td></tr>
+<tr><td><code>cd PASTA</code></td><td>Vai para <code>PASTA</code> (absoluto ou relativo)</td></tr>
+<tr><td><code>cd</code> / <code>cd ~</code></td><td>Vai para a pasta pessoal (<code>$HOME</code>)</td></tr>
+<tr><td><code>cd ..</code></td><td>Sobe um nível</td></tr>
+<tr><td><code>cd -</code></td><td>Vai para a pasta anterior (<code>$OLDPWD</code>) e mostra o caminho</td></tr>
+<tr><td><code>cd -P PASTA</code></td><td>Entra resolvendo links simbólicos (o <code>pwd</code> mostra o caminho real)</td></tr>
+<tr><td><code>$PWD</code> / <code>$OLDPWD</code></td><td>Variáveis com a pasta atual / anterior</td></tr>
+<tr><td><code>pushd PASTA</code></td><td>Vai para <code>PASTA</code> e guarda a atual na pilha</td></tr>
+<tr><td><code>pushd</code></td><td>Troca as duas primeiras pastas da pilha</td></tr>
+<tr><td><code>popd</code></td><td>Volta para a pasta do topo da pilha</td></tr>
+<tr><td><code>dirs</code> / <code>dirs -v</code> / <code>dirs -c</code></td><td>Mostra a pilha / numerada / esvazia a pilha</td></tr>
+<tr><td><code>CDPATH=:~/pasta</code></td><td>Lista extra de lugares onde o <code>cd</code> procura nomes relativos</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Subir dois níveis</h3>
+<p>A Ana está em <code>~/Documentos/projetos/site</code>. Complete para ela ir direto para <code>~/Documentos</code>, com caminho relativo:</p>
+<div class="ex-code">cd <input data-answer="../..|../../" aria-label="caminho"></div>
+</div>
+
+<div class="exercise">
+<h3>2. A pasta vizinha</h3>
+<p>Ela está em <code>~/Documentos</code> e quer ir para <code>~/Imagens</code> usando <code>..</code>. Complete:</p>
+<div class="ex-code">cd <input data-answer="../Imagens|../Imagens/" aria-label="caminho"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Nome com espaço</h3>
+<p>Complete para entrar na pasta <code>Área de trabalho</code> usando aspas duplas:</p>
+<div class="ex-code">cd <input data-answer="&quot;Área de trabalho&quot;" aria-label="pasta"></div>
+</div>
+
+<div class="exercise">
+<h3>4. Qual variável?</h3>
+<p>Complete para mostrar a pasta em que a Ana estava <strong>antes</strong> do último <code>cd</code>:</p>
+<div class="ex-code">echo $<input data-answer="OLDPWD|{OLDPWD}" aria-label="variável"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. A Ana está em <code>/etc</code>. Qual destes comandos <strong>não</strong> leva ela para <code>/home/ana/Downloads</code>?</p>
+<label><input type="radio" name="q5"> <code>cd ~/Downloads</code></label>
+<label><input type="radio" name="q5"> <code>cd Downloads</code></label>
+<label><input type="radio" name="q5"> <code>cd /home/ana/Downloads</code></label>
+<label><input type="radio" name="q5"> <code>cd "$HOME/Downloads"</code></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">6. Por que <code>cd</code> precisa ser um comando interno do Bash, e não um programa separado?</p>
+<label><input type="radio" name="q6"> Porque é mais rápido.</label>
+<label><input type="radio" name="q6"> Porque só o root pode instalar programas.</label>
+<label><input type="radio" name="q6"> Porque um programa separado só mudaria a pasta do próprio processo, não a do Bash.</label>
+<label><input type="radio" name="q6"> Porque o <code>cd</code> precisa ler o <code>CDPATH</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">7. O que o Bash faz com <code>cd Área de trabalho</code> (sem aspas)?</p>
+<label><input type="radio" name="q7"> Passa três argumentos ao <code>cd</code>, que reclama "número excessivo de argumentos".</label>
+<label><input type="radio" name="q7"> Entra na pasta <code>Área de trabalho</code> normalmente.</label>
+<label><input type="radio" name="q7"> Entra na pasta <code>Área</code> e ignora o resto.</label>
+<label><input type="radio" name="q7"> Cria a pasta <code>Área de trabalho</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>pwd</code> mostra onde você está; o prompt mostra o mesmo, com <code>~</code> no lugar de <code>/home/ana</code>.</li>
+  <li>Caminho absoluto começa com <code>/</code> e vale de qualquer lugar; relativo parte da pasta atual.</li>
+  <li><code>..</code> é a pasta de cima, <code>.</code> é esta, <code>~</code> é a pessoal, <code>cd</code> sozinho volta para casa, <code>cd -</code> volta para a anterior.</li>
+  <li>O <code>cd</code> é interno do Bash e atualiza <code>$PWD</code> e <code>$OLDPWD</code>; um <code>cd</code> dentro de um script não muda o seu terminal.</li>
+  <li>Nome com espaço: aspas ou <kbd>Tab</kbd>. Til fora das aspas. Variável sempre entre aspas duplas.</li>
+  <li><code>pushd</code>/<code>popd</code> guardam várias pastas numa pilha; <code>CDPATH</code> cria atalhos (só no terminal).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
