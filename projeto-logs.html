@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto Relatório de Logs — contar acessos com Bash e awk | Guia Bash</title>
+<meta name="description" content="Projeto passo a passo: um script Bash que lê o log de acesso de um servidor web e mostra total, acessos por IP, por código HTTP, páginas mais acessadas e por hora, com saída formatada por printf, opção CSV, gerador de log de teste e comparação entre Bash puro e awk/sort/uniq.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Relatório de Logs</span></h1>
+
+<p class="intro">Todo servidor web anota cada visita num <strong>log de acesso</strong>: quem pediu (o IP), quando, qual página e o que o servidor respondeu (o código HTTP). Ler isso linha por linha é impossível quando são milhares. Neste projeto você escreve um script que transforma o log num relatório: quantos acessos, de quem, quais páginas, quais erros, em que horários. E faz a mesma conta de dois jeitos, em Bash puro e com <code>awk</code>/<code>sort</code>/<code>uniq</code>, para saber quando usar cada um.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Um script <code>relatorio.sh</code> que lê <code>~/Documentos/acesso.log</code> (ou outro log) e mostra tabelas com quantidade, porcentagem e uma barra.</li>
+  <li>A opção <code>-c</code> para gerar CSV (abre em qualquer planilha) e <code>-t N</code> para o "top N" de páginas.</li>
+  <li>A opção <code>-g N</code>, que <strong>inventa</strong> um log de teste com N linhas, para você testar com volume.</li>
+  <li>Uma comparação medida entre Bash puro e <code>awk</code>.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>1h15</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>, <a href="arrays-associativos.html">Arrays Associativos</a>, <a href="printf.html">printf</a>, <a href="pipes.html">Pipes</a>, <a href="ferramentas-texto.html">grep, sed, awk e cia.</a>. A etapa 6 usa <a href="getopts.html">getopts</a>.</td></tr>
+<tr><td>Onde roda</td><td>Nas caixas "Experimente" (o simulador tem o <code>acesso.log</code> da Ana) e no seu computador. As sessões desta página foram feitas no Bash 5.3 real.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Antes de programar: como é uma linha do log</h2>
+<p>O arquivo <code>~/Documentos/acesso.log</code> tem 6 linhas neste formato (é uma versão simplificada do <em>Common Log Format</em>, o formato do Apache e do nginx):</p>
+<pre class="term">$ head -1 Documentos/acesso.log
+192.168.0.10 - - [15/Oct/2026:09:01:12] "GET / HTTP/1.1" 200</pre>
+
+<p>Separando pelos espaços, como o <code>read</code> e o <code>awk</code> fazem, cada linha tem 8 <strong>campos</strong>:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Campo</th><th>Exemplo</th><th>O que é</th></tr>
+<tr><td>1</td><td><code>192.168.0.10</code></td><td>O IP de quem acessou.</td></tr>
+<tr><td>2 e 3</td><td><code>- -</code></td><td>Identidade e usuário (quase sempre vazios, viram <code>-</code>).</td></tr>
+<tr><td>4</td><td><code>[15/Oct/2026:09:01:12]</code></td><td>Data e hora, entre colchetes. A hora começa na posição 13.</td></tr>
+<tr><td>5</td><td><code>"GET</code></td><td>O método (GET = pedir uma página; POST = enviar um formulário), com a aspa grudada.</td></tr>
+<tr><td>6</td><td><code>/</code></td><td>A página pedida.</td></tr>
+<tr><td>7</td><td><code>HTTP/1.1"</code></td><td>A versão do protocolo.</td></tr>
+<tr><td>8</td><td><code>200</code></td><td>O código de resposta: 200 = OK, 304 = não mudou, 403 = proibido, 404 = não encontrado, 500 = erro do servidor.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Etapa 1 — Ler cada linha em campos</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o <code>while read</code> lê uma linha por volta e, se você der vários nomes, divide a linha entre eles. É a base de tudo: depois que cada campo tem um nome, contar é fácil.</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+# relatorio.sh — versão 1: ler cada linha em campos
+log=${1:-$HOME/Documentos/acesso.log}
+total=0
+while read -r ip _ _ data _ pagina _ codigo; do
+  total=$(( total + 1 ))
+  echo "ip=$ip hora=${data:13:8} pagina=$pagina codigo=$codigo"
+done &lt; "$log"
+echo "total: $total acessos"
+</pre>
+
+<dl class="anatomy">
+  <dt>while read -r</dt><dd>Lê uma linha por volta; o <code>-r</code> não deixa a barra invertida ser interpretada. Veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</dd>
+  <dt>ip _ _ data _ pagina _ codigo</dt><dd>Um nome por campo. O <code>_</code> é uma variável "lixeira" para os campos que não interessam. O <strong>último</strong> nome recebe todo o resto da linha (aqui só há o código).</dd>
+  <dt>done &lt; "$log"</dt><dd>O arquivo entra pela entrada padrão do laço inteiro (e não do <code>read</code> sozinho, que leria só a primeira linha para sempre).</dd>
+  <dt>${data:13:8}</dt><dd>Fatia de texto: a partir da posição 13 (contando do 0), 8 caracteres: <code>09:01:12</code>. Veja <a href="strings.html">Manipular Strings</a>.</dd>
+</dl>
+
+<pre class="term">$ ./relatorio.sh
+ip=192.168.0.10 hora=09:01:12 pagina=/ codigo=200
+ip=192.168.0.23 hora=09:01:40 pagina=/contato codigo=200
+ip=192.168.0.10 hora=09:02:03 pagina=/admin codigo=403
+ip=192.168.0.57 hora=09:05:19 pagina=/fotos codigo=404
+ip=192.168.0.10 hora=09:06:44 pagina=/login codigo=200
+ip=192.168.0.23 hora=09:07:02 pagina=/ codigo=200
+total: 6 acessos</pre>
+<p>Cada linha do log virou uma linha com os campos nomeados. Se um campo saiu errado (por exemplo, <code>pagina=HTTP/1.1"</code>), conte de novo os nomes do <code>read</code>: um a mais ou a menos desloca tudo.</p>
+
+<div class="tryscript" data-file="erros.sh" data-goal="out:erros 404: 1,out:erros 403: 1">
+<p class="try-task"><strong>Missão:</strong> além do total, conte quantas linhas têm código <code>404</code> e quantas têm <code>403</code>, e mostre <code>erros 404: 1</code> e <code>erros 403: 1</code> no final.</p>
+<pre class="script">#!/usr/bin/env bash
+log=~/Documentos/acesso.log
+total=0
+while read -r ip _ _ data _ pagina _ codigo; do
+  total=$(( total + 1 ))
+done &lt; "$log"
+echo "total: $total acessos"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+log=~/Documentos/acesso.log
+total=0
+e404=0
+e403=0
+while read -r ip _ _ data _ pagina _ codigo; do
+  total=$(( total + 1 ))
+  if [[ $codigo == 404 ]]; then e404=$(( e404 + 1 )); fi
+  if [[ $codigo == 403 ]]; then e403=$(( e403 + 1 )); fi
+done &lt; "$log"
+echo "total: $total acessos"
+echo "erros 404: $e404"
+echo "erros 403: $e403"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 2 — Contar por IP com um array associativo</h3>
+<p><strong>O que vamos fazer e por quê:</strong> uma variável por código funciona na missão anterior, mas não para IPs: não sabemos de antemão quais vão aparecer. Um <strong>array associativo</strong> cria uma "gaveta" para cada IP novo na hora em que ele aparece. Veja <a href="arrays-associativos.html">Arrays Associativos</a>.</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+# relatorio.sh — versão 2: contar por IP
+set -euo pipefail
+log=${1:-$HOME/Documentos/acesso.log}
+declare -A por_ip
+total=0
+while read -r ip _ _ data _ pagina _ codigo; do
+  (( ++total ))
+  por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))
+done &lt; "$log"
+echo "total: $total acessos"
+for ip in "${!por_ip[@]}"; do
+  echo "${por_ip[$ip]} $ip"
+done | sort -rn
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>set -euo pipefail</code></td><td>O modo estrito do projeto de backup. Aqui ele vai nos ensinar uma armadilha (veja abaixo). Veja <a href="modo-estrito.html">set -euo pipefail</a>.</td></tr>
+<tr><td><code>declare -A por_ip</code></td><td>Cria o array associativo (índice = texto).</td></tr>
+<tr><td><code>(( ++total ))</code></td><td>Soma 1. Com <code>++</code> <strong>antes</strong>, o resultado é o valor novo (1, 2, 3…), nunca 0, então o <code>set -e</code> não o confunde com uma falha.</td></tr>
+<tr><td><code>por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))</code></td><td>"O valor atual (ou 0, se a gaveta ainda não existe) mais 1."</td></tr>
+<tr><td><code>for ip in "${!por_ip[@]}"</code></td><td>Percorre as <strong>chaves</strong> (os IPs). O <code>!</code> pede as chaves em vez dos valores.</td></tr>
+<tr><td><code>done | sort -rn</code></td><td>A saída do laço inteiro passa pelo <code>sort</code>: <code>-n</code> numérico, <code>-r</code> do maior para o menor. O Bash conta; o <code>sort</code> ordena.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./relatorio.sh
+total: 6 acessos
+3 192.168.0.10
+2 192.168.0.23
+1 192.168.0.57
+$ echo $?
+0</pre>
+
+<div class="cenario">
+<strong>"por_ip: variável não associada" com <code>(( por_ip[$ip]++ ))</code></strong>
+<p>A forma mais curta de contar seria <code>(( por_ip[$ip]++ ))</code>. Com o modo estrito, ela quebra:</p>
+<pre class="term">$ ./relatorio.sh
+./relatorio.sh: linha 9: por_ip: variável não associada
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o <code>set -u</code> proíbe ler uma posição que não existe, e na primeira vez a gaveta do IP não existe. (Com <code>++por_ip[$ip]</code> acontece o mesmo.) Sem o <code>-u</code>, o <code>(( x++ ))</code> ainda teria outro problema com o <code>-e</code>: ele devolve o valor <strong>antigo</strong>, 0 na primeira vez, e <code>(( 0 ))</code> é "falso", o que derruba o script. <strong>Como resolver:</strong> a forma com <code>${…:-0}</code> funciona em qualquer modo. Veja <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+</div>
+
+<div class="tryscript" data-file="por-codigo.sh" data-goal="out:4 200,out:1 404">
+<p class="try-task"><strong>Missão:</strong> o script conta por IP. Mude-o para contar por <strong>código HTTP</strong> (a resposta deve ter a linha <code>4 200</code>).</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+log=~/Documentos/acesso.log
+declare -A por_ip
+while read -r ip _ _ data _ pagina _ codigo; do
+  por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))
+done &lt; "$log"
+for ip in "${!por_ip[@]}"; do
+  echo "${por_ip[$ip]} $ip"
+done | sort -rn
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+log=~/Documentos/acesso.log
+declare -A por_codigo
+while read -r ip _ _ data _ pagina _ codigo; do
+  por_codigo[$codigo]=$(( ${por_codigo[$codigo]:-0} + 1 ))
+done &lt; "$log"
+for c in "${!por_codigo[@]}"; do
+  echo "${por_codigo[$c]} $c"
+done | sort -rn
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 3 — Todas as contagens numa passada só</h3>
+<p><strong>O que vamos fazer e por quê:</strong> com o mesmo laço contamos quatro coisas ao mesmo tempo: IP, código, página e hora. Ler o arquivo <strong>uma vez só</strong> é o que deixa o script rápido. E, para não repetir o laço de impressão quatro vezes, uma função recebe o <strong>nome</strong> do array.</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+# relatorio.sh — versão 3: todas as contagens
+set -euo pipefail
+log=${1:-$HOME/Documentos/acesso.log}
+top=5
+declare -A por_ip por_codigo por_pagina por_hora
+total=0
+while read -r ip _ _ data _ pagina _ codigo; do
+  (( ++total ))
+  por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))
+  por_codigo[$codigo]=$(( ${por_codigo[$codigo]:-0} + 1 ))
+  por_pagina[$pagina]=$(( ${por_pagina[$pagina]:-0} + 1 ))
+  por_hora[${data:13:2}h]=$(( ${por_hora[${data:13:2}h]:-0} + 1 ))
+done &lt; "$log"
+
+# imprime "quantidade chave" de um array associativo (nome em $1)
+listar() {
+  local -n arr=$1
+  local k
+  for k in "${!arr[@]}"; do
+    printf '%d %s\n' "${arr[$k]}" "$k"
+  done
+}
+
+echo "== $total acessos =="
+echo "-- por IP";     listar por_ip     | sort -k1,1nr -k2
+echo "-- por código"; listar por_codigo | sort -k2
+echo "-- páginas";    listar por_pagina | sort -k1,1nr -k2 | head -n "$top"
+echo "-- por hora";   listar por_hora   | sort -k2
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>declare -A por_ip por_codigo …</code></td><td>Quatro arrays associativos numa linha.</td></tr>
+<tr><td><code>por_hora[${data:13:2}h]</code></td><td>A chave é a hora, <code>09</code>, com um <code>h</code> colado: <code>09h</code>.</td></tr>
+<tr><td><code>local -n arr=$1</code></td><td>Um <strong>nameref</strong>: <code>arr</code> passa a ser um apelido do array cujo nome veio em <code>$1</code>. <code>listar por_ip</code> faz <code>arr</code> = <code>por_ip</code>. Veja <a href="eval-indirecao.html">eval, Indireção e nameref</a>. <span class="versao">bash 4.3+</span></td></tr>
+<tr><td><code>sort -k1,1nr -k2</code></td><td>Ordena pela coluna 1 numérica decrescente; no empate, pela coluna 2 (o nome), em ordem alfabética. Sem o desempate, a ordem dos empatados mudaria de uma execução para outra.</td></tr>
+<tr><td><code>sort -k2</code></td><td>Códigos e horas ficam melhores em ordem da chave (<code>200, 403, 404</code>; <code>08h, 09h…</code>).</td></tr>
+<tr><td><code>head -n "$top"</code></td><td>Só as primeiras <code>$top</code> linhas: o "top 5".</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./relatorio.sh
+== 6 acessos ==
+-- por IP
+3 192.168.0.10
+2 192.168.0.23
+1 192.168.0.57
+-- por código
+4 200
+1 403
+1 404
+-- páginas
+2 /
+1 /admin
+1 /contato
+1 /fotos
+1 /login
+-- por hora
+6 09h</pre>
+<p>O log da Ana é todo das 9h, então "por hora" tem uma linha só. Na etapa 5 vamos gerar um log do dia inteiro.</p>
+
+<div class="tryscript" data-file="paginas.sh" data-goal="out:2 /,src:head -n ?2|head -2">
+<p class="try-task"><strong>Missão:</strong> o script lista todas as páginas, da mais para a menos acessada. Mostre só as <strong>2</strong> primeiras, acrescentando um <code>head</code> no fim do pipe.</p>
+<pre class="script">#!/usr/bin/env bash
+declare -A por_pagina
+while read -r ip _ _ data _ pagina _ codigo; do
+  por_pagina[$pagina]=$(( ${por_pagina[$pagina]:-0} + 1 ))
+done &lt; ~/Documentos/acesso.log
+for p in "${!por_pagina[@]}"; do
+  echo "${por_pagina[$p]} $p"
+done | sort -rn
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+declare -A por_pagina
+while read -r ip _ _ data _ pagina _ codigo; do
+  por_pagina[$pagina]=$(( ${por_pagina[$pagina]:-0} + 1 ))
+done &lt; ~/Documentos/acesso.log
+for p in "${!por_pagina[@]}"; do
+  echo "${por_pagina[$p]} $p"
+done | sort -rn | head -n 2
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 4 — Saída formatada com <code>printf</code></h3>
+<p><strong>O que vamos fazer e por quê:</strong> "3 192.168.0.10" serve para o computador, mas um relatório para gente precisa de colunas alinhadas, porcentagem e, de preferência, algo visual. Uma função <code>tabela</code> lê as linhas "quantidade chave" e desenha cada uma assim:</p>
+<pre class="term">  192.168.0.10          3  50%  ##############################</pre>
+
+<p>Os quatro truques de <code>printf</code> e de aritmética que ela usa, testados um por um:</p>
+<pre class="term">$ printf "%-16s %5d\n" 192.168.0.10 3
+192.168.0.10         3
+$ printf "%3d%%\n" 17
+ 17%
+$ total=6 qtd=1; echo $(( qtd * 100 / total )) $(( (qtd * 100 + total / 2) / total ))
+16 17
+$ printf -v barra "%*s" 5 ""; echo "[$barra]" "[${barra// /#}]"
+[     ] [#####]</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Truque</th><th>O que faz</th></tr>
+<tr><td><code>%-16s</code></td><td>Texto em 16 colunas, alinhado à esquerda (o <code>-</code>). Sem o <code>-</code>, à direita. Veja <a href="printf.html">printf</a>.</td></tr>
+<tr><td><code>%5d</code></td><td>Número inteiro em 5 colunas, alinhado à direita: as unidades ficam umas embaixo das outras.</td></tr>
+<tr><td><code>%%</code></td><td>Um <code>%</code> de verdade (sozinho, ele iniciaria um formato).</td></tr>
+<tr><td><code>(qtd * 100 + total / 2) / total</code></td><td>O Bash só faz contas com inteiros e <strong>trunca</strong>: 100/6 = 16,67 vira 16. Somar metade do divisor antes de dividir faz <strong>arredondar</strong>: 17. Veja <a href="aritmetica.html">Contas</a>.</td></tr>
+<tr><td><code>printf -v barra '%*s' N ''</code></td><td>Guarda em <code>barra</code> (o <code>-v</code>) um texto vazio alinhado em N colunas, isto é, N espaços. O <code>*</code> pega a largura do argumento seguinte.</td></tr>
+<tr><td><code>${barra// /#}</code></td><td>Troca todos os espaços por <code>#</code>. Veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</td></tr>
+</table>
+</div>
+
+<p>A função completa. Ela guarda as linhas num array (com <code>mapfile</code>) porque precisa passar por elas duas vezes: a primeira para achar o maior valor, que vira a barra cheia de 30 <code>#</code>; a segunda para imprimir.</p>
+<pre class="file" data-file="relatorio.sh (função nova da versão 4)"># lê linhas "quantidade chave" e mostra como tabela (ou CSV, com -c)
+tabela() {
+  local titulo=$1 linha qtd chave maior=1 barra
+  local -a linhas
+  mapfile -t linhas
+  if (( csv )); then
+    for linha in "${linhas[@]}"; do
+      printf '%s,%s,%d\n' "$titulo" "${linha#* }" "${linha%% *}"
+    done
+    return
+  fi
+  for linha in "${linhas[@]}"; do
+    qtd=${linha%% *}
+    if (( qtd &gt; maior )); then maior=$qtd; fi
+  done
+  printf '\n%s\n' "$titulo"
+  for linha in "${linhas[@]}"; do
+    qtd=${linha%% *}
+    chave=${linha#* }
+    printf -v barra '%*s' $(( qtd * 30 / maior )) ''
+    printf '  %-16s %6d %3d%%  %s\n' "$chave" "$qtd" \
+      $(( (qtd * 100 + total / 2) / total )) "${barra// /#}"
+  done
+}
+</pre>
+
+<dl class="anatomy">
+  <dt>mapfile -t linhas</dt><dd>Lê a entrada padrão inteira para o array <code>linhas</code>, uma linha por item, sem o <code>\n</code> (<code>-t</code>). Veja <a href="mapfile.html">mapfile</a>.</dd>
+  <dt>${linha%% *}</dt><dd>Apaga do primeiro espaço até o fim: sobra a quantidade.</dd>
+  <dt>${linha#* }</dt><dd>Apaga do começo até o primeiro espaço: sobra a chave (mesmo que ela tenha espaços).</dd>
+  <dt>if (( qtd &gt; maior )); then …; fi</dt><dd>Guarda o maior valor. Usamos <code>if</code>, e não <code>(( … )) &amp;&amp; maior=…</code>, porque com <code>set -e</code> um <code>&amp;&amp;</code> falso na última linha de uma função faz a função "falhar".</dd>
+</dl>
+
+<p>E o final do script passa a usar a função:</p>
+<pre class="file" data-file="relatorio.sh (final da versão 4)">echo "Relatório de ${log##*/}: $total acessos"
+listar por_ip      | sort -k1,1nr -k2 | tabela "Acessos por IP"
+listar por_codigo  | sort -k2         | tabela "Códigos HTTP"
+listar por_pagina  | sort -k1,1nr -k2 | head -n "$top" | tabela "Páginas mais acessadas"
+listar por_hora    | sort -k2         | tabela "Acessos por hora"</pre>
+
+<pre class="term">$ ./relatorio.sh
+Relatório de acesso.log: 6 acessos
+
+Acessos por IP
+  192.168.0.10          3  50%  ##############################
+  192.168.0.23          2  33%  ####################
+  192.168.0.57          1  17%  ##########
+
+Códigos HTTP
+  200                   4  67%  ##############################
+  403                   1  17%  #######
+  404                   1  17%  #######
+
+Páginas mais acessadas
+  /                     2  33%  ##############################
+  /admin                1  17%  ###############
+  /contato              1  17%  ###############
+  /fotos                1  17%  ###############
+  /login                1  17%  ###############
+
+Acessos por hora
+  09h                   6 100%  ##############################</pre>
+<p>Em cada tabela, a maior quantidade ganha 30 <code>#</code> e as outras, uma barra proporcional. A porcentagem é sempre sobre o total de acessos (6). Repare que as porcentagens arredondadas nem sempre somam 100 (50 + 33 + 17 = 100, mas 67 + 17 + 17 = 101): é o preço de arredondar cada uma.</p>
+
+<div class="tryscript" data-file="tabela.sh" data-goal="out:192.168.0.10         3">
+<p class="try-task"><strong>Missão:</strong> as colunas estão desalinhadas. Troque o <code>printf</code> para mostrar o IP em 16 colunas à esquerda e a quantidade em 5 colunas à direita (<code>'%-16s %5d\n'</code>).</p>
+<pre class="script">#!/usr/bin/env bash
+declare -A por_ip
+while read -r ip _; do
+  por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))
+done &lt; ~/Documentos/acesso.log
+for ip in "${!por_ip[@]}"; do
+  printf '%s %d\n' "$ip" "${por_ip[$ip]}"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+declare -A por_ip
+while read -r ip _; do
+  por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))
+done &lt; ~/Documentos/acesso.log
+for ip in "${!por_ip[@]}"; do
+  printf '%-16s %5d\n' "$ip" "${por_ip[$ip]}"
+done
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 5 — Um log grande para testar, e a comparação com <code>awk</code></h3>
+<p><strong>O que vamos fazer e por quê:</strong> 6 linhas não testam nada. Logs de verdade têm milhares de linhas, e só com volume aparecem as perguntas importantes: o script aguenta? Quanto demora? Em vez de procurar um log real, o script vai <strong>inventar</strong> um, sorteando IPs, páginas, códigos e horários.</p>
+
+<pre class="file" data-file="relatorio.sh (função nova)">gerar() {
+  local n=$1 i ip pagina codigo metodo
+  local ips=(192.168.0.10 192.168.0.23 192.168.0.57 10.0.0.5 10.0.0.8 172.16.4.2)
+  local paginas=(/ / / /contato /fotos /blog /blog/bash /login /admin /favicon.ico)
+  local codigos=(200 200 200 200 200 200 304 404 403 500)
+  local horas=(08 09 09 10 10 10 11 11 12 14 14 15 15 15 16 16 17 18 19 20)
+  RANDOM=42                              # semente fixa: o mesmo log sempre
+  for (( i = 0; i &lt; n; i++ )); do
+    ip=${ips[RANDOM % ${#ips[@]}]}
+    pagina=${paginas[RANDOM % ${#paginas[@]}]}
+    codigo=${codigos[RANDOM % ${#codigos[@]}]}
+    metodo=GET
+    if [[ $pagina == /login ]]; then metodo=POST; fi
+    printf '%s - - [15/Oct/2026:%s:%02d:%02d] "%s %s HTTP/1.1" %s\n' \
+      "$ip" "${horas[RANDOM % ${#horas[@]}]}" $(( RANDOM % 60 )) $(( RANDOM % 60 )) \
+      "$metodo" "$pagina" "$codigo"
+  done | sort -k4,4
+}
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>local ips=(…) paginas=(…)</code></td><td>Listas de onde sortear. Itens repetidos pesam mais: <code>/</code> aparece 3 vezes em 10, o código <code>200</code> 6 vezes em 10, as 15h três vezes, as 12h uma vez (a hora do almoço é calma).</td></tr>
+<tr><td><code>RANDOM=42</code></td><td>Dar um valor ao <code>RANDOM</code> fixa a <strong>semente</strong>: a sequência de sorteios fica sempre a mesma, e o log gerado também. Ótimo para testes que precisam se repetir. Veja <a href="ref-variaveis.html">Variáveis Especiais</a>.</td></tr>
+<tr><td><code>${ips[RANDOM % ${#ips[@]}]}</code></td><td>Um item sorteado: o resto da divisão de um número aleatório pelo tamanho da lista dá uma posição válida (0 a 5).</td></tr>
+<tr><td><code>%02d</code></td><td>Número com 2 dígitos, completando com zero: <code>7</code> vira <code>07</code>.</td></tr>
+<tr><td><code>done | sort -k4,4</code></td><td>Os horários foram sorteados fora de ordem; ordenar pelo campo 4 (<code>[15/Oct/2026:08:00:02]</code>) põe o log em ordem cronológica, como um log de verdade.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./relatorio.sh -g 2000 &gt; teste.log
+$ head -3 teste.log
+192.168.0.23 - - [15/Oct/2026:08:00:02] "GET /favicon.ico HTTP/1.1" 403
+192.168.0.10 - - [15/Oct/2026:08:00:15] "GET / HTTP/1.1" 304
+192.168.0.10 - - [15/Oct/2026:08:01:06] "GET /fotos HTTP/1.1" 200
+$ ./relatorio.sh -t 3 teste.log
+Relatório de teste.log: 2000 acessos
+
+Acessos por IP
+  10.0.0.8            340  17%  ##############################
+  172.16.4.2          340  17%  ##############################
+  192.168.0.23        337  17%  #############################
+  192.168.0.57        336  17%  #############################
+  192.168.0.10        325  16%  ############################
+  10.0.0.5            322  16%  ############################
+
+Códigos HTTP
+  200                1148  57%  ##############################
+  304                 208  10%  #####
+  403                 231  12%  ######
+  404                 191  10%  ####
+  500                 222  11%  #####
+
+Páginas mais acessadas
+  /                   619  31%  ##############################
+  /favicon.ico        220  11%  ##########
+  /fotos              200  10%  #########
+
+Acessos por hora
+  08h                 116   6%  ##########
+  09h                 172   9%  ################
+  10h                 314  16%  #############################
+  11h                 194  10%  ##################
+  12h                  96   5%  #########
+  14h                 210  11%  ###################
+  15h                 319  16%  ##############################
+  16h                 209  10%  ###################
+  17h                 102   5%  #########
+  18h                  81   4%  #######
+  19h                  82   4%  #######
+  20h                 105   5%  #########</pre>
+<p>(As opções <code>-g</code> e <code>-t</code> chegam na etapa 6; aqui você já vê o resultado.) Agora as barras contam uma história: dois picos, às 10h e às 15h, e nenhum acesso às 13h, porque 13 não está na lista de horas. O log gerado no simulador pode sair diferente: a semente garante o mesmo log <strong>no mesmo Bash</strong>, e o gerador do simulador não é o do Bash real.</p>
+
+<h4>Bash puro × awk × sort/uniq</h4>
+<p>Com um log de 20 mil linhas, vamos contar os acessos por IP de três jeitos e medir com <code>time</code>. O <code>conta-ip.sh</code> é a versão 2 do script (Bash puro).</p>
+
+<pre class="term">$ ./relatorio.sh -g 20000 &gt; grande.log
+$ time ./conta-ip.sh grande.log
+total: 20000 acessos
+3387 192.168.0.10
+3379 192.168.0.23
+3363 10.0.0.8
+3317 172.16.4.2
+3287 192.168.0.57
+3267 10.0.0.5
+
+real	0m0,372s
+user	0m0,331s
+sys	0m0,041s
+$ time awk '{ n[$1]++ } END { for (ip in n) print n[ip], ip }' grande.log | sort -rn
+3387 192.168.0.10
+3379 192.168.0.23
+3363 10.0.0.8
+3317 172.16.4.2
+3287 192.168.0.57
+3267 10.0.0.5
+
+real	0m0,007s
+user	0m0,007s
+sys	0m0,002s
+$ time cut -d' ' -f1 grande.log | sort | uniq -c | sort -rn
+   3387 192.168.0.10
+   3379 192.168.0.23
+   3363 10.0.0.8
+   3317 172.16.4.2
+   3287 192.168.0.57
+   3267 10.0.0.5
+
+real	0m0,030s
+user	0m0,031s
+sys	0m0,005s</pre>
+
+<p>Os três dão <strong>o mesmo resultado</strong>, mas o <code>awk</code> foi uns 50 vezes mais rápido que o laço em Bash. O motivo: o <code>while read</code> do Bash lê o arquivo quase caractere por caractere e interpreta cada linha do laço de novo a cada volta; o <code>awk</code> é um programa compilado feito exatamente para "ler linhas, separar campos, contar". O comando do <code>awk</code>, por partes:</p>
+<dl class="anatomy">
+  <dt>awk '…' grande.log</dt><dd>Roda o programa entre aspas simples para cada linha do arquivo.</dd>
+  <dt>{ n[$1]++ }</dt><dd>Para cada linha: some 1 no array <code>n</code>, na posição do campo 1 (o IP). No <code>awk</code>, uma posição nova já vale 0, sem precisar de <code>:-0</code>.</dd>
+  <dt>END { … }</dt><dd>Roda uma vez, depois da última linha.</dd>
+  <dt>for (ip in n) print n[ip], ip</dt><dd>Para cada chave, escreva a contagem e a chave. A vírgula põe um espaço entre elas.</dd>
+</dl>
+<p>E o pipe clássico: <code>cut -d' ' -f1</code> pega só o IP; <code>sort</code> junta os iguais; <code>uniq -c</code> conta os repetidos <strong>vizinhos</strong> (por isso o <code>sort</code> antes); <code>sort -rn</code> põe o maior em cima.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Abordagem</th><th>Vantagem</th><th>Desvantagem</th><th>Qual usar?</th></tr>
+<tr><td>Bash puro (<code>while read</code> + <code>declare -A</code>)</td><td>Um só processo; os resultados ficam em variáveis do script, prontos para <code>if</code>, <code>printf</code>, outras contas.</td><td>Lento: ~1 s a cada 50 mil linhas.</td><td>Arquivos pequenos (até alguns milhares de linhas) e quando o script precisa usar os números depois.</td></tr>
+<tr><td><code>awk</code></td><td>Muito rápido, separa campos sozinho, faz contas com decimais.</td><td>Outra linguagem para aprender; o resultado sai como texto.</td><td>Logs grandes, contas com várias colunas.</td></tr>
+<tr><td><code>cut | sort | uniq -c</code></td><td>Fácil de montar aos poucos no terminal, sem programar.</td><td>Uma contagem por pipe; o <code>sort</code> de um arquivo enorme usa disco.</td><td>Perguntas rápidas no terminal ("quem mais acessou hoje?").</td></tr>
+</table>
+</div>
+
+<p>No nosso relatório ficamos com o Bash para contar, porque ele faz as quatro contagens numa passada e a função <code>tabela</code> precisa dos totais, e usamos <code>sort</code> e <code>head</code> para ordenar. Para logs de milhões de linhas, o desafio extra no fim da página troca o laço por um <code>awk</code>.</p>
+
+<div class="tryscript" data-file="awk-codigos.sh" data-goal="out:4 200,src:\bawk\b">
+<p class="try-task"><strong>Missão:</strong> escreva a contagem por <strong>código HTTP</strong> usando <code>awk</code> (o código é o campo <code>$8</code>), ordenada do mais comum para o menos comum.</p>
+<pre class="script">#!/usr/bin/env bash
+log=~/Documentos/acesso.log
+# por IP (campo 1), como exemplo:
+awk '{ n[$1]++ } END { for (k in n) print n[k], k }' "$log" | sort -rn
+echo "---"
+# escreva aqui a contagem por código (campo 8):
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+log=~/Documentos/acesso.log
+# por IP (campo 1), como exemplo:
+awk '{ n[$1]++ } END { for (k in n) print n[k], k }' "$log" | sort -rn
+echo "---"
+# escreva aqui a contagem por código (campo 8):
+awk '{ n[$8]++ } END { for (k in n) print n[k], k }' "$log" | sort -rn
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 6 — Opções: CSV, top N, gerar log e mensagens de uso</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o relatório na tela é para gente; para uma planilha, o formato certo é <strong>CSV</strong> (valores separados por vírgula). Em vez de dois scripts, uma opção <code>-c</code>. Com mais de uma opção, a ferramenta certa é o <code>getopts</code>. Veja <a href="getopts.html">Opções com getopts</a>.</p>
+
+<pre class="file" data-file="relatorio.sh (leitura das opções)">csv=0
+top=5
+gerar_linhas=0
+
+uso() {
+  echo "uso: ${0##*/} [-c] [-t N] [ARQUIVO] | ${0##*/} -g N" &gt;&amp;2
+  exit 2
+}
+
+while getopts ':ct:g:' opcao; do
+  case $opcao in
+    c) csv=1 ;;
+    t) top=$OPTARG ;;
+    g) gerar_linhas=$OPTARG ;;
+    *) uso ;;
+  esac
+done
+shift $(( OPTIND - 1 ))</pre>
+
+<dl class="anatomy">
+  <dt>':ct:g:'</dt><dd>As opções aceitas: <code>-c</code> sozinha; <code>-t</code> e <code>-g</code> com <code>:</code> depois, porque recebem um valor (<code>-t 3</code>). O <code>:</code> do começo pede ao <code>getopts</code> para não escrever as próprias mensagens de erro: nós cuidamos disso no <code>*)</code>.</dd>
+  <dt>$OPTARG</dt><dd>O valor da opção (o <code>3</code> de <code>-t 3</code>).</dd>
+  <dt>shift $(( OPTIND - 1 ))</dt><dd>Descarta as opções já lidas; o que sobra (o nome do arquivo) vira <code>$1</code>.</dd>
+  <dt>${0##*/}</dt><dd>O nome do script sem a pasta, para a mensagem de uso.</dd>
+  <dt>exit 2</dt><dd>Código 2 = "uso errado", a convenção dos comandos do sistema.</dd>
+</dl>
+
+<p>No modo CSV, a função <code>tabela</code> escreve <code>seção,chave,quantidade</code> em vez de desenhar (veja o <code>if (( csv ))</code> no começo dela, no script completo abaixo).</p>
+
+<pre class="term">$ ./relatorio.sh -c
+secao,chave,quantidade
+total,acessos,6
+Acessos por IP,192.168.0.10,3
+Acessos por IP,192.168.0.23,2
+Acessos por IP,192.168.0.57,1
+Códigos HTTP,200,4
+Códigos HTTP,403,1
+Códigos HTTP,404,1
+Páginas mais acessadas,/,2
+Páginas mais acessadas,/admin,1
+Páginas mais acessadas,/contato,1
+Páginas mais acessadas,/fotos,1
+Páginas mais acessadas,/login,1
+Acessos por hora,09h,6
+$ ./relatorio.sh -c &gt; relatorio.csv              « pronto para abrir no LibreOffice Calc
+$ ./relatorio.sh -x
+uso: relatorio.sh [-c] [-t N] [ARQUIVO] | relatorio.sh -g N
+$ echo $?
+2
+$ ./relatorio.sh nada.log
+relatorio: não consigo ler 'nada.log'
+$ echo $?
+1</pre>
+
+<div class="tryscript" data-file="opcoes.sh" data-args="-h" data-goal="out:uso:,exit:0">
+<p class="try-task"><strong>Missão:</strong> acrescente a opção <code>-h</code> (<em>help</em>): ela deve escrever a linha de uso na <strong>saída padrão</strong> e sair com código <strong>0</strong> (pedir ajuda não é erro). O campo de argumentos já tem <code>-h</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+csv=0
+top=5
+while getopts ':ct:' opcao; do
+  case $opcao in
+    c) csv=1 ;;
+    t) top=$OPTARG ;;
+    *) echo "uso: relatorio.sh [-c] [-t N] [ARQUIVO]" &gt;&amp;2; exit 2 ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+echo "csv=$csv top=$top arquivo=${1:-acesso.log}"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+csv=0
+top=5
+while getopts ':ct:h' opcao; do
+  case $opcao in
+    c) csv=1 ;;
+    t) top=$OPTARG ;;
+    h) echo "uso: relatorio.sh [-c] [-t N] [ARQUIVO]"; exit 0 ;;
+    *) echo "uso: relatorio.sh [-c] [-t N] [ARQUIVO]" &gt;&amp;2; exit 2 ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+echo "csv=$csv top=$top arquivo=${1:-acesso.log}"
+</pre>
+</div>
+</li>
+
+</ol>
+
+<hr>
+
+<h2>O script completo</h2>
+<p>Passa no <a href="shellcheck.html">ShellCheck</a> sem avisos (<code>shellcheck relatorio.sh</code> não escreve nada e devolve 0).</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+# relatorio.sh — relatório de um log de acesso de servidor web.
+# Uso: relatorio.sh [-c] [-t N] [ARQUIVO]   (padrão: ~/Documentos/acesso.log)
+#      relatorio.sh -g N &gt; teste.log        gera um log de teste com N linhas
+#   -c    saída em CSV (secao,chave,quantidade)
+#   -t N  quantas páginas mostrar no "mais acessadas" (padrão: 5)
+set -euo pipefail
+
+csv=0
+top=5
+gerar_linhas=0
+
+uso() {
+  echo "uso: ${0##*/} [-c] [-t N] [ARQUIVO] | ${0##*/} -g N" &gt;&amp;2
+  exit 2
+}
+
+gerar() {
+  local n=$1 i ip pagina codigo metodo
+  local ips=(192.168.0.10 192.168.0.23 192.168.0.57 10.0.0.5 10.0.0.8 172.16.4.2)
+  local paginas=(/ / / /contato /fotos /blog /blog/bash /login /admin /favicon.ico)
+  local codigos=(200 200 200 200 200 200 304 404 403 500)
+  local horas=(08 09 09 10 10 10 11 11 12 14 14 15 15 15 16 16 17 18 19 20)
+  RANDOM=42                              # semente fixa: o mesmo log sempre
+  for (( i = 0; i &lt; n; i++ )); do
+    ip=${ips[RANDOM % ${#ips[@]}]}
+    pagina=${paginas[RANDOM % ${#paginas[@]}]}
+    codigo=${codigos[RANDOM % ${#codigos[@]}]}
+    metodo=GET
+    if [[ $pagina == /login ]]; then metodo=POST; fi
+    printf '%s - - [15/Oct/2026:%s:%02d:%02d] "%s %s HTTP/1.1" %s\n' \
+      "$ip" "${horas[RANDOM % ${#horas[@]}]}" $(( RANDOM % 60 )) $(( RANDOM % 60 )) \
+      "$metodo" "$pagina" "$codigo"
+  done | sort -k4,4
+}
+
+# lê linhas "quantidade chave" e mostra como tabela (ou CSV, com -c)
+tabela() {
+  local titulo=$1 linha qtd chave maior=1 barra
+  local -a linhas
+  mapfile -t linhas
+  if (( csv )); then
+    for linha in "${linhas[@]}"; do
+      printf '%s,%s,%d\n' "$titulo" "${linha#* }" "${linha%% *}"
+    done
+    return
+  fi
+  for linha in "${linhas[@]}"; do
+    qtd=${linha%% *}
+    if (( qtd &gt; maior )); then maior=$qtd; fi
+  done
+  printf '\n%s\n' "$titulo"
+  for linha in "${linhas[@]}"; do
+    qtd=${linha%% *}
+    chave=${linha#* }
+    printf -v barra '%*s' $(( qtd * 30 / maior )) ''
+    printf '  %-16s %6d %3d%%  %s\n' "$chave" "$qtd" \
+      $(( (qtd * 100 + total / 2) / total )) "${barra// /#}"
+  done
+}
+
+while getopts ':ct:g:' opcao; do
+  case $opcao in
+    c) csv=1 ;;
+    t) top=$OPTARG ;;
+    g) gerar_linhas=$OPTARG ;;
+    *) uso ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+
+if (( gerar_linhas &gt; 0 )); then
+  gerar "$gerar_linhas"
+  exit 0
+fi
+
+log=${1:-$HOME/Documentos/acesso.log}
+[[ -r $log ]] || { echo "relatorio: não consigo ler '$log'" &gt;&amp;2; exit 1; }
+
+# --- contagem em Bash puro: uma passada pelo arquivo ---
+declare -A por_ip por_codigo por_pagina por_hora
+total=0
+while read -r ip _ _ data _ pagina _ codigo; do
+  (( ++total ))
+  por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))
+  por_codigo[$codigo]=$(( ${por_codigo[$codigo]:-0} + 1 ))
+  por_pagina[$pagina]=$(( ${por_pagina[$pagina]:-0} + 1 ))
+  por_hora[${data:13:2}h]=$(( ${por_hora[${data:13:2}h]:-0} + 1 ))
+done &lt; "$log"
+
+if (( total == 0 )); then
+  echo "relatorio: '$log' está vazio" &gt;&amp;2
+  exit 1
+fi
+
+# imprime "quantidade chave" de um array associativo (nome em $1)
+listar() {
+  local -n arr=$1
+  local k
+  for k in "${!arr[@]}"; do
+    printf '%d %s\n' "${arr[$k]}" "$k"
+  done
+}
+
+if (( csv )); then
+  echo "secao,chave,quantidade"
+  echo "total,acessos,$total"
+else
+  echo "Relatório de ${log##*/}: $total acessos"
+fi
+listar por_ip      | sort -k1,1nr -k2 | tabela "Acessos por IP"
+listar por_codigo  | sort -k2         | tabela "Códigos HTTP"
+listar por_pagina  | sort -k1,1nr -k2 | head -n "$top" | tabela "Páginas mais acessadas"
+listar por_hora    | sort -k2         | tabela "Acessos por hora"
+</pre>
+
+<div class="tryscript" data-file="relatorio.sh" data-args="">
+<p class="try-task"><strong>Brinque à vontade:</strong> rode como está; depois experimente <code>-c</code>, <code>-t 2</code>, ou <code>-g 30</code> no campo de argumentos.</p>
+<pre class="script">#!/usr/bin/env bash
+# relatorio.sh — relatório de um log de acesso de servidor web.
+# Uso: relatorio.sh [-c] [-t N] [ARQUIVO]   (padrão: ~/Documentos/acesso.log)
+#      relatorio.sh -g N &gt; teste.log        gera um log de teste com N linhas
+#   -c    saída em CSV (secao,chave,quantidade)
+#   -t N  quantas páginas mostrar no "mais acessadas" (padrão: 5)
+set -euo pipefail
+
+csv=0
+top=5
+gerar_linhas=0
+
+uso() {
+  echo "uso: ${0##*/} [-c] [-t N] [ARQUIVO] | ${0##*/} -g N" &gt;&amp;2
+  exit 2
+}
+
+gerar() {
+  local n=$1 i ip pagina codigo metodo
+  local ips=(192.168.0.10 192.168.0.23 192.168.0.57 10.0.0.5 10.0.0.8 172.16.4.2)
+  local paginas=(/ / / /contato /fotos /blog /blog/bash /login /admin /favicon.ico)
+  local codigos=(200 200 200 200 200 200 304 404 403 500)
+  local horas=(08 09 09 10 10 10 11 11 12 14 14 15 15 15 16 16 17 18 19 20)
+  RANDOM=42                              # semente fixa: o mesmo log sempre
+  for (( i = 0; i &lt; n; i++ )); do
+    ip=${ips[RANDOM % ${#ips[@]}]}
+    pagina=${paginas[RANDOM % ${#paginas[@]}]}
+    codigo=${codigos[RANDOM % ${#codigos[@]}]}
+    metodo=GET
+    if [[ $pagina == /login ]]; then metodo=POST; fi
+    printf '%s - - [15/Oct/2026:%s:%02d:%02d] "%s %s HTTP/1.1" %s\n' \
+      "$ip" "${horas[RANDOM % ${#horas[@]}]}" $(( RANDOM % 60 )) $(( RANDOM % 60 )) \
+      "$metodo" "$pagina" "$codigo"
+  done | sort -k4,4
+}
+
+# lê linhas "quantidade chave" e mostra como tabela (ou CSV, com -c)
+tabela() {
+  local titulo=$1 linha qtd chave maior=1 barra
+  local -a linhas
+  mapfile -t linhas
+  if (( csv )); then
+    for linha in "${linhas[@]}"; do
+      printf '%s,%s,%d\n' "$titulo" "${linha#* }" "${linha%% *}"
+    done
+    return
+  fi
+  for linha in "${linhas[@]}"; do
+    qtd=${linha%% *}
+    if (( qtd &gt; maior )); then maior=$qtd; fi
+  done
+  printf '\n%s\n' "$titulo"
+  for linha in "${linhas[@]}"; do
+    qtd=${linha%% *}
+    chave=${linha#* }
+    printf -v barra '%*s' $(( qtd * 30 / maior )) ''
+    printf '  %-16s %6d %3d%%  %s\n' "$chave" "$qtd" \
+      $(( (qtd * 100 + total / 2) / total )) "${barra// /#}"
+  done
+}
+
+while getopts ':ct:g:' opcao; do
+  case $opcao in
+    c) csv=1 ;;
+    t) top=$OPTARG ;;
+    g) gerar_linhas=$OPTARG ;;
+    *) uso ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+
+if (( gerar_linhas &gt; 0 )); then
+  gerar "$gerar_linhas"
+  exit 0
+fi
+
+log=${1:-$HOME/Documentos/acesso.log}
+[[ -r $log ]] || { echo "relatorio: não consigo ler '$log'" &gt;&amp;2; exit 1; }
+
+# --- contagem em Bash puro: uma passada pelo arquivo ---
+declare -A por_ip por_codigo por_pagina por_hora
+total=0
+while read -r ip _ _ data _ pagina _ codigo; do
+  (( ++total ))
+  por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))
+  por_codigo[$codigo]=$(( ${por_codigo[$codigo]:-0} + 1 ))
+  por_pagina[$pagina]=$(( ${por_pagina[$pagina]:-0} + 1 ))
+  por_hora[${data:13:2}h]=$(( ${por_hora[${data:13:2}h]:-0} + 1 ))
+done &lt; "$log"
+
+if (( total == 0 )); then
+  echo "relatorio: '$log' está vazio" &gt;&amp;2
+  exit 1
+fi
+
+# imprime "quantidade chave" de um array associativo (nome em $1)
+listar() {
+  local -n arr=$1
+  local k
+  for k in "${!arr[@]}"; do
+    printf '%d %s\n' "${arr[$k]}" "$k"
+  done
+}
+
+if (( csv )); then
+  echo "secao,chave,quantidade"
+  echo "total,acessos,$total"
+else
+  echo "Relatório de ${log##*/}: $total acessos"
+fi
+listar por_ip      | sort -k1,1nr -k2 | tabela "Acessos por IP"
+listar por_codigo  | sort -k2         | tabela "Códigos HTTP"
+listar por_pagina  | sort -k1,1nr -k2 | head -n "$top" | tabela "Páginas mais acessadas"
+listar por_hora    | sort -k2         | tabela "Acessos por hora"
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>As colunas saem trocadas (<code>pagina=HTTP/1.1"</code>)</strong>
+<p><strong>O que aconteceu:</strong> o número de nomes no <code>read</code> não bate com o formato do log. Logs reais do Apache e do nginx têm mais campos (tamanho da resposta, navegador…). <strong>Como confirmar:</strong> <code>head -1 seu.log | tr ' ' '\n' | cat -n</code> numera os campos. <strong>Como resolver:</strong> ajuste os nomes (ou os <code>$N</code> do awk) para o seu formato.</p>
+</div>
+
+<div class="cenario">
+<strong>Só aparece a primeira linha, para sempre</strong>
+<p><strong>O que aconteceu:</strong> o <code>&lt; "$log"</code> foi parar no <code>read</code> (<code>while read … &lt; "$log"; do</code>): a cada volta o arquivo é aberto de novo e a primeira linha é lida outra vez. <strong>Como resolver:</strong> o redirecionamento vai no <code>done</code>. Interrompa com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+</div>
+
+<div class="cenario">
+<strong>Os totais somem depois do laço</strong>
+<p><strong>O que aconteceu:</strong> você escreveu <code>cat "$log" | while read …</code>. Cada parte de um pipe roda num <strong>subshell</strong>, e as variáveis criadas lá dentro morrem com ele. <strong>Como resolver:</strong> <code>while …; done &lt; "$log"</code> (como no script) ou <code>shopt -s lastpipe</code>. Veja <a href="subshell.html">Subshells e Grupos</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>A última linha do log não é contada</strong>
+<p><strong>O que aconteceu:</strong> o arquivo não termina com quebra de linha, e o <code>read</code> devolve "falha" na última linha incompleta. <strong>Como resolver:</strong> <code>while read -r … || [[ -n $ip ]]; do</code>. Veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>sort: opção inválida -- 'k'</code> ou ordem estranha no macOS</strong>
+<p>O <code>sort</code> do macOS (BSD) aceita <code>-k1,1nr</code>, mas a ordem alfabética depende do <code>LANG</code>. Para resultados iguais em qualquer máquina, use <code>LC_ALL=C sort …</code> (ordem por byte).</p>
+</div>
+
+<hr>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li><strong>Só os erros:</strong> uma opção <code>-e</code> que considera apenas códigos 4xx e 5xx (<code>[[ $codigo == [45]* ]] || continue</code>).</li>
+  <li><strong>Turbo:</strong> troque o laço <code>while read</code> por um único <code>awk</code> que imprime as quatro contagens com um prefixo (<code>print "ip", n, $1</code>…), e leia o resultado com <code>while read secao qtd chave</code>. Meça com <code>time</code> num log de 100 mil linhas.</li>
+  <li><strong>Log real:</strong> adapte para o formato completo do Apache, com o tamanho da resposta, e some os bytes enviados por página.</li>
+  <li><strong>HTML:</strong> uma opção <code>-H</code> que gera uma página com uma <code>&lt;table&gt;</code> usando um <a href="heredoc.html">here-doc</a>.</li>
+  <li><strong>Suspeitos:</strong> liste os IPs com mais de 3 respostas 403 (alguém tentando entrar no <code>/admin</code>?).</li>
+</ul>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Os campos</h3>
+<p>Complete o <code>read</code> para guardar o IP em <code>ip</code> e o código (8º campo) em <code>codigo</code>, jogando os outros 6 campos em <code>_</code>:</p>
+<div class="ex-code">while read -r ip <input data-answer="_ _ _ _ _ _" aria-label="campos"> codigo; do</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Com <code>set -euo pipefail</code>, por que o script usa <code>por_ip[$ip]=$(( ${por_ip[$ip]:-0} + 1 ))</code> em vez de <code>(( por_ip[$ip]++ ))</code>?</p>
+<label><input type="radio" name="q2"> Porque o <code>++</code> não existe no Bash.</label>
+<label><input type="radio" name="q2"> Porque a forma longa é mais rápida.</label>
+<label><input type="radio" name="q2"> Porque o <code>set -u</code> reclama da posição que ainda não existe, e o <code>x++</code> que vale 0 é "falso" para o <code>set -e</code>.</label>
+<label><input type="radio" name="q2"> Porque arrays associativos não aceitam aritmética.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Contar repetidos</h3>
+<p>Complete o pipe que conta quantas vezes cada IP aparece (o <code>uniq</code> só junta repetidos vizinhos):</p>
+<div class="ex-code">cut -d' ' -f1 acesso.log | <input data-answer="sort" aria-label="comando"> | uniq -c | sort -rn</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. <code>total=6</code> e <code>qtd=1</code>. Quanto vale <code>$(( qtd * 100 / total ))</code>?</p>
+<label><input type="radio" name="q4"> 16,67</label>
+<label><input type="radio" name="q4"> 16</label>
+<label><input type="radio" name="q4"> 17</label>
+<label><input type="radio" name="q4"> Dá erro: o Bash não divide.</label>
+</div>
+
+<div class="exercise">
+<h3>5. Coluna alinhada</h3>
+<p>Complete o formato para escrever o IP em 16 colunas, alinhado à esquerda:</p>
+<div class="ex-code">printf '<input data-answer="%-16s" aria-label="formato"> %5d\n' "$ip" "$qtd"</div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Para um log de 2 milhões de linhas, qual abordagem é a mais indicada para contar acessos por página?</p>
+<label><input type="radio" name="q6"> <code>while read</code> com array associativo.</label>
+<label><input type="radio" name="q6"> <code>for linha in $(cat log)</code>.</label>
+<label><input type="radio" name="q6"> Abrir no editor e contar.</label>
+<label><input type="radio" name="q6"> <code>awk</code>, que é dezenas de vezes mais rápido nesse tipo de tarefa.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>while read -r a _ b …; do …; done &lt; arquivo</code> separa cada linha em campos nomeados.</li>
+  <li>Um array associativo conta "por chave"; <code>${a[$k]:-0} + 1</code> funciona até com <code>set -u</code>.</li>
+  <li>O Bash conta, o <code>sort</code> ordena, o <code>head</code> corta o top N.</li>
+  <li><code>printf</code> com <code>%-16s</code>, <code>%5d</code> e <code>%%</code> monta tabelas; <code>(a*100 + t/2)/t</code> arredonda.</li>
+  <li><code>RANDOM=semente</code> gera dados de teste repetíveis.</li>
+  <li>Para arquivos grandes, <code>awk</code> ganha de longe; para perguntas rápidas, <code>cut | sort | uniq -c</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
