@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash: ler arquivos linha a linha — while IFS= read -r | Guia Bash</title>
+<meta name="description" content="Aprenda a ler arquivos linha por linha no Bash com while IFS= read -r, parte por parte: IFS=, -r, &lt; no done, última linha sem quebra, campos de CSV, &lt; &lt;(cmd) × pipe e a variável que some, read -u 3 e mapfile.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash: <span class="hl">Ler Arquivos Linha a Linha</span></h1>
+
+<p class="intro">Ler um arquivo linha por linha é uma das tarefas mais comuns em scripts: processar uma lista de tarefas, um log, uma planilha CSV. O jeito certo no Bash é uma linha que parece mágica, <code>while IFS= read -r linha; do … done &lt; arquivo</code>. Nesta aula você vai entender cada pedaço dela, e por que tirar qualquer um deles causa defeitos.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A receita <code>while IFS= read -r linha</code>, parte por parte, e o papel do <code>&lt;</code> depois do <code>done</code>.</li>
+  <li>Como não perder a última linha quando o arquivo não termina com quebra de linha.</li>
+  <li>Como separar campos de um CSV (<code>IFS=,</code>) e pular o cabeçalho.</li>
+  <li>Como ler a saída de um comando sem perder variáveis (<code>&lt; &lt;(cmd)</code> × <code>cmd | while</code>).</li>
+  <li>Como ler dois arquivos ao mesmo tempo (<code>read -u 3</code>) e quando usar <code>mapfile</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Por que não usar <code>for</code>?</h2>
+<p>Na aula do <a href="for.html"><code>for</code></a> você viu que <code>for linha in $(cat alunos.csv)</code> partiu "Porto Alegre" em dois. O <code>for</code> percorre <strong>palavras</strong>. Para percorrer <strong>linhas</strong>, o Bash tem o comando <code>read</code> (veja <a href="read.html">Ler do Teclado</a>), que lê exatamente uma linha a cada chamada. Coloque o <code>read</code> como condição de um <a href="while.html"><code>while</code></a> e você tem um laço que dá uma volta por linha e para quando o arquivo acaba.</p>
+
+<hr>
+
+<h2>A receita</h2>
+
+<pre class="term">$ cd Documentos
+$ while IFS= read -r linha; do
+&gt;   echo "Tarefa: $linha"
+&gt; done &lt; notas.txt
+Tarefa: Comprar café
+Tarefa: Ligar para o João             « a linha inteira, com os espaços
+Tarefa: Estudar Bash
+Tarefa: Fazer backup das fotos</pre>
+
+<dl class="anatomy">
+  <dt>while</dt><dd>Repete enquanto a condição der certo (código 0).</dd>
+  <dt>IFS=</dt><dd>Esvazia a variável <code>IFS</code> <strong>só para este <code>read</code></strong>. Assim ele não apaga espaços do começo e do fim da linha. Explicado logo abaixo.</dd>
+  <dt>read</dt><dd>Lê uma linha da entrada e guarda na variável. Devolve 0 se leu uma linha, e 1 quando o arquivo acaba. É isso que encerra o laço.</dd>
+  <dt>-r</dt><dd>De <em>raw</em> ("cru"): não trata a barra invertida <code>\</code> como especial. Explicado abaixo.</dd>
+  <dt>linha</dt><dd>O nome da variável que recebe a linha (sem a quebra de linha do final). Pode ser qualquer nome.</dd>
+  <dt>; do … done</dt><dd>O corpo, que roda uma vez para cada linha.</dd>
+  <dt>&lt; notas.txt</dt><dd>Redireciona o arquivo para a entrada do laço <strong>inteiro</strong>. Explicado abaixo.</dd>
+</dl>
+
+<p>Contando as linhas enquanto lê:</p>
+
+<pre class="term">$ n=0
+$ while IFS= read -r linha; do
+&gt;   ((n++))
+&gt;   echo "$n. $linha"
+&gt; done &lt; notas.txt
+1. Comprar café
+2. Ligar para o João
+3. Estudar Bash
+4. Fazer backup das fotos
+$ echo "Total: $n tarefas"
+Total: 4 tarefas                      « a variável sobreviveu ao laço (guarde isso)</pre>
+
+<h3>Por que o <code>&lt;</code> fica depois do <code>done</code>?</h3>
+<p>O redirecionamento vale para o comando <code>while … done</code> todo. O arquivo é aberto <strong>uma vez</strong>, antes da primeira volta, e cada <code>read</code> continua de onde o anterior parou: o primeiro lê a linha 1, o segundo a linha 2, e assim por diante.</p>
+
+<p>Se você colocasse o arquivo no próprio <code>read</code> (<code>while read -r linha &lt; notas.txt</code>), o arquivo seria reaberto a cada volta, e o <code>read</code> leria sempre a <strong>primeira</strong> linha: um laço infinito mostrando "Comprar café".</p>
+
+<h3>Por que <code>IFS=</code>?</h3>
+<p>A variável <code>IFS</code> (<em>Internal Field Separator</em>, "separador interno de campos") diz quais caracteres separam palavras. O padrão é espaço, tab e quebra de linha. O <code>read</code> usa o <code>IFS</code> para cortar os espaços das pontas da linha. Veja a diferença num arquivo com recuo:</p>
+
+<pre class="term">$ printf '%s\n' 'sem recuo' '    quatro espaços antes' '  dois antes e dois depois  ' &gt; recuo.txt
+$ while read linha; do echo "[$linha]"; done &lt; recuo.txt
+[sem recuo]
+[quatro espaços antes]                « os espaços do começo sumiram
+[dois antes e dois depois]            « os das duas pontas sumiram
+$ while IFS= read -r linha; do echo "[$linha]"; done &lt; recuo.txt
+[sem recuo]
+[    quatro espaços antes]            « linha intacta
+[  dois antes e dois depois  ]</pre>
+
+<p>Os colchetes no <code>echo</code> estão ali só para você ver onde a linha começa e termina. Em arquivos de configuração, código ou poesia, o recuo importa; por isso a receita sempre leva <code>IFS=</code>.</p>
+
+<div class="tip">
+<strong><code>IFS=</code> colado no <code>read</code> não muda o <code>IFS</code> do script</strong>
+<p>Uma atribuição escrita logo antes de um comando (<code>VAR=valor comando</code>) vale só durante aquele comando. Depois do <code>read</code>, o <code>IFS</code> volta ao normal sozinho.</p>
+</div>
+
+<h3>Por que <code>-r</code>?</h3>
+<p>Sem <code>-r</code>, o <code>read</code> trata <code>\</code> como "escape": a barra some, e uma barra no fim da linha junta a linha seguinte. Com caminhos do Windows, expressões regulares ou qualquer texto com barras, isso estraga os dados:</p>
+
+<pre class="term">$ printf '%s\n' 'C:\novo\temp' 'linha que continua \' 'aqui' &gt; barras.txt
+$ cat barras.txt
+C:\novo\temp
+linha que continua \
+aqui
+$ while IFS= read linha; do echo "[$linha]"; done &lt; barras.txt
+[C:novotemp]                          « as barras sumiram
+[linha que continua aqui]             « duas linhas viraram uma
+$ while IFS= read -r linha; do echo "[$linha]"; done &lt; barras.txt
+[C:\novo\temp]                        « com -r, tudo chega como está
+[linha que continua \]
+[aqui]</pre>
+
+<p>Não há motivo para ler um arquivo sem <code>-r</code>. O <a href="shellcheck.html">ShellCheck</a> avisa quando você esquece (aviso SC2162).</p>
+
+<hr>
+
+<h2>A última linha sem quebra de linha</h2>
+<p>Todo arquivo de texto "bem formado" termina com uma quebra de linha (<code>\n</code>). Mas arquivos criados em alguns editores, no Windows ou por programas descuidados às vezes não têm essa última quebra. Veja o arquivo <code>sem-fim.txt</code>, com <code>cat -A</code>, que mostra um <code>$</code> onde cada linha termina:</p>
+
+<pre class="term">$ printf 'banana\nuva\nkiwi' &gt; sem-fim.txt
+$ cat -A sem-fim.txt
+banana$
+uva$
+kiwi                                  « sem $: falta a quebra (e o próximo prompt aparece colado aqui)
+$ wc -l sem-fim.txt
+2 sem-fim.txt                         « o wc conta quebras de linha: só 2!
+$ while IFS= read -r linha; do echo "[$linha]"; done &lt; sem-fim.txt
+[banana]
+[uva]                                 « cadê o kiwi?</pre>
+
+<p>O que aconteceu: ao ler <code>kiwi</code>, o <code>read</code> chegou ao fim do arquivo antes de achar a quebra. Ele <strong>guarda</strong> <code>kiwi</code> na variável, mas devolve 1 ("o arquivo acabou"). O <code>while</code> vê o 1 e termina sem rodar o corpo.</p>
+
+<p>A correção é dizer: "continue se o <code>read</code> deu certo <strong>ou</strong> se ele trouxe algum texto":</p>
+
+<pre class="term">$ while IFS= read -r linha || [[ -n $linha ]]; do echo "[$linha]"; done &lt; sem-fim.txt
+[banana]
+[uva]
+[kiwi]                                « agora sim</pre>
+
+<dl class="anatomy">
+  <dt>IFS= read -r linha</dt><dd>Tenta ler uma linha. Na última, sem quebra, devolve 1, mas <code>linha</code> vale <code>kiwi</code>.</dd>
+  <dt>||</dt><dd>"Ou": se o da esquerda falhar, tenta o da direita (veja <a href="operadores.html">; &amp;&amp; ||</a>).</dd>
+  <dt>[[ -n $linha ]]</dt><dd>"A variável não está vazia?" (<em>non-zero length</em>). Verdadeiro para <code>kiwi</code>; falso quando o arquivo realmente acabou e o <code>read</code> não trouxe nada.</dd>
+</dl>
+
+<p>Quando o arquivo vem de fora (do usuário, de outro sistema), use esta versão completa. É ela que a missão abaixo e os projetos do guia usam.</p>
+
+<hr>
+
+<h2>Separar campos: <code>IFS=, read -r nome idade cidade nota</code></h2>
+<p>O <code>read</code> pode guardar cada pedaço da linha numa variável diferente. Ele corta a linha usando os caracteres do <code>IFS</code>. Num CSV, o separador é a vírgula, então você passa <code>IFS=,</code>:</p>
+
+<pre class="term">$ while IFS=, read -r nome idade cidade nota; do
+&gt;   echo "$nome tem $idade anos, mora em $cidade e tirou $nota"
+&gt; done &lt; alunos.csv
+nome tem idade anos, mora em cidade e tirou nota      « o cabeçalho também foi lido!
+Ana tem 29 anos, mora em Recife e tirou 9.5
+Bruno tem 34 anos, mora em Curitiba e tirou 7.0
+Carla tem 22 anos, mora em Salvador e tirou 8.5
+Diego tem 41 anos, mora em Manaus e tirou 6.0
+Elisa tem 27 anos, mora em Porto Alegre e tirou 10.0  « o espaço não atrapalha: só a vírgula separa</pre>
+
+<dl class="anatomy">
+  <dt>IFS=,</dt><dd>Só a vírgula separa campos (só durante este <code>read</code>).</dd>
+  <dt>nome idade cidade nota</dt><dd>Quatro variáveis: o 1º campo vai para <code>nome</code>, o 2º para <code>idade</code>, e assim por diante.</dd>
+</dl>
+
+<p>E se houver mais campos que variáveis? <strong>A última variável fica com o resto da linha</strong>, vírgulas incluídas:</p>
+
+<pre class="term">$ while IFS=, read -r nome resto; do echo "$nome → $resto"; done &lt; alunos.csv
+nome → idade,cidade,nota
+Ana → 29,Recife,9.5
+…
+Elisa → 27,Porto Alegre,10.0          « (saída encurtada)</pre>
+
+<p>Para ignorar um campo, use <code>_</code> como nome de variável "descartável". E sem <code>IFS=</code>, o separador é o espaço, o que serve para logs. Cada linha do <code>acesso.log</code> tem 8 pedaços separados por espaço:</p>
+
+<pre class="term">$ while read -r ip _ _ data pedido caminho _ codigo; do
+&gt;   echo "$ip pediu $caminho → $codigo"
+&gt; done &lt; acesso.log
+192.168.0.10 pediu / → 200
+192.168.0.23 pediu /contato → 200
+192.168.0.10 pediu /admin → 403
+192.168.0.57 pediu /fotos → 404
+192.168.0.10 pediu /login → 200
+192.168.0.23 pediu / → 200</pre>
+
+<h3>Pular o cabeçalho</h3>
+<p>A primeira linha do CSV é o cabeçalho (<code>nome,idade,cidade,nota</code>), não um aluno. Há três jeitos de pulá-la:</p>
+
+<p><strong>1. Ler o cabeçalho antes do laço</strong>, agrupando os dois com <code>{ }</code> para que usem o mesmo arquivo aberto:</p>
+
+<pre class="term">$ {
+&gt;   read -r cabecalho
+&gt;   while IFS=, read -r nome idade cidade nota; do
+&gt;     echo "$nome ($cidade): $nota"
+&gt;   done
+&gt; } &lt; alunos.csv
+Ana (Recife): 9.5                     « o read de fora "gastou" a linha 1
+Bruno (Curitiba): 7.0
+Carla (Salvador): 8.5
+Diego (Manaus): 6.0
+Elisa (Porto Alegre): 10.0
+$ echo "O cabeçalho era: $cabecalho"
+O cabeçalho era: nome,idade,cidade,nota</pre>
+
+<p><strong>2. Cortar com <code>tail -n +2</code></strong> ("da linha 2 em diante"):</p>
+
+<pre class="term">$ tail -n +2 alunos.csv | while IFS=, read -r nome _ _ nota; do echo "$nome: $nota"; done
+Ana: 9.5
+Bruno: 7.0
+Carla: 8.5
+Diego: 6.0
+Elisa: 10.0</pre>
+
+<p><strong>3. Pular dentro do laço</strong>: <code>[[ $nome == nome ]] &amp;&amp; continue</code> (veja <a href="break-continue.html">break e continue</a>).</p>
+
+<div class="warning">
+<strong>Esquecer o cabeçalho dá erro em contas</strong>
+<p>Se você fizer <code>(( idade &gt; 30 ))</code> sem pular o cabeçalho, na primeira volta <code>idade</code> vale o texto <code>idade</code>. Dentro de <code>(( ))</code>, um texto é lido como nome de variável, que aponta para si mesma:</p>
+<pre class="term">$ bash idade.sh
+idade.sh: linha 3: ((: idade: excedido o nível de recursividade da expressão (token de erro é "idade")
+Bruno (Curitiba)
+Diego (Manaus)</pre>
+</div>
+
+<div class="tryscript" data-file="maiores.sh" data-goal="outre:Bruno \(Curitiba\)\nDiego \(Manaus\),src:30">
+<p class="try-task"><strong>Missão:</strong> o script lista todos os alunos. Mude-o para mostrar só quem tem <strong>mais de 30 anos</strong>, no formato <code>Bruno (Curitiba)</code>, e pule o cabeçalho para não dar erro.</p>
+<pre class="script">#!/usr/bin/env bash
+while IFS=, read -r nome idade cidade nota; do
+  echo "$nome ($cidade)"
+done &lt; Documentos/alunos.csv
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+{
+  read -r
+  while IFS=, read -r nome idade cidade nota; do
+    if (( idade &gt; 30 )); then
+      echo "$nome ($cidade)"
+    fi
+  done
+} &lt; Documentos/alunos.csv
+</pre>
+</div>
+
+<hr>
+
+<h2>Ler a saída de um comando: <code>&lt; &lt;(cmd)</code> × <code>cmd | while</code></h2>
+<p>Muitas vezes as linhas não vêm de um arquivo, mas de um comando: só as linhas do log com código 200, por exemplo. O jeito que parece óbvio é o pipe. Ele funciona para mostrar coisas, mas veja o que acontece com uma variável:</p>
+
+<pre class="term">$ total=0
+$ grep ' 200$' acesso.log | while IFS= read -r linha; do
+&gt;   ((total++))
+&gt; done
+$ echo "Acessos com sucesso: $total"
+Acessos com sucesso: 0                « deveria ser 4!</pre>
+
+<p><strong>O que aconteceu:</strong> num pipe, cada parte roda num processo separado. O <code>while</code> do lado direito do <code>|</code> roda numa <strong>subshell</strong>, uma cópia do shell (veja <a href="subshell.html">Subshells</a>). Ele contou até 4, mas na cópia. Quando o pipe terminou, a cópia foi descartada, e o <code>total</code> do seu shell continuou 0.</p>
+
+<p>A solução é inverter: deixar o <code>while</code> no shell atual e trazer o comando para a entrada dele com <strong>substituição de processo</strong>:</p>
+
+<pre class="term">$ total=0
+$ while IFS= read -r linha; do
+&gt;   ((total++))
+&gt; done &lt; &lt;(grep ' 200$' acesso.log)
+$ echo "Acessos com sucesso: $total"
+Acessos com sucesso: 4                « agora sim</pre>
+
+<dl class="anatomy">
+  <dt>&lt;(grep ' 200$' acesso.log)</dt><dd>Roda o <code>grep</code> e entrega a saída dele como se fosse um arquivo. Veja <a href="substituicao-processo.html">Substituição de Processo</a>.</dd>
+  <dt>&lt; &lt;( … )</dt><dd>O primeiro <code>&lt;</code> é o redirecionamento de sempre ("a entrada vem deste arquivo"); o segundo faz parte do <code>&lt;( )</code>. <strong>O espaço entre eles é obrigatório</strong>: <code>&lt;&lt;(</code> colado é outra coisa e dá erro de sintaxe.</dd>
+</dl>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Variáveis mudadas no laço continuam depois?</th><th>Use quando</th></tr>
+<tr><td><code>while … done &lt; arquivo</code></td><td>Sim</td><td>As linhas estão num arquivo.</td></tr>
+<tr><td><code>while … done &lt; &lt;(cmd)</code></td><td>Sim</td><td>As linhas vêm de um comando e você precisa de contadores/variáveis depois.</td></tr>
+<tr><td><code>cmd | while … done</code></td><td><strong>Não</strong> (subshell)</td><td>Você só mostra ou grava coisas dentro do laço.</td></tr>
+<tr><td><code>shopt -s lastpipe</code> + <code>cmd | while</code></td><td>Sim, mas só em scripts</td><td>Scripts que preferem a leitura do pipe. No terminal interativo, não tem efeito.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Ler dois arquivos ao mesmo tempo: <code>read -u 3</code></h2>
+<p>Até aqui o <code>read</code> sempre leu da entrada padrão (o descritor 0). Você pode abrir outro arquivo num <strong>descritor</strong> diferente, como o 3, e mandar o <code>read</code> ler dali com <code>-u 3</code>. Assim, dá para andar em dois arquivos ao mesmo tempo, linha a linha:</p>
+
+<pre class="term">$ printf '%s\n' Ana Bruno Carla &gt; nomes.txt
+$ printf '%s\n' Recife Curitiba Salvador &gt; cidades.txt
+$ while IFS= read -r nome &amp;&amp; IFS= read -r -u 3 cidade; do
+&gt;   echo "$nome mora em $cidade"
+&gt; done &lt; nomes.txt 3&lt; cidades.txt
+Ana mora em Recife
+Bruno mora em Curitiba
+Carla mora em Salvador</pre>
+
+<dl class="anatomy">
+  <dt>read -r nome</dt><dd>Lê uma linha da entrada padrão, que é <code>nomes.txt</code>.</dd>
+  <dt>&amp;&amp;</dt><dd>Só lê a cidade se conseguiu ler o nome. O laço para quando qualquer um dos arquivos acabar.</dd>
+  <dt>read -r -u 3 cidade</dt><dd>Lê uma linha do descritor 3 (<em>unit</em> 3).</dd>
+  <dt>3&lt; cidades.txt</dt><dd>Abre <code>cidades.txt</code> no descritor 3, para o laço inteiro.</dd>
+</dl>
+
+<p>Descritores são explicados a fundo em <a href="descritores.html">Descritores de Arquivo</a>. Aqui basta saber que o 3 é um "cano" extra, que não se mistura com a entrada padrão. E isso resolve um problema bem comum, que está na seção <a href="#nao-funciona">Quando não funciona</a>: perguntar algo ao usuário dentro de um laço que lê arquivo.</p>
+
+<hr>
+
+<h2>A alternativa: <code>mapfile</code></h2>
+<p>Se você precisa de todas as linhas de uma vez (para saber quantas são, acessar a terceira, percorrer de trás para frente), o <code>mapfile</code> carrega o arquivo inteiro num <a href="arrays.html">array</a>, um item por linha:</p>
+
+<pre class="term">$ mapfile -t tarefas &lt; notas.txt
+$ echo "São ${#tarefas[@]} tarefas; a terceira é: ${tarefas[2]}"
+São 4 tarefas; a terceira é: Estudar Bash             « os índices começam em 0</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>while IFS= read -r</code></th><th><code>mapfile -t</code></th></tr>
+<tr><td>Memória</td><td>Uma linha por vez: serve para arquivos enormes.</td><td>O arquivo todo na memória.</td></tr>
+<tr><td>Separar campos</td><td>Sim, direto no <code>read</code> (<code>IFS=, read -r a b c</code>).</td><td>Não; cada item é a linha inteira.</td></tr>
+<tr><td>Acesso</td><td>Em ordem, uma vez.</td><td>Qualquer linha, quantas vezes quiser.</td></tr>
+<tr><td>Versão</td><td>Qualquer shell.</td><td><span class="versao">bash 4.0+</span> (não existe no Bash 3.2 do macOS).</td></tr>
+</table>
+</div>
+
+<p>Os detalhes estão em <a href="mapfile.html">mapfile e readarray</a>.</p>
+
+<hr>
+
+<h2 id="nao-funciona">Quando não funciona</h2>
+
+<div class="cenario">
+<strong>A última linha não foi processada</strong>
+<p><strong>O que aconteceu:</strong> o arquivo não termina com quebra de linha (veja a seção acima). <code>wc -l</code> mostra uma linha a menos do que o <code>cat</code>.</p>
+<p><strong>Como confirmar:</strong> <code>tail -c 1 arquivo | od -c</code>; se não aparecer <code>\n</code>, falta a quebra.</p>
+<p><strong>Como resolver:</strong> <code>while IFS= read -r linha || [[ -n $linha ]]; do</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O contador volta a 0 depois do laço</strong>
+<p><strong>O que aconteceu:</strong> o laço está do lado direito de um pipe (<code>cmd | while …</code>) e rodou numa subshell.</p>
+<p><strong>Como resolver:</strong> <code>while … done &lt; &lt;(cmd)</code>, ou <code>done &lt; arquivo</code> se os dados já estão num arquivo.</p>
+</div>
+
+<div class="cenario">
+<strong>O laço "pula" linhas quando faço uma pergunta dentro dele</strong>
+<pre class="term">$ while IFS= read -r tarefa; do
+&gt;   read -rp "Concluiu '$tarefa'? " resp
+&gt;   echo "→ $tarefa: $resp"
+&gt; done &lt; notas.txt
+→ Comprar café: Ligar para o João             « a "resposta" foi a linha seguinte do arquivo!
+→ Estudar Bash: Fazer backup das fotos</pre>
+<p><strong>O que aconteceu:</strong> os dois <code>read</code> leem da mesma entrada, o arquivo. O segundo, que devia esperar o teclado, "comeu" a linha 2. A pergunta nem apareceu: o <code>-p</code> só mostra o texto quando a entrada é o teclado. O mesmo acontece com qualquer comando dentro do laço que leia a entrada padrão (como <code>ssh</code> ou <code>ffmpeg</code>).</p>
+<p><strong>Como resolver:</strong> leia o arquivo pelo descritor 3, deixando a entrada padrão livre para o teclado:</p>
+<pre class="file" data-file="tarefas.sh">#!/usr/bin/env bash
+while IFS= read -r -u 3 tarefa; do
+  read -rp "Concluiu \"$tarefa\"? " resp
+  echo "→ $tarefa: $resp"
+done 3&lt; Documentos/notas.txt</pre>
+<pre class="term">$ bash tarefas.sh
+Concluiu "Comprar café"? sim
+→ Comprar café: sim
+Concluiu "Ligar para o João"? não
+→ Ligar para o João: não
+Concluiu "Estudar Bash"? sim
+→ Estudar Bash: sim
+Concluiu "Fazer backup das fotos"? não
+→ Fazer backup das fotos: não</pre>
+<p>Outra saída é ler a resposta direto do terminal: <code>read -rp "…" resp &lt; /dev/tty</code>.</p>
+</div>
+
+<div class="tryscript" data-file="tarefas.sh" data-stdin="sim\nnão\nsim\nnão\n" data-goal="out:→ Fazer backup das fotos: não,out:→ Comprar café: sim,src:-u *3">
+<p class="try-task"><strong>Missão:</strong> este script tem o defeito acima: as respostas viram linhas do arquivo. Corrija-o lendo o arquivo pelo descritor 3. As respostas digitadas já vêm preparadas (sim, não, sim, não).</p>
+<pre class="script">#!/usr/bin/env bash
+while IFS= read -r tarefa; do
+  read -rp "Concluiu \"$tarefa\"? " resp
+  echo "→ $tarefa: $resp"
+done &lt; Documentos/notas.txt
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+while IFS= read -r -u 3 tarefa; do
+  read -rp "Concluiu \"$tarefa\"? " resp
+  echo "→ $tarefa: $resp"
+done 3&lt; Documentos/notas.txt
+</pre>
+</div>
+
+<div class="cenario">
+<strong>O laço mostra a primeira linha para sempre</strong>
+<p><strong>O que aconteceu:</strong> o arquivo está no <code>read</code> (<code>while read -r linha &lt; arquivo</code>), e não no <code>done</code>. Ele é reaberto a cada volta.</p>
+<p><strong>Como resolver:</strong> <kbd>Ctrl</kbd>+<kbd>C</kbd> e mova o redirecionamento: <code>while IFS= read -r linha; do …; done &lt; arquivo</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Linhas com <code>\r</code> no fim (arquivo do Windows)</strong>
+<p><strong>O que aconteceu:</strong> arquivos criados no Windows terminam cada linha com <code>\r\n</code>. O <code>read</code> tira o <code>\n</code>, mas o <code>\r</code> fica na variável. Os sintomas são estranhos: comparações que deveriam dar certo falham, e textos colados depois da variável aparecem "por cima" do começo da linha.</p>
+<p><strong>Como confirmar:</strong> <code>cat -A arquivo</code> mostra <code>^M$</code> no fim das linhas.</p>
+<p><strong>Como resolver:</strong> limpe dentro do laço com <code>linha=${linha%$'\r'}</code>, ou converta o arquivo antes com <code>tr -d '\r' &lt; win.txt &gt; unix.txt</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>while IFS= read -r linha; do … done &lt; arq</code></td><td>Uma volta por linha, linha intacta.</td></tr>
+<tr><td><code>… read -r linha || [[ -n $linha ]]; do</code></td><td>Não perde a última linha sem <code>\n</code>.</td></tr>
+<tr><td><code>IFS=, read -r a b c</code></td><td>Separa os campos pela vírgula; a última variável fica com o resto.</td></tr>
+<tr><td><code>read -r _ _ x</code></td><td><code>_</code> descarta campos.</td></tr>
+<tr><td><code>{ read -r; while …; done; } &lt; arq</code></td><td>Pula o cabeçalho.</td></tr>
+<tr><td><code>while … done &lt; &lt;(cmd)</code></td><td>Lê a saída de um comando sem subshell.</td></tr>
+<tr><td><code>cmd | while … done</code></td><td>Lê a saída, mas as variáveis não sobrevivem.</td></tr>
+<tr><td><code>read -r -u 3 x … done 3&lt; arq</code></td><td>Lê do descritor 3 (dois arquivos; perguntas dentro do laço).</td></tr>
+<tr><td><code>mapfile -t arr &lt; arq</code></td><td>Todas as linhas num array.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Complete a receita</h3>
+<p>Complete para ler <code>lista.txt</code> linha por linha, sem perder espaços nem barras:</p>
+<div class="ex-code">while <input data-answer="IFS=" aria-label="variável vazia"> read <input data-answer="-r" aria-label="opção"> linha; do echo "$linha"; done <input data-answer="&lt;" aria-label="redirecionamento"> lista.txt</div>
+</div>
+
+<div class="exercise">
+<h3>2. Campos separados por dois-pontos</h3>
+<p>O arquivo <code>/etc/passwd</code> separa os campos com <code>:</code>. Complete para guardar o 1º campo em <code>usuario</code> e o resto em <code>resto</code>:</p>
+<div class="ex-code">while <input data-answer="IFS=:" aria-label="separador"> read -r usuario resto; do echo "$usuario"; done &lt; /etc/passwd</div>
+</div>
+
+<div class="exercise">
+<h3>3. Sem subshell</h3>
+<p>Complete para contar as linhas de <code>ls</code> sem perder o contador:</p>
+<div class="ex-code">n=0; while IFS= read -r l; do ((n++)); done <input data-answer="&lt; &lt;(ls)" aria-label="redirecionamento"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O arquivo <code>frutas.txt</code> foi criado com <code>printf 'pera\nfigo'</code>. Quantas linhas <code>while IFS= read -r l; do echo "$l"; done &lt; frutas.txt</code> mostra?</p>
+<label><input type="radio" name="q4"> 2</label>
+<label><input type="radio" name="q4"> 1</label>
+<label><input type="radio" name="q4"> 0</label>
+<label><input type="radio" name="q4"> Fica em laço infinito.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Em <code>IFS=, read -r nome idade</code> lendo a linha <code>Elisa,27,Porto Alegre,10.0</code>, quanto vale <code>idade</code>?</p>
+<label><input type="radio" name="q5"> <code>27</code></label>
+<label><input type="radio" name="q5"> <code>27,Porto</code></label>
+<label><input type="radio" name="q5"> <code>27,Porto Alegre,10.0</code></label>
+<label><input type="radio" name="q5"> Fica vazia.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Depois de <code>total=0; cat log | while read -r l; do ((total++)); done</code>, digitado no terminal, quanto vale <code>$total</code>?</p>
+<label><input type="radio" name="q6"> 0, porque o laço rodou numa subshell.</label>
+<label><input type="radio" name="q6"> O número de linhas do log.</label>
+<label><input type="radio" name="q6"> Fica vazio.</label>
+<label><input type="radio" name="q6"> Dá erro de sintaxe.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Para linhas, use <code>while IFS= read -r linha; do … done &lt; arquivo</code>, nunca <code>for linha in $(cat …)</code>.</li>
+  <li><code>IFS=</code> preserva os espaços das pontas; <code>-r</code> preserva as barras; o <code>&lt;</code> no <code>done</code> abre o arquivo uma vez só.</li>
+  <li><code>|| [[ -n $linha ]]</code> salva a última linha quando falta o <code>\n</code> final.</li>
+  <li><code>IFS=, read -r a b c</code> separa campos; a última variável leva o resto; pule o cabeçalho com um <code>read</code> antes do laço.</li>
+  <li><code>cmd | while</code> perde as variáveis (subshell); <code>while … done &lt; &lt;(cmd)</code> não perde.</li>
+  <li><code>read -u 3</code> lê de outro descritor: dois arquivos juntos, ou perguntas ao usuário dentro do laço. Para tudo num array, <a href="mapfile.html"><code>mapfile -t</code></a>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
