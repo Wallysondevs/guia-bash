@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash grep, sed, awk e cia. — ferramentas de texto nos scripts | Guia Bash</title>
+<meta name="description" content="As ferramentas de texto que os scripts Bash mais usam: grep (-q -c -E -o -v -i -n -w) e o código de saída, cut, sort, uniq, tr, sed, awk, wc, tee e column, com os arquivos da Ana e uma tabela de qual usar.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">grep, sed, awk</span> e cia.</h1>
+
+<p class="intro">O Bash sabe decidir e repetir, mas quem faz o trabalho pesado com texto são pequenos programas: <code>grep</code> procura, <code>cut</code> recorta, <code>sort</code> ordena, <code>sed</code> troca, <code>awk</code> calcula. Esta aula mostra cada um com os arquivos da Ana e, principalmente, <strong>como usá-los dentro de um script</strong>: guardando o resultado numa variável, decidindo pelo código de saída e encadeando com pipes.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li><code>grep</code> e o seu código de saída (0, 1 e 2), para usar com <code>if</code>.</li>
+  <li>Recortar, ordenar e contar: <code>cut</code>, <code>sort</code>, <code>uniq</code>, <code>wc</code>, <code>tr</code>.</li>
+  <li><code>sed</code> para trocar e apagar linhas, e o cuidado com <code>sed -i</code>.</li>
+  <li><code>awk</code> para colunas e contas: somar e tirar a média das notas do <code>alunos.csv</code> (e a armadilha da vírgula).</li>
+  <li><code>tee</code>, <code>column</code> e quando o próprio Bash basta, sem ferramenta nenhuma.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: filtros ligados por pipes</h2>
+<p>Todas essas ferramentas são <strong>filtros</strong>: leem texto (de um arquivo ou da entrada padrão), fazem uma coisa só e escrevem o resultado na saída. Ligadas por <a href="pipes.html">pipes</a>, resolvem perguntas inteiras. Exemplo: "quais IPs mais acessaram o site da Ana?"</p>
+
+<pre class="term" data-cwd="~/Documentos">$ cut -d' ' -f1 acesso.log | sort | uniq -c | sort -rn
+      3 192.168.0.10
+      2 192.168.0.23
+      1 192.168.0.57</pre>
+
+<p>Quatro programas, cada um com uma tarefa: o <code>cut</code> pega a primeira coluna (o IP), o <code>sort</code> junta os iguais, o <code>uniq -c</code> conta os repetidos e o último <code>sort -rn</code> põe o maior primeiro. Ao fim da aula, você vai montar essa linha sozinho.</p>
+
+<p>Os exemplos rodam dentro da pasta <code>Documentos</code> da Ana. Os arquivos que vamos usar:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ cat acesso.log
+192.168.0.10 - - [15/Oct/2026:09:01:12] "GET / HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:01:40] "GET /contato HTTP/1.1" 200
+192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+192.168.0.10 - - [15/Oct/2026:09:06:44] "POST /login HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:07:02] "GET / HTTP/1.1" 200
+$ cat alunos.csv
+nome,idade,cidade,nota
+Ana,29,Recife,9.5
+Bruno,34,Curitiba,7.0
+Carla,22,Salvador,8.5
+Diego,41,Manaus,6.0
+Elisa,27,Porto Alegre,10.0</pre>
+
+<p>Cada linha do <code>acesso.log</code> é um pedido feito ao site: o IP de quem pediu, a data, o pedido (<code>GET /admin</code>) e, no fim, o código de resposta (200 = ok, 403 = proibido, 404 = não encontrado). O <code>alunos.csv</code> é uma planilha em texto: campos separados por vírgula, com cabeçalho.</p>
+
+<hr>
+
+<h2><code>grep</code>: procurar linhas</h2>
+<p>O <code>grep</code> mostra as linhas que contêm um padrão. O nome vem de um comando do antigo editor <code>ed</code>: <code>g/re/p</code>, "global, <em>regular expression</em>, print".</p>
+
+<dl class="anatomy">
+  <dt>grep</dt><dd>O comando.</dd>
+  <dt>404</dt><dd>O padrão a procurar (uma <em>expressão regular</em>; aqui, um texto simples).</dd>
+  <dt>acesso.log</dt><dd>Onde procurar. Sem arquivo, o <code>grep</code> lê a entrada padrão (de um pipe).</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ grep 404 acesso.log
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+$ grep -n 403 acesso.log
+3:192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403   « -n: número da linha
+$ grep -v 200 acesso.log
+192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403   « -v: as que NÃO têm 200
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404</pre>
+
+<h3>Maiúsculas e palavras inteiras: <code>-i</code> e <code>-w</code></h3>
+<pre class="term" data-cwd="~/Documentos">$ grep -i ana alunos.csv
+Ana,29,Recife,9.5
+Diego,41,Manaus,6.0                « "Manaus" tem "ana" dentro!
+$ grep -w Ana alunos.csv
+Ana,29,Recife,9.5                  « -w: só a palavra inteira</pre>
+<p>O <code>-i</code> (<em>ignore case</em>) ignora maiúsculas e minúsculas. O <code>-w</code> (<em>word</em>) exige que o padrão seja uma palavra inteira, não um pedaço de outra. Em scripts, o <code>-w</code> evita muitos falsos positivos.</p>
+
+<h3>Vários padrões e só o pedaço: <code>-E</code> e <code>-o</code></h3>
+<pre class="term" data-cwd="~/Documentos">$ grep -E '403|404' acesso.log
+192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+$ grep -oE '[0-9]{3}$' acesso.log | sort | uniq -c
+      4 200
+      1 403
+      1 404</pre>
+<dl class="anatomy">
+  <dt>-E</dt><dd>Expressão regular <em>estendida</em>: <code>|</code> (ou), <code>+</code>, <code>{3}</code>, <code>( )</code> funcionam sem barra. Sem <code>-E</code>, <code>'403|404'</code> procuraria o texto "403|404" literal.</dd>
+  <dt>-o</dt><dd>Mostra <strong>só</strong> o pedaço que casou (<em>only matching</em>), um por linha, em vez da linha inteira.</dd>
+  <dt>[0-9]{3}$</dt><dd>Três dígitos no fim da linha (<code>$</code> = fim). As regex são explicadas em <a href="regex.html">Regex com [[ =~ ]]</a>.</dd>
+</dl>
+
+<h3>No script: <code>-q</code>, <code>-c</code> e o código de saída</h3>
+<p>Dentro de um script você raramente quer as linhas na tela. Você quer uma <strong>resposta</strong>: "tem ou não tem?", "quantas?". O <code>grep</code> responde pelo <a href="codigo-saida.html">código de saída</a>:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ grep -q 404 acesso.log; echo $?
+0                                  « achou
+$ grep -q 500 acesso.log; echo $?
+1                                  « não achou (não é erro!)
+$ grep -q 404 nada.log; echo $?
+grep: nada.log: Arquivo ou diretório inexistente
+2                                  « erro de verdade
+$ grep -c 404 acesso.log
+1                                  « -c: quantas linhas casaram</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Significado</th></tr>
+<tr><td><code>0</code></td><td>Achou pelo menos uma linha.</td></tr>
+<tr><td><code>1</code></td><td>Não achou nenhuma.</td></tr>
+<tr><td><code>2</code></td><td>Erro: arquivo inexistente, sem permissão, regex inválida.</td></tr>
+</table>
+</div>
+
+<p>O <code>-q</code> (<em>quiet</em>, "quieto") não mostra nada e para na primeira linha encontrada. É feito para o <code>if</code>:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ if grep -qw Bruno alunos.csv; then echo "Bruno está na turma"; fi
+Bruno está na turma</pre>
+
+<p>Repare: <strong>não</strong> se escreve <code>if [ grep … ]</code>. O <code>if</code> já testa o código de saída de qualquer comando (veja <a href="if.html">if, elif, else</a>).</p>
+
+<p>E o <code>-c</code> (<em>count</em>) serve para guardar um número numa variável:</p>
+
+<pre class="file" data-file="ok.sh">#!/usr/bin/env bash
+log=Documentos/acesso.log
+total=$(wc -l &lt; "$log")
+ok=$(grep -c ' 200$' "$log")
+echo "Total: $total acessos"
+echo "Com sucesso (200): $ok"
+</pre>
+
+<pre class="term">$ bash ok.sh
+Total: 6 acessos
+Com sucesso (200): 4</pre>
+
+<div class="warning">
+<strong><code>grep -c</code> que não acha nada devolve 1</strong>
+<pre class="term" data-cwd="~/Documentos">$ grep -c 500 acesso.log; echo $?
+0
+1</pre>
+<p>Ele imprime <code>0</code>, mas o código de saída é 1 ("não achei"). Num script com <code>set -e</code> (veja <a href="modo-estrito.html">set -euo pipefail</a>), isso encerra o script. Escreva <code>n=$(grep -c 500 "$log" || true)</code> quando zero for um resultado normal.</p>
+</div>
+
+<div class="tryscript" data-file="contagem.sh" data-goal="out:Com erro (403/404): 2,src:grep">
+<p class="try-task"><strong>Missão:</strong> complete a linha do <code>erros</code> para contar quantas linhas do log terminam com <code>403</code> <strong>ou</strong> <code>404</code>. Dica: <code>grep -c</code> com <code>-E</code> e o padrão <code>' (403|404)$'</code>. Rode até aparecer <code>Com erro (403/404): 2</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+log=Documentos/acesso.log
+total=$(wc -l &lt; "$log")
+erros=
+echo "Total: $total acessos"
+echo "Com erro (403/404): $erros"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+log=Documentos/acesso.log
+total=$(wc -l &lt; "$log")
+erros=$(grep -cE ' (403|404)$' "$log")
+echo "Total: $total acessos"
+echo "Com erro (403/404): $erros"
+</pre>
+</div>
+
+<hr>
+
+<h2><code>cut</code>: recortar colunas</h2>
+<p>O <code>cut</code> pega pedaços de cada linha: campos separados por um caractere, ou posições.</p>
+
+<dl class="anatomy">
+  <dt>-d,</dt><dd>O separador (<em>delimiter</em>) é a vírgula. Para espaço: <code>-d' '</code>. Sem <code>-d</code>, o separador é o tab.</dd>
+  <dt>-f1,4</dt><dd>Os campos (<em>fields</em>) 1 e 4. Também vale <code>-f2-</code> (do 2 ao fim) e <code>-f1-3</code>.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ cut -d, -f1,4 alunos.csv
+nome,nota
+Ana,9.5
+Bruno,7.0
+Carla,8.5
+Diego,6.0
+Elisa,10.0
+$ cut -d' ' -f1 acesso.log
+192.168.0.10
+192.168.0.23
+192.168.0.10
+192.168.0.57
+192.168.0.10
+192.168.0.23</pre>
+
+<p>Limitações: o <code>cut</code> aceita <strong>um</strong> caractere como separador, e cada espaço conta (dois espaços seguidos criam um campo vazio). Para colunas separadas por "vários espaços", use <code>awk</code>. E o <code>-c</code> (caracteres) do GNU <code>cut</code> conta <strong>bytes</strong>, o que quebra letras acentuadas:</p>
+
+<pre class="term">$ cut -c1-3 frutas.txt
+ban
+ma�                                « o "ç" tem 2 bytes e foi cortado ao meio
+lar
+…</pre>
+
+<p>(Saída encurtada.) Para cortar texto com acento, use a expansão <code>${var:0:3}</code>, que conta letras (veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>).</p>
+
+<hr>
+
+<h2><code>sort</code> e <code>uniq</code>: ordenar e contar</h2>
+
+<pre class="term">$ sort frutas.txt
+banana
+banana
+banana
+laranja
+maçã
+maçã
+uva
+$ sort frutas.txt | uniq
+banana
+laranja
+maçã
+uva
+$ sort frutas.txt | uniq -c | sort -rn
+      3 banana
+      2 maçã
+      1 uva
+      1 laranja</pre>
+
+<p>O <code>uniq</code> só junta linhas iguais <strong>vizinhas</strong>. Por isso ele quase sempre vem depois de um <code>sort</code>. Com <code>-c</code> (<em>count</em>), ele mostra quantas vezes cada linha apareceu.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção do <code>sort</code></th><th>O que faz</th></tr>
+<tr><td><code>-n</code></td><td>Ordem numérica (sem ela, "10" vem antes de "9", como num dicionário).</td></tr>
+<tr><td><code>-r</code></td><td>Ordem inversa (<em>reverse</em>): maior primeiro.</td></tr>
+<tr><td><code>-t,</code></td><td>O separador de campos é a vírgula.</td></tr>
+<tr><td><code>-k4</code></td><td>Ordenar pelo campo 4 (<em>key</em>).</td></tr>
+<tr><td><code>-u</code></td><td>Tira as repetidas (como <code>sort | uniq</code>).</td></tr>
+</table>
+</div>
+
+<pre class="term" data-cwd="~/Documentos">$ tail -n +2 alunos.csv | sort -t, -k4 -rn
+Elisa,27,Porto Alegre,10.0
+Ana,29,Recife,9.5
+Carla,22,Salvador,8.5
+Bruno,34,Curitiba,7.0
+Diego,41,Manaus,6.0
+$ tail -n +2 alunos.csv | sort -t, -k2 -n | head -n 1
+Carla,22,Salvador,8.5              « a mais nova</pre>
+
+<p>O <code>tail -n +2</code> pula o cabeçalho, para ele não se misturar com os dados.</p>
+
+<div class="warning">
+<strong><code>sort -n</code> e números com ponto, em português</strong>
+<p>No locale pt_BR, o ponto é o separador de <strong>milhar</strong>. Então, para o <code>sort -n</code>, <code>9.25</code> vale 925:</p>
+<pre class="term">$ printf '9.5\n10.0\n9.25\n' | sort -n
+9.5
+10.0
+9.25                               « 925 &gt; 100 &gt; 95
+$ printf '9.5\n10.0\n9.25\n' | LC_ALL=C sort -n
+9.25
+9.5
+10.0</pre>
+<p>As notas do <code>alunos.csv</code> só saíram certas porque todas têm uma casa decimal. Em scripts que ordenam números com ponto, use <code>LC_ALL=C sort -n</code>. O mesmo assunto aparece no <a href="printf.html">printf</a>.</p>
+</div>
+
+<div class="try" data-goal="contains:~/ranking-ips.txt=3 192.168.0.10" data-solucao="cut -d' ' -f1 Documentos/acesso.log | sort | uniq -c | sort -rn &gt; ranking-ips.txt">
+<p class="try-task"><strong>Missão:</strong> monte a linha do começo da aula: a partir de <code>Documentos/acesso.log</code>, pegue o IP (campo 1, separado por espaço), conte quantas vezes cada um aparece e ordene do maior para o menor. Grave o resultado em <code>ranking-ips.txt</code> e confira com <code>cat</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>wc</code>: contar</h2>
+<p>O <code>wc</code> (<em>word count</em>) conta linhas, palavras e bytes.</p>
+
+<pre class="term" data-cwd="~/Documentos">$ wc acesso.log
+  6  48 389 acesso.log             « linhas, palavras, bytes, nome
+$ wc -l alunos.csv
+6 alunos.csv
+$ wc -l &lt; alunos.csv
+6                                  « só o número: ideal para variáveis
+$ wc -w notas.txt
+12 notas.txt</pre>
+
+<p>Em scripts, use <code>wc -l &lt; arquivo</code>: com o <code>&lt;</code>, o <code>wc</code> não sabe o nome do arquivo e mostra só o número, pronto para <code>n=$(wc -l &lt; arquivo)</code>. E lembre: o <code>alunos.csv</code> tem 6 linhas, mas 5 alunos (uma é o cabeçalho). <code>-c</code> conta bytes; <code>-m</code> conta caracteres (letras acentuadas usam mais de um byte).</p>
+
+<hr>
+
+<h2><code>tr</code>: trocar ou apagar caracteres</h2>
+<p>O <code>tr</code> (<em>translate</em>) troca caracteres um por um. Ele só lê da entrada padrão: não aceita nome de arquivo.</p>
+
+<pre class="term" data-cwd="~/Documentos">$ tr ',' ';' &lt; alunos.csv
+nome;idade;cidade;nota
+Ana;29;Recife;9.5
+…
+$ echo "Olá   mundo   bash" | tr -s ' '
+Olá mundo bash                     « -s: espremeu os espaços repetidos
+$ echo "R$ 1.234,56" | tr -d 'R$ .'
+1234,56                            « -d: apagou R, $, espaço e ponto</pre>
+
+<p>(A primeira saída foi encurtada.) Cuidado com acentos: os intervalos <code>a-z</code> e <code>A-Z</code> só cobrem as letras sem acento, e o GNU <code>tr</code> trabalha byte a byte:</p>
+
+<pre class="term">$ echo "maçã" | tr a-z A-Z
+MAçã                               « ç e ã ficaram minúsculos</pre>
+
+<p>Para maiúsculas com acento, use o próprio Bash: <code>${texto^^}</code> (veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>).</p>
+
+<hr>
+
+<h2><code>sed</code>: trocar e apagar linhas</h2>
+<p>O <code>sed</code> (<em>stream editor</em>, "editor de fluxo") edita o texto enquanto ele passa, linha por linha, sem abrir um editor. O comando mais usado é o <code>s</code>, de <em>substitute</em>:</p>
+
+<dl class="anatomy">
+  <dt>s</dt><dd>Substituir.</dd>
+  <dt>/,/</dt><dd>O que procurar (uma regex), entre barras.</dd>
+  <dt>;/</dt><dd>Pelo que trocar.</dd>
+  <dt>g</dt><dd><em>global</em>: todas as ocorrências da linha. Sem o <code>g</code>, só a primeira.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ sed 's/,/;/' alunos.csv | head -n 2
+nome;idade,cidade,nota             « só a primeira vírgula de cada linha
+Ana;29,Recife,9.5
+$ sed 's/,/;/g' alunos.csv | head -n 2
+nome;idade;cidade;nota             « com g: todas
+Ana;29;Recife;9.5</pre>
+
+<h3>Apagar e mostrar linhas</h3>
+<pre class="term" data-cwd="~/Documentos">$ sed '1d' alunos.csv
+Ana,29,Recife,9.5                  « 1d: apagou a linha 1 (o cabeçalho)
+Bruno,34,Curitiba,7.0
+Carla,22,Salvador,8.5
+Diego,41,Manaus,6.0
+Elisa,27,Porto Alegre,10.0
+$ sed -n '2,3p' alunos.csv
+Ana,29,Recife,9.5                  « -n + p: mostra só as linhas 2 a 3
+Bruno,34,Curitiba,7.0
+$ sed -n '/Bruno/p' alunos.csv
+Bruno,34,Curitiba,7.0</pre>
+
+<p>Um endereço pode ser um número (<code>1</code>), um intervalo (<code>2,3</code>), <code>$</code> (a última linha) ou uma regex entre barras (<code>/^#/</code>, linhas que começam com <code>#</code>). <code>sed '/^#/d' config</code> apaga os comentários de um arquivo de configuração.</p>
+
+<h3>Regex estendida: <code>-E</code></h3>
+<pre class="term" data-cwd="~/Documentos">$ sed -E 's/^([^,]*),([^,]*)/\2 anos: \1/' alunos.csv
+idade anos: nome,cidade,nota
+29 anos: Ana,Recife,9.5
+…</pre>
+<p>(Saída encurtada.) Com <code>-E</code>, os parênteses <strong>capturam</strong> pedaços: <code>\1</code> é o que casou no primeiro par (o nome), <code>\2</code> no segundo (a idade). <code>[^,]*</code> quer dizer "qualquer coisa que não seja vírgula".</p>
+
+<h3>Editar o arquivo de verdade: <code>-i</code></h3>
+<p>Até aqui o <code>sed</code> só mostrou o resultado; o arquivo ficou igual. O <code>-i</code> (<em>in place</em>) grava a mudança <strong>no próprio arquivo</strong>, sem perguntar e sem desfazer. Pratique numa cópia:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ cp notas.txt notas-copia.txt
+$ sed -i 's/café/chá/' notas-copia.txt
+$ cat notas-copia.txt
+Comprar chá
+Ligar para o João
+Estudar Bash
+Fazer backup das fotos
+$ sed -i.bak 's/João/Maria/' notas-copia.txt
+$ ls notas-copia*
+notas-copia.txt
+notas-copia.txt.bak                « -i.bak guardou o original
+$ diff notas-copia.txt.bak notas-copia.txt
+2c2
+&lt; Ligar para o João
+---
+&gt; Ligar para o Maria</pre>
+
+<div class="warning">
+<strong>Cuidados com <code>sed -i</code></strong>
+<ul>
+  <li>Teste sempre <strong>sem</strong> <code>-i</code> primeiro, olhe a saída e só então acrescente o <code>-i</code>.</li>
+  <li>Prefira <code>-i.bak</code>: ele guarda uma cópia do original. Sem o <code>.bak</code>, o erro é para sempre.</li>
+  <li>No macOS (BSD sed), o <code>-i</code> exige um argumento: <code>sed -i '' 's/a/b/' arq</code>. A forma <code>-i.bak</code> funciona nos dois.</li>
+  <li>Nunca faça <code>sed 's/a/b/' arq &gt; arq</code>: o <code>&gt;</code> esvazia o arquivo antes de o <code>sed</code> ler (veja <a href="redirecionamento.html">Redirecionamento</a>).</li>
+</ul>
+</div>
+
+<hr>
+
+<h2><code>awk</code>: colunas e contas</h2>
+<p>O <code>awk</code> (iniciais dos criadores: <strong>A</strong>ho, <strong>W</strong>einberger e <strong>K</strong>ernighan) é quase uma linguagem. Ele lê cada linha, separa em campos <code>$1</code>, <code>$2</code>… e executa um programa curto para cada uma. É a ferramenta certa quando você precisa de <strong>colunas e contas</strong> ao mesmo tempo.</p>
+
+<pre class="syntax">awk 'padrão { ação }' arquivo</pre>
+
+<dl class="anatomy">
+  <dt>-F,</dt><dd>O separador de campos é a vírgula (<em>field separator</em>). Sem <code>-F</code>, o separador é "um ou mais espaços ou tabs", o que já resolve o <code>acesso.log</code>.</dd>
+  <dt>'…'</dt><dd>O programa awk, sempre entre <strong>aspas simples</strong>, senão o Bash trocaria o <code>$1</code> pelo argumento do script.</dd>
+  <dt>NR &gt; 1</dt><dd>O padrão: só as linhas em que o número da linha (<em>number of record</em>) é maior que 1, ou seja, pula o cabeçalho.</dd>
+  <dt>{ print $1, $4 }</dt><dd>A ação: mostrar os campos 1 e 4, separados por espaço (é o que a vírgula faz no <code>print</code>).</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ awk -F, 'NR &gt; 1 { print $1, $4 }' alunos.csv
+Ana 9.5
+Bruno 7.0
+Carla 8.5
+Diego 6.0
+Elisa 10.0
+$ awk -F, '$3 == "Recife"' alunos.csv
+Ana,29,Recife,9.5                  « só padrão, sem ação: mostra a linha
+$ awk '{ print $NF }' acesso.log | sort | uniq -c
+      4 200
+      1 403
+      1 404</pre>
+
+<p><code>NF</code> é o número de campos da linha (<em>number of fields</em>), então <code>$NF</code> é o <strong>último</strong> campo: o código de resposta.</p>
+
+<h3>Somar e tirar a média das notas</h3>
+<p>Aqui o <code>awk</code> brilha: ele tem variáveis e faz contas com decimais (o Bash só faz com inteiros). Mas, na máquina da Ana, a primeira tentativa dá errado:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ awk -F, 'NR &gt; 1 { soma += $4; n++ } END { print "Média:", soma / n }' alunos.csv
+Média: 8                           « errado! a média é 8,2</pre>
+
+<p><strong>O que aconteceu:</strong> o <code>awk</code> da máquina da Ana (e do Debian e do Ubuntu) é o <strong>mawk</strong>, que segue o idioma do sistema. Em pt_BR, o separador decimal é a vírgula, então ele leu <code>9.5</code> como <code>9</code>, <code>8.5</code> como <code>8</code>… A soma deu 40 em vez de 41. A correção é a mesma do <code>printf</code>: números no formato "C" (com ponto).</p>
+
+<pre class="term" data-cwd="~/Documentos">$ LC_NUMERIC=C awk -F, 'NR &gt; 1 { soma += $4; n++ } END { printf "Média: %.2f\n", soma / n }' alunos.csv
+Média: 8.20</pre>
+
+<dl class="anatomy">
+  <dt>LC_NUMERIC=C</dt><dd>Só para este comando: números com ponto (veja <a href="printf.html">printf e echo</a>).</dd>
+  <dt>soma += $4</dt><dd>Para cada aluno, acrescenta a nota à variável <code>soma</code>. No awk, variáveis não precisam ser criadas: começam valendo 0.</dd>
+  <dt>n++</dt><dd>Conta quantos alunos foram somados.</dd>
+  <dt>END { … }</dt><dd>Um bloco que roda <strong>uma vez</strong>, depois da última linha. Existe também <code>BEGIN { … }</code>, que roda antes da primeira.</dd>
+  <dt>printf "Média: %.2f\n", soma / n</dt><dd>O <code>printf</code> do awk funciona como o do Bash, com os argumentos separados por vírgula.</dd>
+</dl>
+
+<p>Com o mesmo cuidado, o <code>awk</code> filtra por número e monta tabelas:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ LC_NUMERIC=C awk -F, 'NR &gt; 1 &amp;&amp; $4 &gt;= 8 { print $1 }' alunos.csv
+Ana
+Carla
+Elisa
+$ LC_NUMERIC=C awk -F, 'NR &gt; 1 { printf "%-8s %5.1f\n", $1, $4 }' alunos.csv
+Ana        9.5
+Bruno      7.0
+Carla      8.5
+Diego      6.0
+Elisa     10.0</pre>
+
+<div class="warning">
+<strong>mawk × gawk</strong>
+<p>Existem várias versões do <code>awk</code>. Debian e Ubuntu instalam o <strong>mawk</strong>; Fedora, Arch e openSUSE, o <strong>gawk</strong> (GNU awk); o macOS, o awk do BSD. Tudo o que esta aula mostra funciona em todos. Já funções como <code>gensub()</code>, <code>asort()</code> e a variável <code>IGNORECASE</code> são só do gawk:</p>
+<pre class="term">$ awk 'BEGIN { print gensub(/a/, "A", "g", "banana") }'
+awk: line 2: function gensub never defined</pre>
+<p>Use <code>gsub()</code> (que existe em todos) ou instale o gawk e chame <code>gawk</code> pelo nome. Outra diferença: o gawk, por padrão, sempre lê números com ponto, então o problema da média acima não acontece nele. Escreva <code>LC_NUMERIC=C</code> mesmo assim: o seu script vai funcionar nos dois.</p>
+</div>
+
+<hr>
+
+<h2><code>tee</code> e <code>column</code></h2>
+<p>O <code>tee</code> é um "T" de encanamento: grava a entrada num arquivo <strong>e</strong> deixa ela seguir para a tela (ou para o próximo pipe). Útil para guardar um log do que o script mostra.</p>
+
+<pre class="term" data-cwd="~/Documentos">$ grep 404 acesso.log | tee erros-404.txt
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404   « na tela…
+$ cat erros-404.txt
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404   « …e no arquivo
+$ echo "nova linha" | tee -a erros-404.txt &gt; /dev/null
+$ wc -l erros-404.txt
+2 erros-404.txt</pre>
+
+<p><code>tee -a</code> acrescenta em vez de substituir (<em>append</em>). O <code>&gt; /dev/null</code> no fim descarta a cópia da tela quando você só quer gravar.</p>
+
+<p>O <code>column -t</code> alinha colunas automaticamente. Com <code>-s,</code> ele separa na vírgula:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ column -t -s, alunos.csv
+nome   idade  cidade        nota
+Ana    29     Recife        9.5
+Bruno  34     Curitiba      7.0
+Carla  22     Salvador      8.5
+Diego  41     Manaus        6.0
+Elisa  27     Porto Alegre  10.0</pre>
+
+<p>É o jeito mais rápido de ver um CSV. Quando você precisa controlar a largura e o alinhamento de cada coluna, use o <a href="printf.html">printf</a>.</p>
+
+<hr>
+
+<h2>Tudo junto num script</h2>
+<p>Um relatório do <code>acesso.log</code> usando várias ferramentas, cada uma no que faz melhor:</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+# Relatório rápido do acesso.log
+export LC_NUMERIC=C
+log=Documentos/acesso.log
+
+if ! grep -q 'HTTP' "$log"; then
+  echo "O arquivo $log não parece um log de acesso." &gt;&amp;2
+  exit 1
+fi
+
+total=$(wc -l &lt; "$log")
+erros=$(grep -cE ' (403|404)$' "$log")
+printf 'Acessos: %d (com erro: %d)\n' "$total" "$erros"
+
+echo "Por IP:"
+cut -d' ' -f1 "$log" | sort | uniq -c | sort -rn | awk '{ printf "  %-14s %s\n", $2, $1 }'
+
+echo "Páginas com erro:"
+awk '$NF &gt;= 400 { print "  " $6 " (" $NF ")" }' "$log"
+</pre>
+
+<pre class="term">$ bash relatorio.sh
+Acessos: 6 (com erro: 2)
+Por IP:
+  192.168.0.10   3
+  192.168.0.23   2
+  192.168.0.57   1
+Páginas com erro:
+  /admin (403)
+  /fotos (404)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linhas</th><th>O que fazem</th></tr>
+<tr><td>3</td><td>Números no formato com ponto para todos os comandos do script.</td></tr>
+<tr><td>6–9</td><td><code>grep -q</code> no <code>if</code>: confere o arquivo antes de começar. O <code>!</code> inverte ("se <strong>não</strong> achou").</td></tr>
+<tr><td>11–12</td><td>Números guardados em variáveis com <code>$( )</code>: <code>wc -l &lt;</code> e <code>grep -c</code>.</td></tr>
+<tr><td>16</td><td>O ranking de IPs; o <code>awk</code> no fim troca a ordem das colunas e alinha.</td></tr>
+<tr><td>19</td><td>O <code>awk</code> filtra pelo último campo (<code>$NF &gt;= 400</code>) e mostra a página (campo 6).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Qual ferramenta para qual tarefa?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tarefa</th><th>Ferramenta</th><th>Exemplo</th></tr>
+<tr><td>Tem ou não tem? (num <code>if</code>)</td><td><code>grep -q</code></td><td><code>if grep -q erro log; then</code></td></tr>
+<tr><td>Mostrar as linhas que têm um texto</td><td><code>grep</code></td><td><code>grep -w Ana alunos.csv</code></td></tr>
+<tr><td>Contar linhas que casam</td><td><code>grep -c</code></td><td><code>grep -c 404 acesso.log</code></td></tr>
+<tr><td>Contar linhas/palavras de um arquivo</td><td><code>wc</code></td><td><code>wc -l &lt; arq</code></td></tr>
+<tr><td>Uma coluna, separador simples</td><td><code>cut</code></td><td><code>cut -d, -f1 alunos.csv</code></td></tr>
+<tr><td>Colunas separadas por espaços variados</td><td><code>awk</code></td><td><code>awk '{ print $1 }'</code></td></tr>
+<tr><td>Somar, média, filtrar por número</td><td><code>awk</code></td><td><code>awk '{ s += $4 } END { print s }'</code></td></tr>
+<tr><td>Ordenar / tirar repetidas / contar repetidas</td><td><code>sort</code>, <code>uniq</code></td><td><code>sort | uniq -c | sort -rn</code></td></tr>
+<tr><td>Trocar texto em todas as linhas</td><td><code>sed</code></td><td><code>sed 's/a/b/g'</code></td></tr>
+<tr><td>Apagar linhas (cabeçalho, comentários)</td><td><code>sed</code></td><td><code>sed '1d'</code>, <code>sed '/^#/d'</code></td></tr>
+<tr><td>Trocar ou apagar caracteres soltos</td><td><code>tr</code></td><td><code>tr -d '\r'</code></td></tr>
+<tr><td>Gravar e mostrar ao mesmo tempo</td><td><code>tee</code></td><td><code>cmd | tee log.txt</code></td></tr>
+<tr><td>Ver uma tabela alinhada</td><td><code>column -t</code></td><td><code>column -t -s, alunos.csv</code></td></tr>
+</table>
+</div>
+
+<h3>Quando o próprio Bash basta</h3>
+<p>Cada ferramenta é um programa novo que o sistema precisa iniciar. Para <strong>uma</strong> variável, o Bash resolve sozinho com as <a href="expansao-parametros.html">expansões de parâmetro</a>, mais rápido e sem problemas de acento. Dentro de um laço que roda mil vezes, a diferença é grande.</p>
+
+<pre class="term">$ arquivo="relatorio.odt"
+$ echo "${arquivo%.odt}.pdf"
+relatorio.pdf                      « em vez de: echo "$arquivo" | sed 's/\.odt$/.pdf/'
+$ linha="Ana,29,Recife,9.5"
+$ echo "${linha%%,*}"
+Ana                                « em vez de: echo "$linha" | cut -d, -f1
+$ echo "${arquivo^^}"
+RELATORIO.ODT                      « em vez de: tr a-z A-Z (e funciona com acento)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Para…</th><th>Em vez de…</th><th>Use o Bash</th></tr>
+<tr><td>Trocar texto numa variável</td><td><code>echo "$x" | sed 's/a/b/g'</code></td><td><code>${x//a/b}</code></td></tr>
+<tr><td>Primeiro campo de uma linha</td><td><code>echo "$x" | cut -d, -f1</code></td><td><code>${x%%,*}</code> ou <code>IFS=, read -r a b &lt;&lt;&lt; "$x"</code></td></tr>
+<tr><td>Maiúsculas / minúsculas</td><td><code>tr a-z A-Z</code></td><td><code>${x^^}</code> / <code>${x,,}</code></td></tr>
+<tr><td>Tamanho do texto</td><td><code>echo -n "$x" | wc -m</code></td><td><code>${#x}</code></td></tr>
+<tr><td>Contém um texto?</td><td><code>echo "$x" | grep -q erro</code></td><td><code>[[ $x == *erro* ]]</code></td></tr>
+</table>
+</div>
+
+<p>A regra: <strong>uma variável</strong>, use o Bash; <strong>um arquivo</strong> (muitas linhas), use a ferramenta, uma vez só, em vez de um laço que chama a ferramenta para cada linha.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O <code>grep</code> com <code>|</code> não acha nada</strong>
+<pre class="term" data-cwd="~/Documentos">$ grep 'Ana|Bruno' alunos.csv; echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> sem <code>-E</code>, o <code>|</code> é um caractere comum; o <code>grep</code> procurou o texto "Ana|Bruno".</p>
+<p><strong>Como resolver:</strong> <code>grep -E 'Ana|Bruno' alunos.csv</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A média ou a soma do <code>awk</code> deu um número "redondo" e errado</strong>
+<p><strong>O que aconteceu:</strong> o mawk, em português, leu <code>9.5</code> como 9 (veja a seção da média). Um filtro como <code>$4 &gt;= 8</code> também falha: sem <code>LC_NUMERIC=C</code>, a Elisa (<code>10.0</code>) não aparece, porque o valor deixa de parecer número e é comparado como texto ("10.0" vem antes de "8" no dicionário).</p>
+<p><strong>Como resolver:</strong> <code>LC_NUMERIC=C awk …</code>, ou <code>export LC_NUMERIC=C</code> no começo do script.</p>
+</div>
+
+<div class="cenario">
+<strong><code>awk</code> imprimiu linhas vazias</strong>
+<pre class="term" data-cwd="~/Documentos">$ awk -F, '{ print $5 }' alunos.csv | head -n 2
+
+
+</pre>
+<p><strong>O que aconteceu:</strong> não existe campo 5. Confira quantos campos há com <code>awk -F, '{ print NF }' arquivo</code>. Outra causa comum: esquecer o <code>-F,</code>, e aí a linha inteira é o campo 1.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>cut</code> devolveu a linha inteira</strong>
+<pre class="term" data-cwd="~/Documentos">$ cut -f1 alunos.csv | head -n 2
+nome,idade,cidade,nota
+Ana,29,Recife,9.5</pre>
+<p><strong>O que aconteceu:</strong> sem <code>-d</code>, o <code>cut</code> procura tabs. Linhas sem o separador saem inteiras.</p>
+<p><strong>Como resolver:</strong> <code>cut -d, -f1 alunos.csv</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"sed: não foi possível ler …"</strong>
+<pre class="term">$ sed -i 's/x/y/' nada.txt
+sed: não foi possível ler nada.txt: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não existe na pasta atual. Confira com <code>pwd</code> e <code>ls</code>. Num script, use caminhos a partir de uma variável e teste antes: <code>[[ -f $arq ]] || exit 1</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>$1</code> do <code>awk</code> virou outra coisa</strong>
+<p><strong>O que aconteceu:</strong> o programa estava entre aspas <strong>duplas</strong> (<code>awk "{ print $1 }"</code>). O Bash trocou <code>$1</code> pelo primeiro argumento do script (ou por nada) antes de o <code>awk</code> rodar.</p>
+<p><strong>Como resolver:</strong> programas awk sempre entre aspas simples. Para passar um valor do Bash, use <code>-v</code>: <code>awk -v min="$minimo" '$4 &gt;= min'</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Opções mais usadas em scripts</th></tr>
+<tr><td><code>grep</code></td><td><code>-q</code> quieto · <code>-c</code> conta · <code>-v</code> inverte · <code>-i</code> ignora maiúsculas · <code>-w</code> palavra inteira · <code>-n</code> número da linha · <code>-o</code> só o pedaço · <code>-E</code> regex estendida · códigos 0/1/2</td></tr>
+<tr><td><code>cut</code></td><td><code>-d,</code> separador · <code>-f1,3</code> campos · <code>-f2-</code> do 2 ao fim · <code>-c1-5</code> bytes</td></tr>
+<tr><td><code>sort</code></td><td><code>-n</code> numérico · <code>-r</code> inverso · <code>-t,</code> separador · <code>-k2</code> campo · <code>-u</code> sem repetidas</td></tr>
+<tr><td><code>uniq</code></td><td>(depois de <code>sort</code>) · <code>-c</code> conta · <code>-d</code> só as repetidas</td></tr>
+<tr><td><code>wc</code></td><td><code>-l</code> linhas · <code>-w</code> palavras · <code>-c</code> bytes · <code>-m</code> caracteres · <code>&lt; arq</code> só o número</td></tr>
+<tr><td><code>tr</code></td><td><code>tr a b</code> troca · <code>-d</code> apaga · <code>-s</code> espreme repetidos (só entrada padrão)</td></tr>
+<tr><td><code>sed</code></td><td><code>s/a/b/</code> · <code>s/a/b/g</code> · <code>Nd</code> · <code>/re/d</code> · <code>-n 'Np'</code> · <code>-E</code> · <code>-i.bak</code></td></tr>
+<tr><td><code>awk</code></td><td><code>-F,</code> · <code>$1 … $NF</code> · <code>NR</code> · <code>NF</code> · <code>BEGIN</code>/<code>END</code> · <code>printf</code> · <code>-v var=valor</code></td></tr>
+<tr><td><code>tee</code></td><td><code>-a</code> acrescenta</td></tr>
+<tr><td><code>column</code></td><td><code>-t</code> tabela · <code>-s,</code> separador</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só a resposta</h3>
+<p>Complete para o <code>if</code> testar, sem mostrar nada na tela, se o <code>acesso.log</code> tem alguma linha com <code>403</code>:</p>
+<div class="ex-code">if grep <input data-answer="-q" aria-label="opção"> 403 acesso.log; then echo "Houve acesso proibido"; fi</div>
+</div>
+
+<div class="exercise">
+<h3>2. Recortar a cidade</h3>
+<p>Complete para mostrar só a coluna das cidades do <code>alunos.csv</code>:</p>
+<div class="ex-code">cut <input data-answer="-d, -f3|-d , -f3|-f3 -d,|-d',' -f3|-d&quot;,&quot; -f3" aria-label="opções"> alunos.csv</div>
+</div>
+
+<div class="exercise">
+<h3>3. Apagar o cabeçalho</h3>
+<p>Complete o comando do <code>sed</code> para mostrar o <code>alunos.csv</code> sem a primeira linha:</p>
+<div class="ex-code">sed '<input data-answer="1d" aria-label="comando do sed">' alunos.csv</div>
+</div>
+
+<div class="exercise">
+<h3>4. Contar repetidas</h3>
+<p>Complete para contar quantas vezes cada fruta aparece em <code>frutas.txt</code>:</p>
+<div class="ex-code">sort frutas.txt | <input data-answer="uniq -c" aria-label="comando"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. <code>grep -q 500 acesso.log</code> não mostra nada. Como o script sabe se achou?</p>
+<label><input type="radio" name="q5"> Não sabe: com <code>-q</code> o <code>grep</code> não devolve nada.</label>
+<label><input type="radio" name="q5"> Pela variável <code>$GREP</code>.</label>
+<label><input type="radio" name="q5"> Pelo código de saída: 0 achou, 1 não achou, 2 erro.</label>
+<label><input type="radio" name="q5"> Pelo arquivo <code>grep.out</code> que o <code>-q</code> cria.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">6. Na máquina da Ana (mawk, pt_BR), <code>awk -F, 'NR&gt;1 { s += $4 } END { print s }' alunos.csv</code> mostra 40, e não 41. Por quê?</p>
+<label><input type="radio" name="q6"> Porque o <code>NR&gt;1</code> pulou a Ana.</label>
+<label><input type="radio" name="q6"> Porque, no locale pt_BR, o mawk lê <code>9.5</code> como 9 (o separador decimal é a vírgula).</label>
+<label><input type="radio" name="q6"> Porque o awk só soma inteiros.</label>
+<label><input type="radio" name="q6"> Porque faltou o <code>BEGIN</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">7. Você tem o nome de um arquivo numa variável e quer trocar a extensão <code>.odt</code> por <code>.pdf</code>. Qual é a melhor forma num script?</p>
+<label><input type="radio" name="q7"> <code>echo "$arq" | sed 's/odt/pdf/'</code></label>
+<label><input type="radio" name="q7"> <code>echo "$arq" | tr odt pdf</code></label>
+<label><input type="radio" name="q7"> <code>echo "$arq" | cut -d. -f1</code></label>
+<label><input type="radio" name="q7"> <code>"${arq%.odt}.pdf"</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>grep</code> procura; no script, use <code>-q</code> no <code>if</code> e <code>-c</code> para contar. Código 0 = achou, 1 = não achou, 2 = erro.</li>
+  <li><code>cut</code> recorta campos com um separador; <code>sort | uniq -c | sort -rn</code> faz rankings; <code>wc -l &lt; arq</code> dá só o número.</li>
+  <li><code>sed 's/a/b/g'</code> troca, <code>sed '1d'</code> apaga; teste sem <code>-i</code> e prefira <code>-i.bak</code>.</li>
+  <li><code>awk -F,</code> lida com colunas e contas; em pt_BR, use <code>LC_NUMERIC=C</code> para números com ponto. Evite recursos só do gawk.</li>
+  <li><code>tee</code> grava e mostra, <code>column -t</code> alinha. Para uma variável só, prefira as expansões do próprio Bash.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash printf e echo — formatar a saída de um script | Guia Bash</title>
+<meta name="description" content="Aprenda printf no Bash: formato e argumentos, %s %d %f %5s %-10s %05d, tabelas alinhadas, %b, %q, printf -v, datas com %()T, as armadilhas do echo e a vírgula decimal do pt_BR.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">printf</span> e echo</h1>
+
+<p class="intro">Todo script precisa mostrar alguma coisa: uma mensagem, um relatório, uma tabela. O <code>echo</code> serve para o simples. O <code>printf</code> serve para todo o resto: ele alinha colunas, controla casas decimais, completa com zeros e funciona <strong>igual em qualquer shell</strong>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As armadilhas do <code>echo</code> (<code>-e</code>, <code>-n</code>, diferenças entre shells) e por que o <code>printf</code> é previsível.</li>
+  <li>Como o <code>printf</code> junta um <strong>formato</strong> com <strong>argumentos</strong>: <code>%s</code>, <code>%d</code>, <code>%f</code>, largura, alinhamento e zeros.</li>
+  <li>A regra de ouro: o formato se repete para os argumentos que sobram (tabelas com uma linha só).</li>
+  <li><code>%b</code>, <code>%q</code>, <code>printf -v</code> e datas sem o comando <code>date</code>.</li>
+  <li>Por que <code>printf "%.2f" 3.5</code> dá erro no Brasil, e o que é <code>LC_NUMERIC</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: o <code>echo</code> não é sempre igual</h2>
+<p>O <code>echo</code> (em inglês, "eco") repete o que recebe e pula uma linha no fim. Para uma mensagem, é perfeito:</p>
+
+<pre class="term">$ echo "Olá, Ana"
+Olá, Ana</pre>
+
+<p>Os problemas aparecem quando você quer algo a mais. O <code>echo</code> do Bash tem duas opções:</p>
+
+<dl class="anatomy">
+  <dt>-n</dt><dd>Não pula linha no fim (<em>no newline</em>).</dd>
+  <dt>-e</dt><dd>Interpreta escapes como <code>\t</code> (tab) e <code>\n</code> (nova linha) — <em>escapes</em>. Sem ele, o Bash mostra a barra literalmente.</dd>
+</dl>
+
+<pre class="term">$ echo -n "sem quebra"; echo " &lt;- veio colado"
+sem quebra &lt;- veio colado          « o -n não pulou linha
+$ echo "a\tb"
+a\tb                               « sem -e, o \t sai como texto
+$ echo -e "a\tb"
+a	b                                « com -e, virou um tab</pre>
+
+<p>Até aqui, tudo bem. Agora veja três armadilhas reais:</p>
+
+<h3>Armadilha 1: o valor da variável parece uma opção</h3>
+<pre class="term">$ texto="-n"
+$ echo "$texto"
+$                                  « não apareceu nada!</pre>
+<p>O <code>echo</code> recebeu <code>-n</code> e achou que era a opção, não o texto. Isso acontece com qualquer valor que comece com <code>-n</code>, <code>-e</code> ou <code>-E</code>, como um nome de arquivo ou uma linha lida de um arquivo.</p>
+
+<h3>Armadilha 2: outro shell, outro comportamento</h3>
+<p>Muitos sistemas usam o <code>dash</code> como <code>sh</code> (Debian e Ubuntu, por exemplo). O <code>echo</code> dele não conhece o <code>-e</code> e interpreta os escapes sempre:</p>
+<pre class="term">$ sh -c 'echo -e "a\tb"'
+-e a	b                             « o "-e" foi impresso como texto
+$ sh -c 'echo "a\tb"'
+a	b                                « e o \t virou tab sem pedir</pre>
+<p>Ou seja, o mesmo <code>echo</code> dá resultados diferentes no Bash e no <code>sh</code>. Até dentro do Bash isso muda: a opção <code>shopt -s xpg_echo</code> faz o <code>echo</code> do Bash interpretar escapes sem <code>-e</code>.</p>
+
+<h3>A solução: <code>printf</code></h3>
+<p>O <code>printf</code> (<em>print formatted</em>, "imprimir formatado") vem da linguagem C e é definido pelo padrão POSIX. Ele faz <strong>sempre</strong> a mesma coisa, em qualquer shell:</p>
+<pre class="term">$ printf "Olá, Ana"
+Olá, Ana$                          « sem \n, o prompt fica colado
+$ printf "Olá, Ana\n"
+Olá, Ana</pre>
+
+<p>Repare na primeira linha: o <code>printf</code> <strong>não</strong> pula linha sozinho. Você coloca o <code>\n</code> onde quiser. Isso parece trabalho a mais, mas é justamente o que dá controle.</p>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Use <code>echo</code> para mensagens fixas, que você mesmo escreveu (<code>echo "Backup concluído"</code>). Use <code>printf</code> sempre que houver escapes, falta de quebra de linha, números formatados ou o conteúdo de uma variável que você não controla.</p>
+</div>
+
+<hr>
+
+<h2>Formato e argumentos</h2>
+<p>O <code>printf</code> recebe primeiro um <strong>formato</strong>: um texto-modelo com "buracos". Depois vêm os <strong>argumentos</strong>, que preenchem os buracos em ordem.</p>
+
+<pre class="syntax">printf "FORMATO" argumento1 argumento2 …</pre>
+
+<dl class="anatomy">
+  <dt>printf</dt><dd>O comando (é interno do Bash: <code>type printf</code> diz "printf é um comando interno do shell").</dd>
+  <dt>"%s tem %d anos\n"</dt><dd>O formato. <code>%s</code> é um buraco para texto (<em>string</em>), <code>%d</code> é um buraco para número inteiro (<em>decimal</em>), <code>\n</code> pula linha. O resto sai como está.</dd>
+  <dt>Ana</dt><dd>Primeiro argumento: vai para o primeiro buraco (<code>%s</code>).</dd>
+  <dt>29</dt><dd>Segundo argumento: vai para o segundo buraco (<code>%d</code>).</dd>
+</dl>
+
+<pre class="term">$ printf "%s tem %d anos\n" Ana 29
+Ana tem 29 anos</pre>
+
+<p>Cada <code>%</code> seguido de uma letra é um <strong>especificador</strong> (ou "conversão"). Os mais usados:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Especificador</th><th>Recebe</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>%s</code></td><td>texto</td><td><code>printf "%s\n" Ana</code></td><td><code>Ana</code></td></tr>
+<tr><td><code>%d</code></td><td>número inteiro</td><td><code>printf "%d\n" 42</code></td><td><code>42</code></td></tr>
+<tr><td><code>%f</code></td><td>número com casas decimais</td><td><code>printf "%.2f\n" 3,5</code></td><td><code>3,50</code></td></tr>
+<tr><td><code>%x</code> / <code>%o</code></td><td>inteiro, mostrado em hexadecimal / octal</td><td><code>printf "%x %o\n" 255 255</code></td><td><code>ff 377</code></td></tr>
+<tr><td><code>%e</code></td><td>número em notação científica</td><td><code>printf "%e\n" 1234,5</code></td><td><code>1,234500e+03</code></td></tr>
+<tr><td><code>%c</code></td><td>só o primeiro caractere</td><td><code>printf "%c\n" Ana</code></td><td><code>A</code></td></tr>
+<tr><td><code>%%</code></td><td>nada: imprime um <code>%</code></td><td><code>printf "100%%\n"</code></td><td><code>100%</code></td></tr>
+</table>
+</div>
+
+<p>E os escapes que o formato entende (sem precisar de <code>-e</code>): <code>\n</code> (nova linha), <code>\t</code> (tab), <code>\\</code> (uma barra), <code>\"</code> (aspas).</p>
+
+<pre class="term">$ printf "%d em hexa: %x, em octal: %o\n" 255 255 255
+255 em hexa: ff, em octal: 377
+$ printf "100%%\n"
+100%</pre>
+
+<div class="warning">
+<strong>Sempre coloque o formato entre aspas</strong>
+<p>Sem aspas, o shell come a barra antes de o <code>printf</code> ver o formato: <code>printf [%s]\n Ana</code> mostra <code>[Ana]n</code> e não pula linha. Prefira aspas simples (<code>'%s\n'</code>) ou duplas; com duplas, lembre que <code>$</code> dentro do formato é trocado pelo shell.</p>
+</div>
+
+<hr>
+
+<h2>Largura, alinhamento e zeros</h2>
+<p>Entre o <code>%</code> e a letra você pode pôr um número: a <strong>largura</strong> mínima do campo. Os colchetes abaixo são só para você enxergar os espaços.</p>
+
+<pre class="term">$ printf "[%5s]\n" Ana
+[  Ana]                            « 5 posições, alinhado à direita
+$ printf "[%-10s]\n" Ana
+[Ana       ]                       « o - alinha à esquerda, 10 posições
+$ printf "[%05d]\n" 42
+[00042]                            « o 0 completa com zeros
+$ printf '%.3s\n' Bananada
+Ban                                « em texto, .3 corta em 3 letras</pre>
+
+<dl class="anatomy">
+  <dt>%5s</dt><dd>Texto em um campo de pelo menos 5 posições. Sobrou espaço? Ele vai para a <strong>esquerda</strong> (alinha à direita, como números numa planilha).</dd>
+  <dt>%-10s</dt><dd>O <code>-</code> inverte: texto à esquerda, espaços à direita. É o certo para nomes.</dd>
+  <dt>%05d</dt><dd>Inteiro em 5 posições, completando com <code>0</code> em vez de espaço. Ótimo para numerar arquivos: <code>foto-007.jpg</code>.</dd>
+  <dt>%.2f</dt><dd>Número com exatamente 2 casas depois da vírgula (arredonda).</dd>
+  <dt>%8.2f</dt><dd>As duas coisas juntas: 8 posições no total, 2 casas decimais.</dd>
+</dl>
+
+<p>Se o texto for maior que a largura, nada é cortado: a largura é um <strong>mínimo</strong>. Para numerar com zeros, junte com as <a href="chaves.html">chaves</a>:</p>
+
+<pre class="term">$ printf "%03d\n" {8..11}
+008
+009
+010
+011</pre>
+
+<hr>
+
+<h2>A regra de ouro: o formato se repete</h2>
+<p>Quando há mais argumentos que buracos, o <code>printf</code> <strong>usa o formato de novo</strong> com os que sobraram, até acabarem. Isso é diferente de quase todas as outras linguagens e é muito útil:</p>
+
+<pre class="term">$ printf "Nome: %s\n" Ana Bruno Carla
+Nome: Ana                          « 1ª volta do formato
+Nome: Bruno                        « 2ª volta
+Nome: Carla                        « 3ª volta
+$ printf "%s=%s\n" a 1 b 2 c
+a=1
+b=2
+c=                                 « faltou argumento: %s vazio (%d viraria 0)</pre>
+
+<p>Com isso, uma lista vira "um por linha" sem laço nenhum: <code>printf '%s\n' *.txt</code> lista os arquivos de texto, um por linha, mesmo os que têm espaço no nome.</p>
+
+<h3>Tabela alinhada com o <code>alunos.csv</code></h3>
+<p>Vamos juntar tudo. O arquivo <code>Documentos/alunos.csv</code> da Ana tem uma linha de cabeçalho e cinco alunos, separados por vírgula. Este script mostra o arquivo como uma tabela de verdade. A leitura linha a linha com <code>while read</code> é explicada em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>; aqui o foco é o <code>printf</code>.</p>
+
+<pre class="file" data-file="tabela.sh">#!/usr/bin/env bash
+# Mostra o alunos.csv como uma tabela alinhada
+printf "%-8s %5s  %-13s %4s\n" NOME IDADE CIDADE NOTA
+while IFS=, read -r nome idade cidade nota; do
+  printf "%-8s %5d  %-13s %4s\n" "$nome" "$idade" "$cidade" "$nota"
+done &lt; &lt;(tail -n +2 Documentos/alunos.csv)
+</pre>
+
+<pre class="term">$ bash tabela.sh
+NOME     IDADE  CIDADE        NOTA
+Ana         29  Recife         9.5
+Bruno       34  Curitiba       7.0
+Carla       22  Salvador       8.5
+Diego       41  Manaus         6.0
+Elisa       27  Porto Alegre  10.0</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td>3</td><td>O cabeçalho usa <strong>as mesmas larguras</strong> das linhas de dados. É isso que faz as colunas baterem.</td></tr>
+<tr><td>4</td><td>Lê cada linha, separando os campos na vírgula, em quatro variáveis.</td></tr>
+<tr><td>5</td><td><code>%-8s</code>: nome à esquerda em 8 posições; <code>%5d</code>: idade à direita em 5; <code>%-13s</code>: cidade à esquerda em 13 ("Porto Alegre" tem 12); <code>%4s</code>: nota à direita em 4, <strong>como texto</strong> (já vamos ver por quê).</td></tr>
+<tr><td>6</td><td><code>tail -n +2</code> entrega o arquivo a partir da linha 2, pulando o cabeçalho.</td></tr>
+</table>
+</div>
+
+<p>Repare nas aspas em <code>"$cidade"</code>: sem elas, "Porto Alegre" viraria <strong>dois</strong> argumentos, e a regra de ouro faria o <code>printf</code> começar uma linha nova no meio da tabela.</p>
+
+<div class="tryscript" data-file="lista.sh" data-goal="out:Bruno     Curitiba,src:%-10s">
+<p class="try-task"><strong>Missão:</strong> o script abaixo mostra nome e cidade, mas as colunas ficam tortas. Mude o formato do <code>printf</code> para que o nome ocupe <strong>10 posições, alinhado à esquerda</strong>. Rode e veja as cidades se alinharem.</p>
+<pre class="script">#!/usr/bin/env bash
+tail -n +2 Documentos/alunos.csv | while IFS=, read -r nome idade cidade nota; do
+  printf "%s %s\n" "$nome" "$cidade"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+tail -n +2 Documentos/alunos.csv | while IFS=, read -r nome idade cidade nota; do
+  printf "%-10s%s\n" "$nome" "$cidade"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Números com vírgula: o <code>printf</code> no Brasil</h2>
+<p>Tente imprimir a nota da Ana com uma casa decimal num sistema em português:</p>
+
+<pre class="term">$ printf "%.2f\n" 3.5
+bash: printf: 3.5: número inválido
+3,00                               « e ainda jogou fora o ,5!
+$ echo $?
+1
+$ printf "%.2f\n" 3,5
+3,50                               « com vírgula, funciona</pre>
+
+<p><strong>O que aconteceu?</strong> O <code>printf</code> do Bash lê e escreve números do jeito do <strong>idioma do sistema</strong> (o <em>locale</em>). Com <code>LANG=pt_BR.UTF-8</code>, o separador decimal é a vírgula. Então <code>3.5</code> não é um número válido: o Bash lê o que consegue (<code>3</code>), avisa o erro e devolve código 1. A saída também sai com vírgula.</p>
+
+<p>Quem decide o formato dos números é a variável <code>LC_NUMERIC</code> (<em>locale category numeric</em>). A hierarquia é:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Papel</th></tr>
+<tr><td><code>LC_ALL</code></td><td>Se estiver definida, vence todas as outras. Use só para testes.</td></tr>
+<tr><td><code>LC_NUMERIC</code></td><td>Só o formato dos números (separador decimal e de milhar).</td></tr>
+<tr><td><code>LANG</code></td><td>O padrão para tudo o que não foi definido acima. Na máquina da Ana: <code>pt_BR.UTF-8</code>.</td></tr>
+</table>
+</div>
+
+<p>Para um comando só usar o ponto, mude <code>LC_NUMERIC</code> na frente dele. O locale <code>C</code> é o "neutro", em inglês, com ponto:</p>
+
+<pre class="term">$ LC_NUMERIC=C printf "%.2f\n" 3.5
+3.50
+$ LC_ALL=pt_BR.UTF-8 LC_NUMERIC=C printf "%.2f\n" 3.5
+bash: printf: 3.5: número inválido   « LC_ALL vence o LC_NUMERIC
+3,00</pre>
+
+<p>Num script que lê números de arquivos (como as notas do CSV, que usam ponto), coloque no começo:</p>
+
+<pre class="file" data-file="medias.sh">#!/usr/bin/env bash
+export LC_NUMERIC=C      # números com ponto, em qualquer computador
+printf "%.1f\n" 9.5
+</pre>
+
+<p>O efeito colateral é a saída também sair com ponto. Se você quiser ler com ponto e mostrar com vírgula, troque o caractere com uma <a href="expansao-parametros.html">expansão de parâmetro</a>: <code>printf "%.1f\n" "${nota/./,}"</code>. Por isso a tabela de cima usa <code>%4s</code> para a nota: como texto, ela sai exatamente como está no arquivo.</p>
+
+<div class="tip">
+<strong>Bônus do locale: milhar com ponto</strong>
+<p>A flag <code>'</code> agrupa os milhares do jeito do idioma: <code>printf "%'d\n" 1234567</code> mostra <code>1.234.567</code> em pt_BR.</p>
+</div>
+
+<p>Outro detalhe: o Bash só sabe fazer contas com inteiros (veja <a href="aritmetica.html">Contas</a>). O <code>printf</code> <strong>formata</strong> números com casas decimais, mas não calcula com eles.</p>
+
+<hr>
+
+<h2><code>%b</code> e <code>%q</code>: escapes e aspas</h2>
+<p>Os escapes do <strong>formato</strong> são interpretados, mas os dos <strong>argumentos</strong> não. Para interpretar escapes vindos de uma variável, use <code>%b</code> (de <em>backslash</em>):</p>
+
+<pre class="term">$ printf "%s\n" "a\tb"
+a\tb                               « %s mostra o texto como ele é
+$ printf "%b\n" "a\tb"
+a	b                                « %b interpreta o \t, como o echo -e</pre>
+
+<p>O <code>%q</code> (de <em>quote</em>) faz o contrário: mostra o texto com as aspas e barras necessárias para colá-lo de volta no shell sem estragar. É ótimo para mensagens de depuração e para gerar comandos:</p>
+
+<pre class="term">$ printf "%q\n" "nome com espaço" 'aspas"duplas' 'R$ 10'
+nome\ com\ espaço
+aspas\"duplas
+R\$\ 10</pre>
+
+<hr>
+
+<h2><code>printf -v</code>: guardar numa variável</h2>
+<p>Em vez de mostrar na tela, o <code>printf -v NOME</code> grava o resultado na variável <code>NOME</code>.</p>
+
+<dl class="anatomy">
+  <dt>-v linha</dt><dd>"Guarde o resultado na variável <code>linha</code>" (<em>variable</em>). É uma opção só do Bash.</dd>
+  <dt>"%s-%s"</dt><dd>O formato de sempre.</dd>
+  <dt>Ana 29</dt><dd>Os argumentos.</dd>
+</dl>
+
+<pre class="term">$ printf -v linha "%s-%s" Ana 29
+$                                  « nada na tela: foi para a variável
+$ echo "$linha"
+Ana-29</pre>
+
+<p>É o mesmo que <code>linha=$(printf "%s-%s" Ana 29)</code>, só que mais rápido (não cria um <a href="substituicao-comando.html">subshell</a>) e preserva quebras de linha no fim. Em funções, é uma das formas de "devolver" um valor (veja <a href="funcoes-retorno.html">local, return e Saída</a>).</p>
+
+<div class="try" data-goal="var:codigo=A-007" data-solucao="printf -v codigo &quot;A-%03d&quot; 7">
+<p class="try-task"><strong>Missão:</strong> use <code>printf -v</code> para criar a variável <code>codigo</code> com o valor <code>A-007</code>, a partir do número <code>7</code> (com o formato completando os zeros). Confira com <code>echo "$codigo"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Datas sem o <code>date</code>: <code>%(…)T</code></h2>
+<p>O <code>printf</code> do Bash formata datas com <code>%(FORMATO)T</code>. Dentro dos parênteses vão os mesmos códigos do comando <code>date</code>: <code>%d</code> dia, <code>%m</code> mês, <code>%Y</code> ano, <code>%H:%M</code> hora e minuto, <code>%A</code> dia da semana.</p>
+
+<dl class="anatomy">
+  <dt>%(%d/%m/%Y)T</dt><dd>"Mostre uma data neste formato" (<em>T de time</em>).</dd>
+  <dt>-1</dt><dd>O argumento é um instante em segundos desde 1970. <code>-1</code> (ou nenhum argumento) quer dizer "agora".</dd>
+</dl>
+
+<pre class="term">$ printf '%(%d/%m/%Y)T\n' -1
+15/10/2026
+$ printf 'Hoje é %(%A)T\n' -1
+Hoje é quinta                      « o nome do dia vem em português
+$ printf -v hoje '%(%Y-%m-%d)T' -1; echo "backup-$hoje.tar"
+backup-2026-10-15.tar</pre>
+
+<p>A data mostrada é a do momento em que você roda (aqui, 15/10/2026). Use aspas simples: dentro de aspas duplas o <code>%(</code> funciona, mas é fácil esquecer um <code>$</code> e confundir com <code>$( )</code>. A vantagem sobre <code>$(date +%F)</code> é não rodar um programa externo, o que conta dentro de laços.</p>
+
+<hr>
+
+<h2><code>echo</code> × <code>printf</code>: qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th><th>Por quê</th></tr>
+<tr><td>Mensagem fixa: <code>"Backup concluído"</code></td><td><code>echo</code></td><td>Mais curto e legível.</td></tr>
+<tr><td>Mostrar o conteúdo de uma variável qualquer</td><td><code>printf '%s\n' "$x"</code></td><td>Não confunde <code>-n</code>/<code>-e</code> com opção.</td></tr>
+<tr><td>Sem quebra de linha no fim (ex.: antes de um <code>read</code>)</td><td><code>printf</code></td><td><code>echo -n</code> não existe em todo <code>sh</code>. (Para perguntas, <code>read -p</code> é ainda melhor.)</td></tr>
+<tr><td>Tabs, várias linhas</td><td><code>printf</code></td><td><code>echo -e</code> muda de shell para shell.</td></tr>
+<tr><td>Colunas, zeros, casas decimais</td><td><code>printf</code></td><td>Só ele tem largura e precisão.</td></tr>
+<tr><td>Script <code>#!/bin/sh</code> (portável)</td><td><code>printf</code></td><td>É o único com comportamento garantido pelo POSIX.</td></tr>
+<tr><td>Texto longo, várias linhas fixas</td><td><a href="heredoc.html">here-doc</a></td><td>Mais legível que muitos <code>\n</code>.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"número inválido"</strong>
+<pre class="term">$ printf "%d\n" abc
+bash: printf: abc: número inválido
+0
+$ printf "%d\n" 3.7
+bash: printf: 3.7: número inválido
+3</pre>
+<p><strong>O que aconteceu:</strong> <code>%d</code> só aceita inteiros. Com texto, o Bash imprime <code>0</code>; com casas decimais, imprime o que leu até o ponto. Nos dois casos o código de saída é 1. Com <code>%f</code>, o mesmo erro aparece quando o número usa ponto e o sistema está em português (veja a seção da vírgula).</p>
+<p><strong>Como resolver:</strong> confira o valor antes (<code>[[ $x =~ ^[0-9]+$ ]]</code>, veja <a href="regex.html">Regex</a>), use <code>%s</code> se for só para mostrar, ou <code>LC_NUMERIC=C</code> para números com ponto.</p>
+</div>
+
+<div class="cenario">
+<strong>"opção inválida" quando o formato começa com <code>-</code></strong>
+<pre class="term">$ printf "-n\n"
+bash: printf: -n: opção inválida
+printf: uso: printf [-v var] formato [argumentos]</pre>
+<p><strong>O que aconteceu:</strong> o <code>printf</code> achou que <code>-n</code> era uma opção dele.</p>
+<p><strong>Como resolver:</strong> <code>--</code> avisa que as opções acabaram: <code>printf -- "-n\n"</code>. Ou não comece o formato com o texto: <code>printf '%s\n' "-n"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Tudo saiu numa linha só (ou o prompt grudou no texto)</strong>
+<pre class="term">$ printf "%s" Ana Bruno Carla
+AnaBrunoCarla$</pre>
+<p><strong>O que aconteceu:</strong> o <code>printf</code> não pula linha sozinho, e o formato <code>%s</code> se repetiu três vezes sem nenhum separador.</p>
+<p><strong>Como resolver:</strong> coloque o <code>\n</code> no formato: <code>printf "%s\n" Ana Bruno Carla</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A tabela "quebrou" no meio</strong>
+<pre class="term">$ cidade="Porto Alegre"
+$ printf "%-8s|%s\n" Elisa $cidade
+Elisa   |Porto
+Alegre  |</pre>
+<p><strong>O que aconteceu:</strong> sem aspas, <code>$cidade</code> virou dois argumentos (<code>Porto</code> e <code>Alegre</code>), e o formato foi repetido para a sobra.</p>
+<p><strong>Como resolver:</strong> aspas duplas em toda variável: <code>"$cidade"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>echo</code> não mostrou nada</strong>
+<p>Se a variável vale <code>-n</code>, <code>-e</code> ou <code>-E</code>, o <code>echo</code> a trata como opção. Troque por <code>printf '%s\n' "$variavel"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo → resultado</th></tr>
+<tr><td><code>%s</code></td><td>Texto</td><td><code>printf '%s\n' Ana</code> → <code>Ana</code></td></tr>
+<tr><td><code>%d</code> / <code>%i</code></td><td>Inteiro</td><td><code>printf '%d\n' 42</code> → <code>42</code></td></tr>
+<tr><td><code>%f</code>, <code>%.2f</code></td><td>Decimal (2 casas)</td><td><code>printf '%.2f\n' 3,5</code> → <code>3,50</code> (pt_BR)</td></tr>
+<tr><td><code>%e</code></td><td>Notação científica</td><td><code>1,234500e+03</code></td></tr>
+<tr><td><code>%x</code> / <code>%o</code></td><td>Hexadecimal / octal</td><td><code>255</code> → <code>ff</code> / <code>377</code></td></tr>
+<tr><td><code>%c</code></td><td>Primeiro caractere</td><td><code>Ana</code> → <code>A</code></td></tr>
+<tr><td><code>%5s</code> / <code>%-10s</code></td><td>Largura, à direita / à esquerda</td><td><code>[  Ana]</code> / <code>[Ana       ]</code></td></tr>
+<tr><td><code>%05d</code></td><td>Completa com zeros</td><td><code>42</code> → <code>00042</code></td></tr>
+<tr><td><code>%.3s</code></td><td>Corta o texto</td><td><code>Bananada</code> → <code>Ban</code></td></tr>
+<tr><td><code>%'d</code></td><td>Separador de milhar do idioma</td><td><code>1234567</code> → <code>1.234.567</code></td></tr>
+<tr><td><code>%%</code></td><td>Um <code>%</code></td><td><code>100%</code></td></tr>
+<tr><td><code>%b</code></td><td>Texto, interpretando escapes</td><td><code>"a\tb"</code> → <code>a	b</code></td></tr>
+<tr><td><code>%q</code></td><td>Texto com aspas para o shell</td><td><code>R$ 10</code> → <code>R\$\ 10</code></td></tr>
+<tr><td><code>%(fmt)T</code></td><td>Data/hora (<code>-1</code> = agora)</td><td><code>%(%d/%m/%Y)T</code> → <code>15/10/2026</code></td></tr>
+<tr><td><code>\n \t \\</code></td><td>Nova linha, tab, barra</td><td></td></tr>
+<tr><td><code>printf -v var …</code></td><td>Grava na variável em vez da tela</td><td><code>printf -v x '%03d' 7</code></td></tr>
+<tr><td><code>printf -- …</code></td><td>Fim das opções</td><td><code>printf -- '-n\n'</code></td></tr>
+<tr><td><code>echo -n</code> / <code>echo -e</code></td><td>Sem quebra / com escapes (só no Bash)</td><td></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Alinhar à esquerda</h3>
+<p>Complete o formato para o nome ocupar 12 posições, alinhado à esquerda:</p>
+<div class="ex-code">printf "<input data-answer="%-12s" aria-label="especificador">|\n" Ana</div>
+</div>
+
+<div class="exercise">
+<h3>2. Numerar arquivos</h3>
+<p>Complete para gerar <code>foto-001.jpg</code>, <code>foto-002.jpg</code>, <code>foto-003.jpg</code>, um por linha:</p>
+<div class="ex-code">printf "foto-<input data-answer="%03d" aria-label="especificador">.jpg\n" 1 2 3</div>
+</div>
+
+<div class="exercise">
+<h3>3. Guardar sem mostrar</h3>
+<p>Complete para gravar o texto <code>Ana tem 29 anos</code> na variável <code>frase</code>, sem mostrar nada na tela:</p>
+<div class="ex-code">printf <input data-answer="-v frase" aria-label="opção e variável"> "%s tem %d anos" Ana 29</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Quantas linhas <code>printf "%s=%s\n" a 1 b 2</code> imprime?</p>
+<label><input type="radio" name="q4"> Uma: <code>a=1</code>, e o resto é ignorado.</label>
+<label><input type="radio" name="q4"> Nenhuma: sobra argumento e dá erro.</label>
+<label><input type="radio" name="q4"> Duas: <code>a=1</code> e <code>b=2</code>, porque o formato se repete.</label>
+<label><input type="radio" name="q4"> Quatro, uma por argumento.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Num Ubuntu em português, <code>printf "%.1f\n" 9.5</code> mostra "número inválido". Por quê?</p>
+<label><input type="radio" name="q5"> Porque <code>%.1f</code> só aceita inteiros.</label>
+<label><input type="radio" name="q5"> Porque o locale pt_BR usa vírgula como separador decimal, e <code>9.5</code> não é um número válido nele.</label>
+<label><input type="radio" name="q5"> Porque faltou o <code>-e</code>.</label>
+<label><input type="radio" name="q5"> Porque o Bash não tem <code>printf</code> com decimais.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. A variável <code>x</code> vale <code>-e</code>. Qual comando mostra <code>-e</code> na tela com certeza?</p>
+<label><input type="radio" name="q6"> <code>printf '%s\n' "$x"</code></label>
+<label><input type="radio" name="q6"> <code>echo "$x"</code></label>
+<label><input type="radio" name="q6"> <code>echo -e "$x"</code></label>
+<label><input type="radio" name="q6"> <code>printf "$x\n"</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>echo</code> é bom para mensagens fixas; <code>-n</code> e <code>-e</code> mudam de shell para shell, e um valor como <code>-n</code> some.</li>
+  <li><code>printf "FORMATO" args…</code>: <code>%s</code> texto, <code>%d</code> inteiro, <code>%.2f</code> decimal, <code>%%</code> um por cento; o <code>\n</code> é você quem põe.</li>
+  <li>Largura e alinhamento: <code>%5s</code> (direita), <code>%-10s</code> (esquerda), <code>%05d</code> (zeros). O formato se repete para os argumentos que sobram.</li>
+  <li><code>%b</code> interpreta escapes, <code>%q</code> põe aspas, <code>printf -v var</code> grava numa variável, <code>%(%d/%m/%Y)T</code> mostra datas.</li>
+  <li>Em pt_BR, decimais usam vírgula: use <code>LC_NUMERIC=C</code> para ler números com ponto.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

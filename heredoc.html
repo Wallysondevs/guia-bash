@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Here-docs e Here-strings — texto de várias linhas no script | Guia Bash</title>
+<meta name="description" content="Aprenda here-doc no Bash: &lt;&lt;FIM com expansão, &lt;&lt;'FIM' literal, &lt;&lt;-FIM que tira tabs, gerar arquivos de configuração e HTML, here-doc em funções, here-string &lt;&lt;&lt; e os erros reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Here-docs</span> e Here-strings</h1>
+
+<p class="intro">Um <strong>here-doc</strong> ("documento aqui") é um bloco de texto escrito dentro do próprio script e entregue como entrada a um comando. Com ele, um script cria arquivos de configuração, páginas HTML e mensagens de ajuda de várias linhas sem um <code>echo</code> por linha. A <strong>here-string</strong> é a versão de uma linha só.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como funciona o <code>&lt;&lt;FIM</code> e por que ele troca variáveis pelo valor.</li>
+  <li>A diferença entre <code>&lt;&lt;FIM</code>, <code>&lt;&lt;'FIM'</code> (literal) e <code>&lt;&lt;-FIM</code> (tira tabs).</li>
+  <li>Como gerar arquivos de configuração e HTML, e escrever a ajuda de um script numa função.</li>
+  <li>A here-string <code>&lt;&lt;&lt;</code> e o truque <code>read a b &lt;&lt;&lt; "$linha"</code>.</li>
+  <li>O aviso "here-document … delimitado pelo fim do arquivo" e como resolver.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: muitas linhas de texto</h2>
+<p>Imagine um script que precisa criar um arquivo de configuração com quatro linhas. Com <code>echo</code>, fica assim:</p>
+
+<pre class="file" data-file="feio.sh">echo "# Configuração da loja" &gt; app.conf
+echo "nome=loja" &gt;&gt; app.conf
+echo "porta=8080" &gt;&gt; app.conf
+echo "log=/home/ana/logs/loja.log" &gt;&gt; app.conf
+</pre>
+
+<p>Funciona, mas é repetitivo, e basta trocar um <code>&gt;&gt;</code> por <code>&gt;</code> para apagar o que veio antes. Com um here-doc, você escreve o texto <strong>do jeito que ele vai ficar</strong>:</p>
+
+<pre class="file" data-file="bonito.sh">cat &gt; app.conf &lt;&lt;FIM
+# Configuração da loja
+nome=loja
+porta=8080
+log=/home/ana/logs/loja.log
+FIM
+</pre>
+
+<hr>
+
+<h2>A forma básica: <code>&lt;&lt;FIM</code></h2>
+<p>O here-doc é um <a href="redirecionamento.html">redirecionamento</a> de entrada: em vez de o comando ler do teclado ou de um arquivo, ele lê as linhas que vêm logo abaixo, até encontrar a palavra que marca o fim.</p>
+
+<pre class="syntax">comando &lt;&lt;DELIMITADOR
+linhas de texto
+…
+DELIMITADOR</pre>
+
+<dl class="anatomy">
+  <dt>cat</dt><dd>O comando que recebe o texto. O <code>cat</code> só repete o que recebe, então o texto aparece na tela (ou vai para um arquivo, com <code>&gt;</code>).</dd>
+  <dt>&lt;&lt;</dt><dd>"A entrada são as próximas linhas". Um <code>&lt;</code> lê de um arquivo; dois, do próprio script.</dd>
+  <dt>FIM</dt><dd>O <strong>delimitador</strong>: a palavra que encerra o bloco. O nome é livre. <code>EOF</code> (<em>end of file</em>) é o mais comum nos tutoriais; aqui usamos <code>FIM</code>.</dd>
+  <dt>linhas do meio</dt><dd>O conteúdo, entregue ao comando como se fosse um arquivo.</dd>
+  <dt>FIM (sozinho)</dt><dd>A linha que fecha. Precisa ter <strong>só</strong> o delimitador: nada antes, nada depois, nem espaço.</dd>
+</dl>
+
+<p>No terminal, o Bash mostra o prompt de continuação <code>&gt;</code> enquanto espera o <code>FIM</code> (você não digita esse sinal):</p>
+
+<pre class="term">$ cat &lt;&lt;FIM
+&gt; Usuária: $USER
+&gt; Pasta: $PWD
+&gt; FIM
+Usuária: ana                        « $USER foi trocado pelo valor
+Pasta: /home/ana</pre>
+
+<p>Repare: as variáveis foram <strong>expandidas</strong>. Um here-doc com o delimitador sem aspas funciona como um texto entre aspas duplas: troca <code>$variável</code>, <code>$(comando)</code> e <code>$((conta))</code>.</p>
+
+<pre class="term">$ cat &lt;&lt;FIM
+&gt; Dois mais dois: $((2 + 2))
+&gt; FIM
+Dois mais dois: 4</pre>
+
+<h3>Mandar para um arquivo</h3>
+<p>O <code>&gt; arquivo</code> fica na <strong>primeira</strong> linha, junto do comando. É lá que estão todos os redirecionamentos do comando:</p>
+
+<pre class="term">$ cat &lt;&lt;FIM &gt; lembrete.txt
+&gt; Comprar pão
+&gt; Pagar a luz
+&gt; FIM
+$ cat lembrete.txt
+Comprar pão
+Pagar a luz</pre>
+
+<p><code>cat &gt; lembrete.txt &lt;&lt;FIM</code> é igual: a ordem dos redirecionamentos na linha não importa aqui. Use <code>&gt;&gt;</code> para acrescentar no fim de um arquivo que já existe.</p>
+
+<hr>
+
+<h2>Gerar um arquivo de configuração</h2>
+<p>Este é o uso mais comum em scripts. O script abaixo cria o <code>app.conf</code> usando variáveis, a data do dia e um argumento opcional.</p>
+
+<pre class="file" data-file="gerar-config.sh">#!/usr/bin/env bash
+app=loja
+porta=${1:-8080}
+cat &gt; app.conf &lt;&lt;FIM
+# Gerado por $0 em $(date +%d/%m/%Y)
+nome=$app
+porta=$porta
+log=$HOME/logs/$app.log
+FIM
+echo "app.conf criado ($porta)"
+</pre>
+
+<pre class="term">$ bash gerar-config.sh 9000
+app.conf criado (9000)
+$ cat app.conf
+# Gerado por gerar-config.sh em 15/10/2026
+nome=loja
+porta=9000
+log=/home/ana/logs/loja.log</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td>3</td><td><code>${1:-8080}</code>: o primeiro argumento, ou 8080 se não houver (veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>).</td></tr>
+<tr><td>4</td><td>Abre o here-doc e manda tudo para <code>app.conf</code>, substituindo o que existia.</td></tr>
+<tr><td>5</td><td><code>$0</code> é o nome do script; <code>$(date …)</code> roda o <code>date</code> e cola o resultado (a data em que você rodar).</td></tr>
+<tr><td>6–8</td><td>Cada <code>$variável</code> vira seu valor. <code>$HOME</code> virou <code>/home/ana</code>.</td></tr>
+<tr><td>9</td><td><code>FIM</code> sozinho fecha o bloco. O script continua na linha 10.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="contato.sh" data-goal="contains:~/contato.txt=Nome: Ana,contains:~/contato.txt=Cidade: Recife,src:&lt;&lt;">
+<p class="try-task"><strong>Missão:</strong> complete o script com um here-doc que crie o arquivo <code>contato.txt</code> com duas linhas: <code>Nome: </code> seguido do valor de <code>$nome</code> e <code>Cidade: </code> seguido do valor de <code>$cidade</code>. Depois de rodar, confira com o <code>cat</code> do final.</p>
+<pre class="script">#!/usr/bin/env bash
+nome=Ana
+cidade=Recife
+# escreva o here-doc aqui
+
+cat contato.txt
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+nome=Ana
+cidade=Recife
+cat &gt; contato.txt &lt;&lt;FIM
+Nome: $nome
+Cidade: $cidade
+FIM
+cat contato.txt
+</pre>
+</div>
+
+<hr>
+
+<h2>Texto literal: <code>&lt;&lt;'FIM'</code></h2>
+<p>Às vezes você quer o texto <strong>exatamente</strong> como está, com os <code>$</code> intactos. Por exemplo, para gerar outro script, ou mostrar um exemplo de código. Basta colocar o delimitador entre aspas, na primeira linha:</p>
+
+<pre class="file" data-file="literal.sh">#!/usr/bin/env bash
+nome=Ana
+cat &lt;&lt;'FIM'
+Olá, $nome!
+Hoje é $(date +%A).
+FIM
+</pre>
+
+<pre class="term">$ bash literal.sh
+Olá, $nome!                          « nada foi trocado
+Hoje é $(date +%A).</pre>
+
+<p>Compare com a mesma coisa sem as aspas, e com uma barra antes de um <code>$</code> que deve ficar:</p>
+
+<pre class="file" data-file="carta.sh">#!/usr/bin/env bash
+nome=Ana
+cat &lt;&lt;FIM
+Olá, $nome!
+Hoje é $(date +%A).
+O script custa \$ 0,00 e mora em $HOME.
+FIM
+</pre>
+
+<pre class="term">$ bash carta.sh
+Olá, Ana!
+Hoje é quinta.
+O script custa $ 0,00 e mora em /home/ana.   « o \$ virou um $ comum</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Abertura</th><th>Expande <code>$var</code>, <code>$( )</code>, <code>$(( ))</code>?</th><th>Use quando…</th></tr>
+<tr><td><code>&lt;&lt;FIM</code></td><td>Sim (como aspas duplas). <code>\$</code> mantém um <code>$</code>.</td><td>O texto tem valores do script (configurações, relatórios).</td></tr>
+<tr><td><code>&lt;&lt;'FIM'</code> ou <code>&lt;&lt;"FIM"</code></td><td>Não, nada (como aspas simples).</td><td>O texto é código, ou tem muitos <code>$</code> e crases.</td></tr>
+</table>
+</div>
+
+<p>Basta qualquer aspas em qualquer parte do delimitador (<code>'FIM'</code>, <code>"FIM"</code>, até <code>\FIM</code>) para o bloco ficar literal. A linha que fecha é sempre só <code>FIM</code>, sem aspas.</p>
+
+<hr>
+
+<h2>Indentar sem estragar: <code>&lt;&lt;-FIM</code></h2>
+<p>Dentro de um <code>if</code> ou de uma função, você quer recuar o código. Mas no here-doc comum, o recuo vira parte do texto, e o <code>FIM</code> recuado não fecha o bloco. A forma <code>&lt;&lt;-</code> (com hífen) remove <strong>tabs</strong> do começo de cada linha, inclusive da linha do <code>FIM</code>.</p>
+
+<pre class="file" data-file="tabs.sh">#!/usr/bin/env bash
+if true; then
+	cat &lt;&lt;-FIM
+		linha com dois tabs
+	linha com um tab
+	FIM
+fi
+echo "fim do script"
+</pre>
+
+<p>Você não enxerga a diferença entre tab e espaço. O <code>cat -A</code> mostra cada tab como <code>^I</code> e o fim de cada linha como <code>$</code>:</p>
+
+<pre class="term">$ cat -A tabs.sh
+#!/usr/bin/env bash$
+if true; then$
+^Icat &lt;&lt;-FIM$
+^I^Ilinha com dois tabs$
+^Ilinha com um tab$
+^IFIM$
+fi$
+echo "fim do script"$
+$ bash tabs.sh
+linha com dois tabs                  « todos os tabs do começo saíram
+linha com um tab
+fim do script</pre>
+
+<div class="warning">
+<strong>Só tabs, nunca espaços</strong>
+<p>O <code>&lt;&lt;-</code> remove apenas o caractere tab. Muitos editores trocam o tab por espaços quando você aperta a tecla Tab; aí o <code>FIM</code> recuado não é reconhecido e o here-doc engole o resto do script (veja "Quando não funciona"). Se o seu editor usa espaços, deixe o conteúdo e o <code>FIM</code> encostados na margem esquerda, com <code>&lt;&lt;FIM</code> normal.</p>
+</div>
+
+<hr>
+
+<h2>Gerar HTML</h2>
+<p>Um here-doc pode ter um <code>$( )</code> com um laço dentro. Este script gera uma página com a lista de alunos do <code>alunos.csv</code>:</p>
+
+<pre class="file" data-file="pagina.sh">#!/usr/bin/env bash
+titulo="Turma de Bash"
+total=$(tail -n +2 Documentos/alunos.csv | wc -l)
+cat &gt; turma.html &lt;&lt;FIM
+&lt;!doctype html&gt;
+&lt;html lang="pt-BR"&gt;
+&lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;$titulo&lt;/title&gt;&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;$titulo&lt;/h1&gt;
+  &lt;p&gt;$total alunos matriculados.&lt;/p&gt;
+  &lt;ul&gt;
+$(tail -n +2 Documentos/alunos.csv | while IFS=, read -r nome _ cidade _; do
+    printf '    &lt;li&gt;%s (%s)&lt;/li&gt;\n' "$nome" "$cidade"
+  done)
+  &lt;/ul&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+FIM
+echo "turma.html gerada"
+</pre>
+
+<pre class="term">$ bash pagina.sh
+turma.html gerada
+$ cat turma.html
+&lt;!doctype html&gt;
+&lt;html lang="pt-BR"&gt;
+&lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Turma de Bash&lt;/title&gt;&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;Turma de Bash&lt;/h1&gt;
+  &lt;p&gt;5 alunos matriculados.&lt;/p&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Ana (Recife)&lt;/li&gt;
+    &lt;li&gt;Bruno (Curitiba)&lt;/li&gt;
+    &lt;li&gt;Carla (Salvador)&lt;/li&gt;
+    &lt;li&gt;Diego (Manaus)&lt;/li&gt;
+    &lt;li&gt;Elisa (Porto Alegre)&lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+
+<p>O que acontece nas linhas 12 a 14: o <code>$( )</code> roda um laço que lê o CSV (o <code>_</code> é um nome de variável para os campos que não interessam) e imprime um <code>&lt;li&gt;</code> por aluno com o <a href="printf.html">printf</a>. O resultado é colado no lugar, dentro do here-doc. A leitura com <code>while read</code> é explicada em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+
+<hr>
+
+<h2>Here-doc dentro de uma função: a ajuda do script</h2>
+<p>Todo script com opções deve mostrar como se usa. Uma <a href="funcoes.html">função</a> com um here-doc deixa a ajuda legível e fácil de manter:</p>
+
+<pre class="file" data-file="ajuda.sh">#!/usr/bin/env bash
+uso() {
+  cat &lt;&lt;FIM
+Uso: ${0##*/} [-v] ARQUIVO...
+
+Conta as linhas de cada ARQUIVO.
+  -v   mostra detalhes
+  -h   mostra esta ajuda
+FIM
+}
+if [[ $# -eq 0 ]]; then
+  uso &gt;&amp;2
+  exit 1
+fi
+</pre>
+
+<pre class="term">$ bash ajuda.sh
+Uso: ajuda.sh [-v] ARQUIVO...
+
+Conta as linhas de cada ARQUIVO.
+  -v   mostra detalhes
+  -h   mostra esta ajuda
+$ echo $?
+1                                    « saiu com erro: faltou o ARQUIVO</pre>
+
+<dl class="anatomy">
+  <dt>uso() { … }</dt><dd>Uma função chamada <code>uso</code>. O here-doc fica dentro dela, mas o texto e o <code>FIM</code> ficam na margem esquerda (sem <code>&lt;&lt;-</code>, o recuo entraria no texto).</dd>
+  <dt>${0##*/}</dt><dd>O nome do script sem a pasta: se você rodar <code>bash ~/bin/ajuda.sh</code>, aparece só <code>ajuda.sh</code>.</dd>
+  <dt>uso &gt;&amp;2</dt><dd>Manda a ajuda para a saída de erro, porque aqui ela aparece por causa de um uso errado.</dd>
+</dl>
+
+<hr>
+
+<h2>Here-doc para outros comandos</h2>
+<p>Qualquer comando que lê a entrada padrão aceita um here-doc. Alguns exemplos que funcionam na máquina da Ana:</p>
+
+<pre class="term">$ wc -l &lt;&lt;FIM
+&gt; um
+&gt; dois
+&gt; três
+&gt; FIM
+3
+$ cat &lt;&lt;FIM | sort
+&gt; uva
+&gt; banana
+&gt; maçã
+&gt; FIM
+banana
+maçã
+uva</pre>
+
+<p>No segundo exemplo, o here-doc é a entrada do <code>cat</code>, e o <code>| sort</code> fica na primeira linha também. Um here-doc também alimenta um laço <code>while read</code>:</p>
+
+<pre class="term">$ while read -r fruta qtd; do
+&gt;   echo "$fruta: $qtd"
+&gt; done &lt;&lt;FIM
+&gt; banana 3
+&gt; maçã 2
+&gt; FIM
+banana: 3
+maçã: 2</pre>
+
+<h3>Exemplos do mundo real (ilustrativos)</h3>
+<p>Os três exemplos abaixo precisam de rede, de um servidor de e-mail ou de senha de administrador, então não rodam no laboratório nem no simulador. Eles mostram o mesmo padrão em ação:</p>
+
+<pre class="file" data-file="exemplos-reais.sh"># 1. Enviar um e-mail (precisa de um programa mail configurado)
+mail -s "Backup de $(date +%d/%m)" ana@exemplo.com &lt;&lt;FIM
+O backup terminou às $(date +%H:%M).
+Arquivos copiados: $total
+FIM
+
+# 2. Rodar vários comandos em outro computador pelo ssh
+#    (aspas no FIM: as variáveis são do servidor, não daqui)
+ssh ana@servidor &lt;&lt;'FIM'
+cd /var/www
+du -sh .
+df -h /
+FIM
+
+# 3. Gravar um arquivo do sistema como root
+#    (o "&gt; /etc/…" não funcionaria: veja redirecionamento.html)
+sudo tee /etc/minha-app.conf &gt; /dev/null &lt;&lt;FIM
+porta=8080
+FIM
+</pre>
+
+<p>No exemplo do <code>ssh</code>, as aspas em <code>'FIM'</code> são importantes: sem elas, o seu computador trocaria as variáveis e os <code>$( )</code> <strong>antes</strong> de enviar o texto ao servidor.</p>
+
+<hr>
+
+<h2>Guardar um here-doc numa variável</h2>
+<p>Duas formas:</p>
+
+<pre class="term">$ msg=$(cat &lt;&lt;'FIM'
+&gt; um
+&gt; dois
+&gt; FIM
+&gt; )
+$ echo "$msg"
+um
+dois
+$ read -r -d '' texto &lt;&lt;'FIM'
+&gt; linha A
+&gt; linha B
+&gt; FIM
+$ echo $?
+1                                    « "erro", mas a variável foi preenchida
+$ echo "$texto"
+linha A
+linha B</pre>
+
+<p>O <code>read -d ''</code> lê até achar um caractere nulo, que nunca vem; por isso termina com código 1 ao chegar no fim do texto. Isso é normal, mas cuidado com <code>set -e</code> (veja <a href="modo-estrito.html">set -euo pipefail</a>): ali, esse 1 encerraria o script. A forma com <code>$(cat …)</code> não tem esse problema.</p>
+
+<hr>
+
+<h2>Here-string: <code>&lt;&lt;&lt;</code></h2>
+<p>Quando o texto é uma linha só (ou está numa variável), use a <strong>here-string</strong> ("texto aqui"): três sinais de menor e o texto logo depois.</p>
+
+<dl class="anatomy">
+  <dt>tr a-z A-Z</dt><dd>Um comando que lê a entrada padrão (aqui, troca minúsculas por maiúsculas).</dd>
+  <dt>&lt;&lt;&lt;</dt><dd>"A entrada é este texto".</dd>
+  <dt>"ola mundo"</dt><dd>O texto. Use aspas: é uma palavra só para o Bash. Pode ser <code>"$variável"</code>.</dd>
+</dl>
+
+<pre class="term">$ tr a-z A-Z &lt;&lt;&lt; "ola mundo"
+OLA MUNDO
+$ bc &lt;&lt;&lt; "9.5 + 7.0 + 8.5"
+25.0
+$ texto="erro: disco cheio"
+$ grep -q erro &lt;&lt;&lt; "$texto" &amp;&amp; echo "achei um erro"
+achei um erro</pre>
+
+<p>É o mesmo que <code>echo "$texto" | grep -q erro</code>, sem criar um pipe. Um detalhe: a here-string acrescenta uma quebra de linha no fim.</p>
+
+<pre class="term">$ wc -c &lt;&lt;&lt; "abc"
+4                                    « a, b, c e o \n
+$ printf '%s' "abc" | wc -c
+3</pre>
+
+<h3>O truque mais útil: <code>read</code> com here-string</h3>
+<p>A here-string é a forma certa de separar uma linha em variáveis:</p>
+
+<pre class="term">$ linha="Ana 29 Recife"
+$ read nome idade cidade &lt;&lt;&lt; "$linha"
+$ echo "$nome / $idade / $cidade"
+Ana / 29 / Recife
+$ IFS=, read -r nome idade cidade nota &lt;&lt;&lt; "Bruno,34,Curitiba,7.0"
+$ echo "$nome tem nota $nota"
+Bruno tem nota 7.0</pre>
+
+<p>Por que não <code>echo "$linha" | read nome</code>? Porque cada lado de um pipe roda num <strong>subshell</strong>: o <code>read</code> preenche as variáveis lá dentro, e elas somem quando o pipe acaba.</p>
+
+<pre class="term">$ echo "Ana" | read n; echo "[$n]"
+[]                                   « vazio: o read rodou num subshell
+$ read n &lt;&lt;&lt; "Ana"; echo "[$n]"
+[Ana]</pre>
+
+<p>Esse mesmo problema aparece com <code>cmd | while read</code>; ele é explicado com calma em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+
+<div class="try" data-goal="var:cidade=Salvador,ran:&lt;&lt;&lt;" data-solucao="IFS=, read -r nome idade cidade nota &lt;&lt;&lt; &quot;Carla,22,Salvador,8.5&quot;">
+<p class="try-task"><strong>Missão:</strong> use <code>read</code> com uma here-string para separar a linha <code>Carla,22,Salvador,8.5</code> nas variáveis <code>nome idade cidade nota</code> (o separador é a vírgula). Confira com <code>echo "$cidade"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer…</th><th>Use</th><th>Exemplo</th></tr>
+<tr><td>Uma linha de texto num arquivo</td><td><code>echo</code>/<code>printf</code> + <code>&gt;</code></td><td><code>printf 'porta=%s\n' "$p" &gt; app.conf</code></td></tr>
+<tr><td>Várias linhas, com variáveis</td><td><code>&lt;&lt;FIM</code></td><td>configuração, relatório, e-mail</td></tr>
+<tr><td>Várias linhas, sem trocar nada</td><td><code>&lt;&lt;'FIM'</code></td><td>gerar outro script, comandos para <code>ssh</code></td></tr>
+<tr><td>Várias linhas recuadas dentro de um <code>if</code></td><td><code>&lt;&lt;-FIM</code> (com tabs)</td><td>ajuda dentro de uma função</td></tr>
+<tr><td>Passar uma variável como entrada</td><td><code>&lt;&lt;&lt; "$var"</code></td><td><code>grep -q x &lt;&lt;&lt; "$var"</code></td></tr>
+<tr><td>Separar uma linha em campos</td><td><code>read … &lt;&lt;&lt; "$linha"</code></td><td><code>IFS=, read -r a b &lt;&lt;&lt; "$l"</code></td></tr>
+<tr><td>A entrada é um arquivo que já existe</td><td><code>&lt; arquivo</code></td><td><code>wc -l &lt; frutas.txt</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"aviso: here-document na linha N delimitado pelo fim do arquivo (desejava `FIM')"</strong>
+<pre class="file" data-file="espaco-fim.sh">#!/usr/bin/env bash
+cat &lt;&lt;FIM
+linha 1
+linha 2
+FIM 
+echo "depois"
+</pre>
+<pre class="term">$ bash espaco-fim.sh
+espaco-fim.sh: linha 6: aviso: here-document na linha 2 delimitado pelo fim do arquivo (desejava `FIM')
+linha 1
+linha 2
+FIM                                  « o FIM virou texto…
+echo "depois"                        « …e o resto do script também
+$ echo $?
+0</pre>
+<p><strong>O que aconteceu:</strong> a linha 5 tem um espaço invisível depois de <code>FIM</code>. Para o Bash, <code>FIM </code> não é <code>FIM</code>, então ele seguiu procurando até o fim do arquivo e usou tudo como texto. É só um aviso: o script "funciona" e sai com 0, mas o <code>echo "depois"</code> nunca rodou.</p>
+<p><strong>Como confirmar:</strong> <code>cat -A espaco-fim.sh</code> mostra <code>FIM $</code> (espaço antes do <code>$</code> do fim da linha). Outras causas: <code>FIM</code> recuado com espaços, escrito diferente (<code>fim</code>, <code>FIM;</code>) ou o arquivo salvo no Windows (aparece <code>FIM^M$</code>).</p>
+<p><strong>Como resolver:</strong> deixe a linha de fechamento com <strong>só</strong> o delimitador, encostado na margem (ou recuado só com tabs, se usar <code>&lt;&lt;-</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe: fim inesperado do arquivo"</strong>
+<pre class="term">$ bash espacos.sh
+espacos.sh: linha 7: aviso: here-document na linha 3 delimitado pelo fim do arquivo (desejava `FIM')
+espacos.sh: linha 8: erro de sintaxe: fim inesperado do arquivo do comando `if' na linha 2
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> o here-doc estava dentro de um <code>if</code>, com <code>&lt;&lt;-FIM</code>, mas recuado com <strong>espaços</strong>. O <code>FIM</code> não foi reconhecido, o here-doc engoliu o <code>fi</code>, e o <code>if</code> ficou sem fechar. Agora o script nem roda.</p>
+<p><strong>Como resolver:</strong> recue com tabs de verdade (confira com <code>cat -A</code>: devem aparecer <code>^I</code>), ou tire o recuo do conteúdo e do <code>FIM</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal ficou mostrando <code>&gt;</code> e não sai</strong>
+<p>Você abriu um here-doc no terminal e o Bash está esperando o delimitador. Digite a linha com só <code>FIM</code> (ou o nome que você usou) e Enter. Para desistir, aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>. Se apertar <kbd>Ctrl</kbd>+<kbd>D</kbd>, o here-doc termina ali com o aviso <code>bash: aviso: here-document na linha 8 delimitado pelo fim do arquivo (desejava `FIM')</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>As variáveis apareceram como <code>$nome</code></strong>
+<p><strong>O que aconteceu:</strong> o delimitador estava entre aspas (<code>&lt;&lt;'FIM'</code> ou <code>&lt;&lt;"FIM"</code>), o que desliga as expansões. Ao contrário: se um <code>$</code> sumiu ou virou outra coisa, o delimitador estava sem aspas; escape com <code>\$</code> ou use <code>'FIM'</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>cmd &lt;&lt;FIM</code> … <code>FIM</code></td><td>Here-doc: as linhas viram a entrada do comando; expande <code>$var</code>, <code>$( )</code>, <code>$(( ))</code>.</td></tr>
+<tr><td><code>cmd &lt;&lt;'FIM'</code> / <code>&lt;&lt;"FIM"</code></td><td>Here-doc literal: nada é expandido.</td></tr>
+<tr><td><code>cmd &lt;&lt;-FIM</code></td><td>Remove tabs do começo de cada linha e do <code>FIM</code>.</td></tr>
+<tr><td><code>\$</code>, <code>\`</code>, <code>\\</code></td><td>Num here-doc sem aspas, mantêm o caractere literal.</td></tr>
+<tr><td><code>cat &gt; arq &lt;&lt;FIM</code></td><td>Cria um arquivo com o texto (<code>&gt;&gt;</code> acrescenta).</td></tr>
+<tr><td><code>cat &lt;&lt;FIM | cmd</code></td><td>O pipe vai na primeira linha.</td></tr>
+<tr><td><code>var=$(cat &lt;&lt;'FIM'</code> … <code>FIM</code> <code>)</code></td><td>Guarda o texto numa variável.</td></tr>
+<tr><td><code>cmd &lt;&lt;&lt; "texto"</code></td><td>Here-string: uma palavra como entrada (com <code>\n</code> no fim).</td></tr>
+<tr><td><code>read a b &lt;&lt;&lt; "$linha"</code></td><td>Separa uma linha em variáveis no shell atual.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Abrir o here-doc</h3>
+<p>Complete para criar <code>lista.txt</code> com as linhas seguintes, até <code>FIM</code>:</p>
+<div class="ex-code">cat &gt; lista.txt <input data-answer="&lt;&lt;FIM|&lt;&lt; FIM|&lt;&lt;'FIM'|&lt;&lt;&quot;FIM&quot;" aria-label="abertura do here-doc"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Sem trocar as variáveis</h3>
+<p>Complete a abertura para que <code>$HOME</code> apareça escrito assim, sem virar <code>/home/ana</code>:</p>
+<div class="ex-code">cat <input data-answer="&lt;&lt;'FIM'|&lt;&lt;&quot;FIM&quot;|&lt;&lt;\FIM" aria-label="abertura literal"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Here-string</h3>
+<p>Complete para contar as palavras da variável <code>frase</code> com <code>wc -w</code>, sem usar <code>echo</code> nem pipe:</p>
+<div class="ex-code">wc -w <input data-answer="&lt;&lt;&lt; &quot;$frase&quot;|&lt;&lt;&lt;&quot;$frase&quot;|&lt;&lt;&lt; $frase" aria-label="here-string"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Um script tem <code>cat &lt;&lt;-FIM</code> dentro de um <code>if</code>, com o conteúdo e o <code>FIM</code> recuados com 4 espaços. O que acontece?</p>
+<label><input type="radio" name="q4"> Funciona: o <code>&lt;&lt;-</code> remove qualquer recuo.</label>
+<label><input type="radio" name="q4"> O texto sai com 4 espaços, mas o script funciona.</label>
+<label><input type="radio" name="q4"> O <code>FIM</code> não é reconhecido: o here-doc vai até o fim do arquivo e o <code>if</code> fica sem <code>fi</code>.</label>
+<label><input type="radio" name="q4"> O Bash troca os espaços por tabs automaticamente.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Por que <code>echo "Ana 29" | read nome idade</code> deixa <code>$nome</code> vazio, e <code>read nome idade &lt;&lt;&lt; "Ana 29"</code> não?</p>
+<label><input type="radio" name="q5"> Porque o <code>echo</code> não manda texto para o <code>read</code>.</label>
+<label><input type="radio" name="q5"> Porque, no pipe, o <code>read</code> roda num subshell e as variáveis somem quando ele termina.</label>
+<label><input type="radio" name="q5"> Porque faltou a opção <code>-r</code>.</label>
+<label><input type="radio" name="q5"> Porque a here-string só funciona com uma variável.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>cmd &lt;&lt;FIM</code> … <code>FIM</code> entrega várias linhas como entrada; os redirecionamentos e pipes ficam na primeira linha.</li>
+  <li>Sem aspas no delimitador, expande variáveis e <code>$( )</code>; com <code>'FIM'</code>, o texto é literal.</li>
+  <li><code>&lt;&lt;-FIM</code> remove <strong>tabs</strong> (não espaços) do começo das linhas.</li>
+  <li>A linha de fechamento tem só o delimitador. Um espaço a mais gera "delimitado pelo fim do arquivo (desejava `FIM')".</li>
+  <li><code>&lt;&lt;&lt; "$var"</code> passa uma linha como entrada; <code>read a b &lt;&lt;&lt; "$linha"</code> separa campos sem perder as variáveis.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
