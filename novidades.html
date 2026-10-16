@@ -327,7 +327,7 @@ $ unset GLOBSORT</pre>
 <pre class="term">$ compgen -V lista -d D; declare -p lista
 declare -a lista=([0]="Documentos" [1]="Downloads")</pre>
 
-<p><strong><code>source -p caminho</code></strong>: procura o arquivo nas pastas indicadas, em vez do <code>$PATH</code>:</p>
+<p><strong><code>source -p caminho</code></strong>: procura o arquivo nas pastas indicadas, em vez do <code>$PATH</code>. Aqui, <code>bin2/util.sh</code> é um arquivo de uma linha só, <code>echo carregou util.sh</code>:</p>
 
 <pre class="term">$ source -p ./bin2 util.sh
 carregou util.sh
@@ -347,7 +347,7 @@ trap do sinal 10</pre>
 $ echo $BASH_MONOSECONDS
 2711</pre>
 
-<p><strong><code>bash_source_fullpath</code></strong> (desligada por padrão): <code>BASH_SOURCE</code> passa a ter o caminho completo do arquivo:</p>
+<p><strong><code>bash_source_fullpath</code></strong> (desligada por padrão): <code>BASH_SOURCE</code> passa a ter o caminho completo do arquivo. O <code>mostra.sh</code> tem só <code>echo "BASH_SOURCE: ${BASH_SOURCE[0]}"</code>:</p>
 
 <pre class="term">$ source ./mostra.sh
 BASH_SOURCE: ./mostra.sh
