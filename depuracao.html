@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Depurar — bash -n, set -x, PS4 e caller | Guia Bash</title>
+<meta name="description" content="Aprenda a achar erros em scripts Bash: bash -n para checar a sintaxe, bash -x e set -x para ver cada comando, PS4 com arquivo e linha, set -v, BASH_XTRACEFD, passo a passo com trap DEBUG, declare -p, caller e os erros clássicos (token inesperado, EOF inesperado, ^M).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Depurar</span></h1>
+
+<p class="intro"><strong>Depurar</strong> (em inglês, <em>debug</em>, "tirar os insetos") é descobrir por que o script não faz o que você esperava. O Bash não tem um depurador gráfico, mas tem algo muito eficiente: ele pode <strong>mostrar cada comando, já com as variáveis trocadas pelos valores, antes de executá-lo</strong>. Na maioria das vezes, o erro salta aos olhos na primeira leitura.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A checar só a sintaxe, sem rodar nada, com <code>bash -n</code>.</li>
+  <li>A ler o rastro de <code>bash -x</code> / <code>set -x</code>: o que significam o <code>+</code> e o <code>++</code>.</li>
+  <li>A pôr arquivo e número da linha no rastro com <code>PS4</code>, e a mandar o rastro para um arquivo.</li>
+  <li>A rodar um script passo a passo e a inspecionar variáveis com <code>declare -p</code>.</li>
+  <li>A reconhecer os erros clássicos: "token inesperado", "EOF inesperado", <code>^M</code> e variável vazia.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O método em 4 passos</h2>
+<p>Antes das ferramentas, o roteiro. Quase todo problema de script se resolve assim:</p>
+<ol>
+  <li><strong>Leia a mensagem de erro inteira.</strong> Em scripts, o Bash diz o arquivo e a linha: <code>fruta.sh: linha 5: …</code>.</li>
+  <li><strong>Cheque a sintaxe</strong> com <code>bash -n script.sh</code>.</li>
+  <li><strong>Veja o que realmente rodou</strong> com <code>bash -x script.sh</code>.</li>
+  <li><strong>Reduza:</strong> rode só o comando suspeito no terminal, com os valores que o rastro mostrou.</li>
+</ol>
+<p>E, antes de tudo isso (ou junto), passe o script no <a href="shellcheck.html">ShellCheck</a>, que acha muitos desses erros sem rodar nada.</p>
+
+<hr>
+
+<h2>Só a sintaxe: <code>bash -n</code></h2>
+<p>A opção <code>-n</code> (<em>noexec</em>, "não executar") faz o Bash <strong>ler</strong> o script inteiro e procurar erros de escrita, sem rodar nenhum comando. É seguro mesmo para scripts que apagam arquivos.</p>
+
+<dl class="anatomy">
+  <dt>bash</dt><dd>Um novo Bash, que vai ler o arquivo.</dd>
+  <dt>-n</dt><dd>Só ler e checar a gramática. Nada é executado.</dd>
+  <dt>script.sh</dt><dd>O arquivo a checar.</dd>
+</dl>
+
+<p>Primeiro, um script que está certo: <code>media.sh</code>, que calcula a média das notas de <code>alunos.csv</code>.</p>
+
+<pre class="term">$ bash -n media.sh
+$ echo $?
+0                                              « nenhuma mensagem e código 0: a sintaxe está certa</pre>
+
+<p>"Sintaxe certa" não quer dizer "script certo": <code>bash -n</code> não sabe se um arquivo existe, se uma variável está vazia ou se um comando está escrito errado (<code>ehco</code> é um nome válido de comando, que só falha ao rodar). Ele pega <strong>gramática</strong>: <code>if</code> sem <code>fi</code>, aspas sem par, parênteses abertos.</p>
+
+<pre class="file" data-file="sem-fi.sh">#!/usr/bin/env bash
+if [[ -f frutas.txt ]]; then
+  echo "achei"
+echo "fim"
+</pre>
+
+<pre class="term">$ bash -n sem-fi.sh
+sem-fi.sh: linha 5: erro de sintaxe: fim inesperado do arquivo do comando `if' na linha 2
+$ echo $?
+2</pre>
+
+<p>Leia a mensagem com atenção: o arquivo tem 4 linhas, e o erro é na "linha 5", ou seja, <strong>depois do fim</strong>. O Bash chegou ao fim do arquivo ainda esperando o <code>fi</code> do <code>if</code> aberto na linha 2. A mensagem diz as duas coisas.</p>
+
+<div class="try" data-setup="printf '#!/usr/bin/env bash\nif [[ -f frutas.txt ]]; then\n  echo achei\necho fim\n' &gt; quebrado.sh" data-goal="ran:bash -n,err:inesperado" data-solucao="bash -n quebrado.sh">
+<p class="try-task"><strong>Missão:</strong> existe um script <code>quebrado.sh</code> na pasta da Ana. Sem executá-lo, peça ao Bash para checar só a sintaxe e leia a mensagem: em que linha o <code>if</code> foi aberto? (Se quiser, veja o arquivo com <code>cat -n quebrado.sh</code>.)</p>
+</div>
+
+<hr>
+
+<h2>Ver cada comando: <code>bash -x</code></h2>
+<p>A Ana fez um script que diz quantas vezes uma fruta aparece na lista. Ele não dá erro nenhum, mas a resposta está errada:</p>
+
+<pre class="file" data-file="fruta.sh">#!/usr/bin/env bash
+# fruta.sh — diz quantas vezes uma fruta aparece na lista
+fruta=$1
+total=$(grep -c "$frtua" frutas.txt)
+if [ $total -gt 0 ]; then
+  echo "$fruta aparece $total vezes"
+else
+  echo "não tem $fruta"
+fi
+</pre>
+
+<pre class="term">$ bash fruta.sh uva
+uva aparece 7 vezes                            « só tem uma uva na lista!
+$ bash fruta.sh kiwi
+kiwi aparece 7 vezes                           « e nenhum kiwi</pre>
+
+<p>A opção <code>-x</code> (<em>xtrace</em>, "rastrear a execução") faz o Bash mostrar cada comando <strong>depois das expansões</strong>, ou seja, com as variáveis já trocadas pelos valores, logo antes de rodá-lo:</p>
+
+<pre class="term">$ bash -x fruta.sh uva
++ fruta=uva
+++ grep -c '' frutas.txt                       « aqui! o grep recebeu um texto vazio
++ total=7
++ '[' 7 -gt 0 ']'
++ echo 'uva aparece 7 vezes'
+uva aparece 7 vezes</pre>
+
+<p>A segunda linha entrega o erro: o <code>grep</code> procurou <code>''</code> (texto vazio), que casa com todas as 7 linhas. Por quê? Porque o script usa <code>$frtua</code>, com as letras trocadas, uma variável que não existe. Olhando só o código, era fácil não ver; no rastro, o valor vazio aparece na cara.</p>
+
+<h3>Como ler o rastro</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você vê</th><th>Significa</th></tr>
+<tr><td><code>+ comando</code></td><td>Um comando do script, já com variáveis e curingas expandidos.</td></tr>
+<tr><td><code>++ comando</code></td><td>Um comando rodando um nível abaixo: dentro de <code>$( )</code>, de um pipe em <code>$( )</code> ou de um subshell. Cada nível acrescenta um <code>+</code>.</td></tr>
+<tr><td><code>'texto'</code></td><td>As aspas simples são acrescentadas pelo rastro para mostrar onde cada argumento começa e termina. <code>''</code> é um argumento vazio.</td></tr>
+<tr><td>Linha sem <code>+</code></td><td>Saída normal do script (o que ele imprime).</td></tr>
+<tr><td><code>'[' 7 -gt 0 ']'</code></td><td>O <code>[</code> é um comando como outro qualquer, e cada parte é um argumento.</td></tr>
+</table>
+</div>
+
+<p>Repare na ordem: <code>++ grep</code> aparece <strong>antes</strong> de <code>+ total=7</code>, porque o Bash precisa rodar o <code>$( )</code> primeiro para saber o valor a atribuir.</p>
+
+<p>Com o nome corrigido para <code>$fruta</code>, o rastro passa a mostrar <code>++ grep -c uva frutas.txt</code>, e a resposta fica certa:</p>
+
+<div class="tryscript" data-file="fruta.sh" data-args="uva" data-goal="out:uva aparece 1 vezes">
+<p class="try-task"><strong>Missão:</strong> conserte o script para que <code>uva</code> apareça 1 vez. Dica: compare o nome da variável criada na linha 3 com o nome usado na linha 4. Se quiser ver o rastro aqui, acrescente <code>set -x</code> na segunda linha.</p>
+<pre class="script">#!/usr/bin/env bash
+# fruta.sh — diz quantas vezes uma fruta aparece na lista
+fruta=$1
+total=$(grep -c "$frtua" frutas.txt)
+if [ $total -gt 0 ]; then
+  echo "$fruta aparece $total vezes"
+else
+  echo "não tem $fruta"
+fi
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+# fruta.sh — diz quantas vezes uma fruta aparece na lista
+fruta=$1
+total=$(grep -c "$fruta" frutas.txt)
+if [ $total -gt 0 ]; then
+  echo "$fruta aparece $total vezes"
+else
+  echo "não tem $fruta"
+fi
+</pre>
+</div>
+
+<div class="tip">
+<strong>Esse erro tinha prevenção</strong>
+<p>Com <code>set -u</code> (<a href="modo-estrito.html">Modo Estrito</a>), o script teria parado com <code>frtua: variável não associada</code>, na linha exata. E o ShellCheck avisaria que <code>frtua</code> nunca recebeu valor.</p>
+</div>
+
+<hr>
+
+<h2>Só um trecho: <code>set -x</code> e <code>set +x</code></h2>
+<p>Em scripts grandes, o rastro inteiro é longo demais. Ligue-o só em volta da parte suspeita, <strong>dentro</strong> do script: <code>set -x</code> liga, <code>set +x</code> desliga.</p>
+
+<pre class="file" data-file="trecho-x.sh">#!/usr/bin/env bash
+nome=Ana
+set -x
+pasta=~/Documentos
+qtd=$(ls "$pasta" | wc -l)
+set +x
+echo "$nome tem $qtd itens em $pasta"
+</pre>
+
+<pre class="term">$ bash trecho-x.sh
++ pasta=/home/ana/Documentos                   « o ~ já aparece expandido
+++ ls /home/ana/Documentos
+++ wc -l                                       « as duas partes do pipe dentro do $( )
++ qtd=5
++ set +x                                       « o próprio set +x aparece, e o rastro para
+Ana tem 5 itens em /home/ana/Documentos</pre>
+
+<p>A linha <code>nome=Ana</code> não aparece, porque veio antes do <code>set -x</code>. Você pode também ligar o rastro no terminal (<code>set -x</code>) para ver como o Bash expande um comando seu, e desligar com <code>set +x</code>.</p>
+
+<hr>
+
+<h2>Arquivo e linha no rastro: <code>PS4</code></h2>
+<p>O <code>+</code> do começo de cada linha vem da variável <code>PS4</code> (o quarto prompt do Bash; o <code>PS1</code> é o do <a href="ps1.html">terminal</a>). Mudando o <code>PS4</code>, cada linha do rastro pode dizer de onde veio:</p>
+
+<dl class="anatomy">
+  <dt>PS4='…'</dt><dd>O texto impresso antes de cada comando rastreado. Aspas <strong>simples</strong>, para as variáveis serem lidas a cada linha, e não uma vez só.</dd>
+  <dt>${BASH_SOURCE}</dt><dd>O arquivo do script que está rodando (útil quando um script faz <code>source</code> de outro).</dd>
+  <dt>${LINENO}</dt><dd>O número da linha.</dd>
+  <dt>${FUNCNAME[0]:-}</dt><dd>(Opcional) O nome da função atual; <code>:-</code> evita erro com <code>set -u</code> fora de funções.</dd>
+</dl>
+
+<pre class="term">$ PS4='+ ${BASH_SOURCE}:${LINENO}: ' bash -x fruta.sh uva
++ fruta.sh:3: fruta=uva
+++ fruta.sh:4: grep -c '' frutas.txt
++ fruta.sh:4: total=7
++ fruta.sh:5: '[' 7 -gt 0 ']'
++ fruta.sh:6: echo 'uva aparece 7 vezes'
+uva aparece 7 vezes</pre>
+
+<p>Agora você vai direto à linha 4. Escrever <code>PS4=… bash -x script</code> na mesma linha muda o <code>PS4</code> só para esse comando. Para usar sempre, ponha <code>export PS4='+ ${BASH_SOURCE}:${LINENO}: '</code> no seu <a href="inicializacao.html"><code>~/.bashrc</code></a>, ou dentro do script, antes do <code>set -x</code>.</p>
+
+<div class="warning">
+<strong>O primeiro caractere do PS4 é repetido</strong>
+<p>O Bash repete o <strong>primeiro</strong> caractere do <code>PS4</code> para mostrar o nível (<code>+</code>, <code>++</code>, <code>+++</code>). Por isso, comece o <code>PS4</code> com <code>+</code>; se começar com espaço, os níveis ficam invisíveis.</p>
+</div>
+
+<hr>
+
+<h2>O rastro num arquivo: <code>BASH_XTRACEFD</code></h2>
+<p>O rastro sai na saída de erro, misturado com as mensagens do script. Para separar, abra um <a href="descritores.html">descritor</a> para um arquivo e diga ao Bash para usá-lo com a variável <code>BASH_XTRACEFD</code> (<em>xtrace file descriptor</em>):</p>
+
+<pre class="file" data-file="debug-fd.sh">#!/usr/bin/env bash
+exec 3&gt; rastro.log
+BASH_XTRACEFD=3
+set -x
+fruta=uva
+grep -c "$fruta" frutas.txt
+</pre>
+
+<pre class="term">$ bash debug-fd.sh
+1                                              « na tela, só a saída do script
+$ cat rastro.log
++ fruta=uva
++ grep -c uva frutas.txt                       « o rastro foi para o arquivo</pre>
+
+<dl class="anatomy">
+  <dt>exec 3&gt; rastro.log</dt><dd>Abre o arquivo <code>rastro.log</code> no canal 3, para o script inteiro.</dd>
+  <dt>BASH_XTRACEFD=3</dt><dd>O rastro do <code>-x</code> vai para o canal 3, em vez do 2.</dd>
+</dl>
+
+<hr>
+
+<h2>Ver as linhas como estão escritas: <code>set -v</code></h2>
+<p>A opção <code>-v</code> (<em>verbose</em>, "falador") mostra cada linha do script <strong>como ela foi lida</strong>, antes de qualquer expansão. É útil para erros de sintaxe, porque mostra até onde o Bash conseguiu ler:</p>
+
+<pre class="term">$ bash -v sem-then.sh
+#!/usr/bin/env bash
+if [[ -f frutas.txt ]]
+  echo "achei"
+fi
+sem-then.sh: linha 4: erro de sintaxe próximo ao token inesperado `fi'
+sem-then.sh: linha 4: `fi'</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Mostra</th><th>Use para</th></tr>
+<tr><td><code>-n</code></td><td>Nada: só checa a gramática.</td><td>Erros de sintaxe, sem rodar.</td></tr>
+<tr><td><code>-v</code></td><td>As linhas como estão no arquivo.</td><td>Ver até onde o Bash leu.</td></tr>
+<tr><td><code>-x</code></td><td>Os comandos já expandidos, com <code>+</code>.</td><td>Ver valores reais e o caminho percorrido. <strong>A mais útil.</strong></td></tr>
+<tr><td><code>-xv</code></td><td>As duas coisas.</td><td>Comparar o escrito com o executado.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passo a passo com <code>trap … DEBUG</code></h2>
+<p>O evento <code>DEBUG</code> do <a href="trap.html"><code>trap</code></a> roda antes de cada comando. Com um <code>read</code> dentro dele, o script espera um Enter a cada passo, como um depurador:</p>
+
+<pre class="file" data-file="passo.sh">#!/usr/bin/env bash
+trap 'read -rp "[linha $LINENO] $BASH_COMMAND   (Enter) " &lt; /dev/tty' DEBUG
+nome=Ana
+qtd=$(wc -l &lt; frutas.txt)
+echo "$nome tem $qtd frutas"
+</pre>
+
+<pre class="term">$ bash passo.sh
+[linha 3] nome=Ana   (Enter)                   « o script espera você apertar Enter
+[linha 4] qtd=$(wc -l &lt; frutas.txt)   (Enter)
+[linha 5] echo "$nome tem $qtd frutas"   (Enter)
+Ana tem 7 frutas</pre>
+
+<dl class="anatomy">
+  <dt>$BASH_COMMAND</dt><dd>O comando que <strong>vai</strong> rodar, como está escrito (sem expandir).</dd>
+  <dt>&lt; /dev/tty</dt><dd>Lê do teclado de verdade, mesmo se a entrada do script estiver redirecionada.</dd>
+</dl>
+
+<p>Enquanto ele espera, você pode até abrir outro terminal e olhar os arquivos que o script criou até ali.</p>
+
+<hr>
+
+<h2>Olhar dentro das variáveis: <code>declare -p</code></h2>
+<p><code>echo "$x"</code> esconde detalhes: espaços no fim, caracteres invisíveis, se é array. O <code>declare -p</code> (<em>print</em>) mostra a variável exatamente como o Bash a guarda, em forma de comando:</p>
+
+<pre class="term">$ cores=(azul verde); declare -A idade=([Ana]=29)
+$ declare -p cores idade
+declare -a cores=([0]="azul" [1]="verde")      « -a: array indexado
+declare -A idade=([Ana]="29" )                 « -A: array associativo
+$ declare -p PATH HOME
+declare -x PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+declare -x HOME="/home/ana"                    « -x: exportada (variável de ambiente)</pre>
+
+<p>Ele brilha com caracteres invisíveis. Veja uma variável que veio de um arquivo do Windows, com um <code>\r</code> escondido no fim:</p>
+
+<pre class="term">$ nome=$'Ana\r'
+$ echo "[$nome]"
+]Ana                                           « o \r volta o cursor e o ] cobre o [
+$ declare -p nome
+declare -- nome=$'Ana\r'                       « aqui o \r aparece com todas as letras</pre>
+
+<hr>
+
+<h2>Mensagens de depuração e <code>caller</code></h2>
+<h3>Um <code>echo</code> de depuração que se desliga sozinho</h3>
+<p>O jeito mais antigo de depurar é espalhar <code>echo</code> pelo script. Faça isso do jeito certo: na <strong>saída de erro</strong> (para não misturar com o resultado) e só quando você pedir, com uma variável <code>DEBUG</code>:</p>
+
+<pre class="file" data-file="dbg2.sh">#!/usr/bin/env bash
+set -euo pipefail
+debug() {
+  if [[ -n ${DEBUG:-} ]]; then
+    printf 'DEBUG: %s\n' "$*" &gt;&amp;2
+  fi
+}
+debug "começando, argumentos: $*"
+echo "trabalhando"
+debug "terminei"
+</pre>
+
+<pre class="term">$ bash dbg2.sh x
+trabalhando                                    « normal: nenhuma mensagem extra
+$ DEBUG=1 bash dbg2.sh x
+DEBUG: começando, argumentos: x
+trabalhando
+DEBUG: terminei</pre>
+
+<div class="warning">
+<strong>Não escreva <code>[[ … ]] &amp;&amp; echo</code> como última linha da função</strong>
+<p>A versão "curta" <code>debug() { [[ -n ${DEBUG:-} ]] &amp;&amp; echo "DEBUG: $*" &gt;&amp;2; }</code> devolve 1 quando <code>DEBUG</code> está vazia (o código do <code>[[ ]]</code>). Com <code>set -e</code>, a primeira chamada a <code>debug</code> mata o script sem mensagem nenhuma. Use <code>if</code>, como acima.</p>
+</div>
+
+<h3>Quem me chamou? <code>caller</code></h3>
+<p>Dentro de uma função, o comando interno <code>caller</code> diz de qual linha e arquivo ela foi chamada. Com um número (<code>caller 0</code>, <code>caller 1</code>…), ele sobe na pilha de chamadas e mostra também o nome da função:</p>
+
+<pre class="file" data-file="quem.sh">#!/usr/bin/env bash
+erro() {
+  echo "erro: $1 (chamado na linha $(caller))" &gt;&amp;2
+}
+copiar() {
+  cp "$1" ~/backup/ 2&gt;/dev/null || erro "não copiei $1"
+}
+copiar nada.txt
+echo "---"
+caminho() {
+  local i
+  for ((i = 0; ; i++)); do
+    caller "$i" || break
+  done
+}
+a() { b; }
+b() { caminho; }
+a
+</pre>
+
+<pre class="term">$ bash quem.sh
+erro: não copiei nada.txt (chamado na linha 6 quem.sh)   « a linha do "|| erro", dentro de copiar
+---
+17 b quem.sh                                   « caminho foi chamado na linha 17, dentro de b
+16 a quem.sh                                   « b foi chamado na linha 16, dentro de a
+18 main quem.sh                                « a foi chamado na linha 18, no corpo do script</pre>
+
+<p>"<code>main</code>" é como o Bash chama o corpo do script, fora de funções. Essa lista de chamadas (a <strong>pilha</strong>) é o que outras linguagens mostram num erro; com <code>caller</code>, você monta a sua.</p>
+
+<hr>
+
+<h2>Erros clássicos e como achá-los</h2>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado"</strong>
+<pre class="term">$ cat sem-then.sh
+#!/usr/bin/env bash
+if [[ -f frutas.txt ]]
+  echo "achei"
+fi
+$ bash sem-then.sh
+sem-then.sh: linha 4: erro de sintaxe próximo ao token inesperado `fi'
+sem-then.sh: linha 4: `fi'</pre>
+<p><strong>O que aconteceu:</strong> um <em>token</em> é uma "peça" do comando (palavra-chave, operador). O Bash achou um <code>fi</code> onde esperava outra coisa: faltou o <code>then</code> (ou o <code>;</code> antes dele, quando está na mesma linha). O erro de verdade costuma estar <strong>antes</strong> da linha apontada.</p>
+<p><strong>Como resolver:</strong> confira os pares: <code>if … then … fi</code>, <code>for/while … do … done</code>, <code>case … in … esac</code>, e o <code>;</code> antes de <code>then</code>/<code>do</code> quando estão na mesma linha. Variantes do mesmo erro: <code>token inesperado `done'</code>, <code>`else'</code>, <code>`}'</code>, <code>`('</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"encontrado EOF inesperado enquanto procurava por `"' correspondente"</strong>
+<pre class="term">$ cat aspas.sh
+#!/usr/bin/env bash
+echo "Olá, mundo
+echo "fim"
+$ bash -n aspas.sh
+aspas.sh: linha 3: encontrado EOF inesperado enquanto procurava por `"' correspondente</pre>
+<p><strong>O que aconteceu:</strong> EOF é <em>end of file</em>, "fim do arquivo". Uma aspa da linha 2 não foi fechada; o Bash leu tudo procurando o par e o arquivo acabou. O mesmo acontece com <code>$(</code> e <code>$((</code> sem o fechamento: <code>procurava por `)' correspondente</code>.</p>
+<p><strong>Como resolver:</strong> procure a aspa aberta <strong>acima</strong> da linha apontada. Um editor com cores ajuda: tudo depois da aspa aberta fica da cor de texto. O ShellCheck também aponta a linha da aspa.</p>
+</div>
+
+<div class="cenario">
+<strong>"fim inesperado do arquivo do comando `if'"</strong>
+<pre class="term">$ bash -n sem-fi.sh
+sem-fi.sh: linha 5: erro de sintaxe: fim inesperado do arquivo do comando `if' na linha 2</pre>
+<p><strong>O que aconteceu:</strong> um bloco aberto (<code>if</code>, <code>while</code>, <code>{</code> de função…) não foi fechado.</p>
+<p><strong>Como resolver:</strong> a mensagem diz onde o bloco começou ("na linha 2"). Feche-o com <code>fi</code>/<code>done</code>/<code>}</code>. Indentar o código direito torna esse erro visível na hora.</p>
+</div>
+
+<div class="cenario">
+<strong><code>$'\r'</code>, <code>bash\r</code> e <code>^M</code>: o script veio do Windows</strong>
+<pre class="term">$ bash windows.sh
+Olá
+windows.sh: linha 3: cd: $'Documentos\r': Arquivo ou diretório inexistente
+$ ./windows.sh
+env: ‘bash\r’: Arquivo ou diretório inexistente
+env: usa -[v]S para passar opções em linhas shebang</pre>
+<p><strong>O que aconteceu:</strong> no Windows, as linhas terminam com dois caracteres, <code>\r\n</code> (CRLF); no Linux, só com <code>\n</code>. O <code>\r</code> sobrando vira parte do último argumento de cada linha: a pasta procurada é <code>Documentos\r</code>, e o shebang pede um programa chamado <code>bash\r</code>.</p>
+<p><strong>Como confirmar:</strong></p>
+<pre class="term">$ cat -A windows.sh
+#!/usr/bin/env bash^M$                         « ^M é o \r; $ marca o fim da linha
+echo "OlM-CM-!"^M$
+cd Documentos^M$
+$ file windows.sh
+windows.sh: Bourne-Again shell script, Unicode text, UTF-8 text executable, with CRLF line terminators</pre>
+<p><strong>Como resolver:</strong> tire os <code>\r</code>: <code>sed -i 's/\r$//' windows.sh</code> (ou <code>dos2unix windows.sh</code>, se estiver instalado). No editor, salve com fim de linha "LF". No Git, configure <code>core.autocrlf</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não deu erro, mas fez a coisa errada (variável vazia)</strong>
+<p><strong>O que aconteceu:</strong> uma variável estava vazia ou com outro valor, como o <code>$frtua</code> do exemplo. Sinais típicos: <code>''</code> no rastro do <code>-x</code>, mensagens como <code>[: -gt: esperado operador unário</code> ou um comando que "pegou tudo".</p>
+<p><strong>Como resolver:</strong> rode com <code>bash -x</code> e procure <code>''</code>; confira a variável com <code>declare -p</code>; ligue <code>set -u</code> para que nomes inexistentes virem erro.</p>
+</div>
+
+<div class="cenario">
+<strong>O script para no meio sem mensagem</strong>
+<p><strong>O que aconteceu:</strong> quase sempre é o <code>set -e</code> parando num comando que devolveu 1 sem ser um erro de verdade (<code>grep</code> sem resultado, <code>((n++))</code>, a função <code>debug</code> curta).</p>
+<p><strong>Como resolver:</strong> <code>bash -x script.sh</code>: a <strong>última</strong> linha com <code>+</code> é o comando que parou o script. Para deixar isso permanente, use o <code>trap … ERR</code> de <a href="trap.html">trap e Sinais</a>, que mostra a linha do erro.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>O que faz</th></tr>
+<tr><td><code>bash -n script.sh</code></td><td>Checa a sintaxe sem executar.</td></tr>
+<tr><td><code>bash -x script.sh</code></td><td>Executa mostrando cada comando expandido.</td></tr>
+<tr><td><code>set -x</code> / <code>set +x</code></td><td>Liga / desliga o rastro dentro do script.</td></tr>
+<tr><td><code>bash -v</code> / <code>set -v</code></td><td>Mostra as linhas como foram lidas.</td></tr>
+<tr><td><code>PS4='+ ${BASH_SOURCE}:${LINENO}: '</code></td><td>Arquivo e linha em cada linha do rastro.</td></tr>
+<tr><td><code>exec 3&gt;log; BASH_XTRACEFD=3</code></td><td>Manda o rastro para um arquivo.</td></tr>
+<tr><td><code>trap '…' DEBUG</code></td><td>Roda algo antes de cada comando (passo a passo).</td></tr>
+<tr><td><code>declare -p var</code></td><td>Mostra a variável exatamente como está guardada.</td></tr>
+<tr><td><code>caller [N]</code></td><td>Linha, função e arquivo de quem chamou a função.</td></tr>
+<tr><td><code>cat -A arquivo</code></td><td>Mostra caracteres invisíveis (<code>^M</code>, tabs <code>^I</code>, fim de linha <code>$</code>).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só a sintaxe</h3>
+<p>Complete para checar a sintaxe de <code>backup.sh</code> sem executá-lo:</p>
+<div class="ex-code">bash <input data-answer="-n" aria-label="opção"> backup.sh</div>
+</div>
+
+<div class="exercise">
+<h3>2. Rastro de um trecho</h3>
+<p>Complete as duas linhas que ligam e desligam o rastro dentro de um script:</p>
+<div class="ex-code"><input data-answer="set -x" aria-label="liga"><br>cp "$origem" "$destino"<br><input data-answer="set +x" aria-label="desliga"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Linha no rastro</h3>
+<p>Complete o <code>PS4</code> para mostrar o número da linha:</p>
+<div class="ex-code">PS4='+ ${BASH_SOURCE}:<input data-answer="${LINENO}|$LINENO" aria-label="variável">: '</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. No rastro do <code>bash -x</code>, o que indica uma linha que começa com <code>++</code>?</p>
+<label><input type="radio" name="q4"> Um comando que falhou.</label>
+<label><input type="radio" name="q4"> Um comando rodando um nível abaixo, por exemplo dentro de <code>$( )</code>.</label>
+<label><input type="radio" name="q4"> Um comando repetido duas vezes.</label>
+<label><input type="radio" name="q4"> Uma linha de comentário.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. O erro <code>cd: $'Documentos\r': Arquivo ou diretório inexistente</code> indica que…</p>
+<label><input type="radio" name="q5"> …a pasta Documentos foi apagada.</label>
+<label><input type="radio" name="q5"> …falta <code>set -u</code> no script.</label>
+<label><input type="radio" name="q5"> …o script tem fins de linha do Windows (CRLF).</label>
+<label><input type="radio" name="q5"> …o <code>cd</code> não aceita aspas.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. O que o <code>bash -n</code> <strong>não</strong> consegue descobrir?</p>
+<label><input type="radio" name="q6"> Que um comando foi digitado errado, como <code>ehco</code>.</label>
+<label><input type="radio" name="q6"> Que falta um <code>fi</code>.</label>
+<label><input type="radio" name="q6"> Que uma aspa não foi fechada.</label>
+<label><input type="radio" name="q6"> Que falta um <code>)</code> num <code>$(</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>bash -n</code> checa a gramática sem rodar nada; não pega comandos ou valores errados.</li>
+  <li><code>bash -x</code> (ou <code>set -x</code> … <code>set +x</code>) mostra cada comando já expandido: <code>+</code> é o script, <code>++</code> é um nível abaixo, <code>''</code> é um argumento vazio.</li>
+  <li><code>PS4='+ ${BASH_SOURCE}:${LINENO}: '</code> põe arquivo e linha no rastro; <code>BASH_XTRACEFD</code> manda o rastro para um arquivo.</li>
+  <li><code>trap … DEBUG</code> faz o passo a passo; <code>declare -p</code> mostra variáveis sem disfarce; <code>caller</code> diz quem chamou a função.</li>
+  <li>"token inesperado" e "EOF inesperado": o erro real costuma estar antes da linha apontada. <code>^M</code>/<code>\r</code>: o arquivo veio do Windows, use <code>sed -i 's/\r$//'</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
