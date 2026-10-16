@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto Backup com Rotação — tar, data no nome, set -euo pipefail e trap | Guia Bash</title>
+<meta name="description" content="Projeto passo a passo: um script Bash de backup de ~/Documentos com tar e data no nome, rotação que mantém os 5 mais recentes, set -euo pipefail, trap para limpar arquivo incompleto, mensagens na saída de erro, códigos de saída e agendamento.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Backup com Rotação</span></h1>
+
+<p class="intro">Backup é o script que todo mundo deveria ter e quase ninguém tem. Neste projeto você escreve um que compacta a pasta <code>~/Documentos</code> num arquivo com a data no nome, guarda só os 5 mais recentes e, principalmente, <strong>falha do jeito certo</strong>: se algo der errado, ele para, apaga o arquivo pela metade, avisa na saída de erro e devolve um código diferente de 0. Um backup quebrado que diz "OK" é pior do que nenhum backup.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Um script <code>backup.sh</code> que cria <code>~/backups/documentos-2026-10-15_103012.tar.gz</code>.</li>
+  <li>Rotação: só os 5 backups mais recentes ficam, os outros são apagados.</li>
+  <li><code>set -euo pipefail</code> e um <code>trap</code> que limpa o arquivo incompleto quando algo falha.</li>
+  <li>Mensagens na saída de erro e só o caminho do backup na saída padrão, para outro script poder usá-lo.</li>
+  <li>Uma linha de agendamento para rodar todo dia sozinho.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>1h</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="script-primeiro.html">Seu Primeiro Script</a>, <a href="substituicao-comando.html">Substituição de Comando</a>, <a href="arrays.html">Arrays</a>, <a href="codigo-saida.html">Código de Saída</a>. Ajudam: <a href="modo-estrito.html">set -euo pipefail</a> e <a href="trap.html">trap e Sinais</a>.</td></tr>
+<tr><td>Onde roda</td><td>O <code>tar</code> não existe no simulador do guia: as sessões desta página foram feitas no Bash real, e as caixas "Experimente" treinam as outras partes do script (o nome com data, a rotação, o <code>set -e</code>, o <code>trap</code>, o <code>&gt;&amp;2</code>). O script inteiro você roda no seu computador. Veja <a href="projetos.html">Como Usar os Projetos</a>.</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Backup na mesma máquina é só meio backup</strong>
+<p>Para aprender, o destino aqui é <code>~/backups</code>, no mesmo disco. Na vida real, mande a cópia para outro lugar: um HD externo, outro computador, a nuvem. Um disco que queima leva junto os dados <strong>e</strong> os backups que estavam nele.</p>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Etapa 1 — Um <code>.tar.gz</code> com a data no nome</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o <code>tar</code> (de <em>tape archive</em>, "arquivo de fita", do tempo em que backup ia para fita magnética) junta uma pasta inteira num arquivo só; com <code>-z</code> ele ainda compacta com gzip. A data no nome faz cada backup ter um nome diferente, e um nome que se ordena sozinho.</p>
+
+<pre class="file" data-file="backup.sh">#!/usr/bin/env bash
+# backup.sh — versão 1: um .tar.gz com a data no nome
+origem=~/Documentos
+destino=~/backups
+data=$(date +%F_%H%M%S)
+nome=documentos-$data.tar.gz
+
+mkdir -p "$destino"
+tar -czf "$destino/$nome" -C "$(dirname "$origem")" "$(basename "$origem")"
+echo "criado: $destino/$nome"
+</pre>
+
+<p>A linha do <code>date</code>, parte por parte:</p>
+<dl class="anatomy">
+  <dt>$(</dt><dd>Substituição de comando: roda o que está dentro e coloca a saída no lugar.</dd>
+  <dt>date</dt><dd>Mostra a data e a hora.</dd>
+  <dt>+</dt><dd>"A partir daqui vem um formato meu."</dd>
+  <dt>%F</dt><dd>Data completa no formato ano-mês-dia: <code>2026-10-15</code>.</dd>
+  <dt>_</dt><dd>Um sublinhado literal (sem espaço, para o nome não precisar de aspas).</dd>
+  <dt>%H%M%S</dt><dd>Hora, minuto e segundo, com dois dígitos cada: <code>103012</code>.</dd>
+</dl>
+
+<p>E a linha do <code>tar</code>:</p>
+<dl class="anatomy">
+  <dt>tar</dt><dd>O programa de arquivamento.</dd>
+  <dt>-c</dt><dd><em>create</em>: criar um arquivo novo.</dd>
+  <dt>-z</dt><dd>Compactar com gzip (por isso o <code>.gz</code>).</dd>
+  <dt>-f "$destino/$nome"</dt><dd><em>file</em>: o nome do arquivo a criar. O <code>-f</code> precisa vir por último no grupo <code>-czf</code>, porque o nome vem logo depois dele.</dd>
+  <dt>-C "$(dirname "$origem")"</dt><dd>Entra primeiro em <code>/home/ana</code> (o <code>dirname</code> tira o último pedaço do caminho)…</dd>
+  <dt>"$(basename "$origem")"</dt><dd>…e guarda <code>Documentos</code>. Assim os caminhos dentro do backup começam em <code>Documentos/</code>, e não em <code>home/ana/Documentos/</code>.</dd>
+</dl>
+
+<pre class="term">$ ./backup.sh
+criado: /home/ana/backups/documentos-2026-10-15_103012.tar.gz
+$ echo $?
+0
+$ ls -l backups
+total 4
+-rw-rw-r-- 1 ana ana 768 out 15 10:30 documentos-2026-10-15_103012.tar.gz
+$ tar -tzf backups/documentos-*.tar.gz             « -t = listar o conteúdo
+Documentos/
+Documentos/alunos.csv
+Documentos/notas.txt
+Documentos/acesso.log
+Documentos/relatorio.odt
+Documentos/projetos/
+Documentos/projetos/site/
+Documentos/projetos/site/index.html
+Documentos/projetos/site/style.css
+Documentos/projetos/backup.sh</pre>
+<p>A pasta inteira, com subpastas, cabe em 768 bytes (são arquivos de texto pequenos, e texto compacta muito bem). A ordem da listagem é a ordem em que o <code>tar</code> encontrou os arquivos no disco, não a alfabética.</p>
+
+<p><strong>Confira o que importa: a restauração.</strong> Backup que nunca foi restaurado é só uma esperança. Extraia numa pasta de teste e compare com o original:</p>
+<pre class="term">$ mkdir /tmp/teste
+$ tar -xzf backups/documentos-*.tar.gz -C /tmp/teste      « -x = extrair
+$ diff -r Documentos /tmp/teste/Documentos &amp;&amp; echo IGUAIS
+IGUAIS</pre>
+<p>O <code>diff -r</code> compara as duas árvores arquivo por arquivo e não escreve nada quando são iguais (código 0), então o <code>&amp;&amp; echo IGUAIS</code> roda. Veja <a href="operadores.html">; &amp;&amp; ||</a>.</p>
+
+<div class="tryscript" data-file="nome.sh" data-goal="outre:documentos-\d{4}-\d\d-\d\d_\d{6}\.tar\.gz">
+<p class="try-task"><strong>Missão:</strong> este script monta o nome do backup só com a data. Se a Ana rodar duas vezes no mesmo dia, o segundo backup apaga o primeiro! Mude o formato do <code>date</code> para acrescentar <code>_</code> e a hora, minuto e segundo (<code>documentos-AAAA-MM-DD_HHMMSS.tar.gz</code>).</p>
+<pre class="script">#!/usr/bin/env bash
+data=$(date +%F)
+nome=documentos-$data.tar.gz
+echo "o backup vai se chamar: $nome"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+data=$(date +%F_%H%M%S)
+nome=documentos-$data.tar.gz
+echo "o backup vai se chamar: $nome"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 2 — Rotação: manter só os 5 mais recentes</h3>
+<p><strong>O que vamos fazer e por quê:</strong> um backup por dia, sem limpeza, enche o disco. A <strong>rotação</strong> apaga os mais antigos e deixa só os <code>N</code> mais recentes. O truque: como o nome começa com <code>AAAA-MM-DD_HHMMSS</code>, a <strong>ordem alfabética é a ordem cronológica</strong>. E o curinga do Bash já devolve os nomes em ordem alfabética. Não precisamos do <code>ls</code>.</p>
+
+<pre class="file" data-file="backup.sh (trecho novo da versão 2)">manter=5                       # junto das outras variáveis, no começo
+
+# depois do tar:
+backups=("$destino"/documentos-*.tar.gz)
+excesso=$(( ${#backups[@]} - manter ))
+if (( excesso &gt; 0 )); then
+  for velho in "${backups[@]:0:excesso}"; do
+    rm -f -- "$velho"
+    echo "rotação: apagado ${velho##*/}"
+  done
+fi
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>backups=("$destino"/documentos-*.tar.gz)</code></td><td>Guarda num <strong>array</strong> todos os nomes que casam com o curinga, do mais antigo para o mais novo. Veja <a href="arrays.html">Arrays</a>.</td></tr>
+<tr><td><code>${#backups[@]}</code></td><td>Quantos itens o array tem.</td></tr>
+<tr><td><code>excesso=$(( … - manter ))</code></td><td>Quantos sobram além dos 5. Com 7 backups, <code>excesso</code> é 2.</td></tr>
+<tr><td><code>"${backups[@]:0:excesso}"</code></td><td>Uma <strong>fatia</strong> do array: a partir da posição 0, pegue <code>excesso</code> itens. São os mais antigos.</td></tr>
+<tr><td><code>${velho##*/}</code></td><td>Só o nome do arquivo, sem a pasta, para a mensagem ficar curta.</td></tr>
+</table>
+</div>
+
+<p>Para testar sem esperar seis dias, criamos seis "backups antigos" vazios com <code>touch</code> e as <a href="chaves.html">chaves</a> <code>{09..14}</code>:</p>
+<pre class="term">$ mkdir backups
+$ touch backups/documentos-2026-10-{09..14}_020000.tar.gz
+$ ls backups
+documentos-2026-10-09_020000.tar.gz  documentos-2026-10-12_020000.tar.gz
+documentos-2026-10-10_020000.tar.gz  documentos-2026-10-13_020000.tar.gz
+documentos-2026-10-11_020000.tar.gz  documentos-2026-10-14_020000.tar.gz
+$ ./backup.sh
+criado: /home/ana/backups/documentos-2026-10-15_103012.tar.gz
+rotação: apagado documentos-2026-10-09_020000.tar.gz      « 7 backups - 5 = 2 apagados
+rotação: apagado documentos-2026-10-10_020000.tar.gz
+$ ls backups
+documentos-2026-10-11_020000.tar.gz  documentos-2026-10-14_020000.tar.gz
+documentos-2026-10-12_020000.tar.gz  documentos-2026-10-15_103012.tar.gz
+documentos-2026-10-13_020000.tar.gz</pre>
+
+<div class="note">
+<strong>Outras formas de fazer a rotação</strong>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como</th><th>Quando usar</th></tr>
+<tr><td>Pelo nome (a nossa)</td><td>curinga + fatia do array</td><td>Quando a data está no nome. Não chama programa nenhum e não se confunde com nomes estranhos.</td></tr>
+<tr><td>Pela data de modificação</td><td><code>ls -1t … | tail -n +6</code></td><td>Quando o nome não tem data. Cuidado: ler a saída do <code>ls</code> quebra com nomes com quebra de linha, e o ShellCheck reclama (SC2012).</td></tr>
+<tr><td>Por idade</td><td><code>find "$destino" -name 'documentos-*' -mtime +7 -delete</code></td><td>"Manter 7 dias" em vez de "manter 5 cópias". Se o backup parar de rodar, em uma semana não sobra nenhum: perigoso.</td></tr>
+</table>
+</div>
+</div>
+
+<div class="tryscript" data-file="rotacao.sh" data-setup="mkdir backups;;touch backups/documentos-2026-10-0{1..8}_020000.tar.gz" data-goal="absent:~/backups/documentos-2026-10-05_020000.tar.gz,file:~/backups/documentos-2026-10-06_020000.tar.gz">
+<p class="try-task"><strong>Missão:</strong> a pasta <code>~/backups</code> tem 8 backups (dias 01 a 08). O disco da Ana é pequeno: mude o script para manter só os <strong>3</strong> mais recentes e rode.</p>
+<pre class="script">#!/usr/bin/env bash
+destino=~/backups
+manter=5
+
+backups=("$destino"/documentos-*.tar.gz)
+echo "encontrei ${#backups[@]} backups"
+excesso=$(( ${#backups[@]} - manter ))
+if (( excesso &gt; 0 )); then
+  for velho in "${backups[@]:0:excesso}"; do
+    rm -f -- "$velho"
+    echo "rotação: apagado ${velho##*/}"
+  done
+fi
+ls "$destino"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+destino=~/backups
+manter=3
+
+backups=("$destino"/documentos-*.tar.gz)
+echo "encontrei ${#backups[@]} backups"
+excesso=$(( ${#backups[@]} - manter ))
+if (( excesso &gt; 0 )); then
+  for velho in "${backups[@]:0:excesso}"; do
+    rm -f -- "$velho"
+    echo "rotação: apagado ${velho##*/}"
+  done
+fi
+ls "$destino"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 3 — Parar no primeiro erro: <code>set -euo pipefail</code></h3>
+<p><strong>O que vamos fazer e por quê:</strong> vamos provocar uma falha. Tiramos a permissão de leitura de um arquivo (<code>chmod 000</code>), como acontece com arquivos de outro usuário, e rodamos a versão 2:</p>
+
+<pre class="term">$ mkdir backups
+$ touch backups/documentos-2026-10-{10..14}_020000.tar.gz
+$ chmod 000 Documentos/notas.txt
+$ ./backup.sh
+tar: Documentos/notas.txt: Função open falhou: Permissão negada
+tar: Saindo com status de falha em razão de erros anteriores
+criado: /home/ana/backups/documentos-2026-10-15_103033.tar.gz      « mentira: está incompleto
+rotação: apagado documentos-2026-10-10_020000.tar.gz               « e apagou um backup bom!
+$ echo $?
+0</pre>
+<p>Veja o tamanho do estrago: o <code>tar</code> falhou, mas o script seguiu em frente, disse "criado", apagou um backup <strong>bom</strong> para dar lugar ao quebrado e ainda saiu com código 0 ("tudo certo"). Quem olhasse só o código jamais saberia. Por padrão, o Bash ignora erros e continua na próxima linha.</p>
+
+<p>A correção é uma linha logo depois do shebang:</p>
+<pre class="file" data-file="backup.sh (versão 3, começo)">#!/usr/bin/env bash
+# backup.sh — versão 3: para no primeiro erro
+set -euo pipefail
+</pre>
+
+<dl class="anatomy">
+  <dt>set</dt><dd>Liga opções do shell.</dd>
+  <dt>-e</dt><dd><em>errexit</em>: se um comando falhar (código diferente de 0), o script termina na hora, com o código desse comando.</dd>
+  <dt>-u</dt><dd><em>nounset</em>: usar uma variável que não existe vira erro (pega erros de digitação como <code>$destnio</code>, que viraria texto vazio).</dd>
+  <dt>-o pipefail</dt><dd>Num pipe <code>a | b</code>, se o <code>a</code> falhar, o pipe todo falha (sem isso, só conta o último comando).</dd>
+</dl>
+
+<pre class="term">$ ./backup.sh
+tar: Documentos/notas.txt: Função open falhou: Permissão negada
+tar: Saindo com status de falha em razão de erros anteriores
+$ echo $?
+2                                                       « o código do tar: 2 = erro fatal
+$ ls backups
+documentos-2026-10-10_020000.tar.gz  documentos-2026-10-13_020000.tar.gz
+documentos-2026-10-11_020000.tar.gz  documentos-2026-10-14_020000.tar.gz
+documentos-2026-10-12_020000.tar.gz  documentos-2026-10-15_103033.tar.gz</pre>
+<p>Melhorou: nenhum "criado", nenhuma rotação, código 2. Mas olhe o <code>ls</code>: o arquivo <strong>incompleto</strong> <code>documentos-2026-10-15_103033.tar.gz</code> ficou lá, com cara de backup de verdade, e na próxima rotação vai contar como um dos 5. A etapa 4 resolve isso. O <a href="modo-estrito.html">modo estrito</a> tem armadilhas (o <code>-e</code> não vale dentro de <code>if</code>, por exemplo); a aula explica todas.</p>
+
+<div class="tryscript" data-file="copia.sh" data-goal="exit:1,src:set -euo pipefail">
+<p class="try-task"><strong>Missão:</strong> o <code>cp</code> deste script falha (o arquivo não existe), mas ele diz "backup concluído" e sai com 0. Acrescente <code>set -euo pipefail</code> logo abaixo do shebang para ele parar no erro, e confira o código de saída.</p>
+<pre class="script">#!/usr/bin/env bash
+mkdir -p ~/backups
+cp ~/Documentos/planilha.ods ~/backups/
+echo "backup concluído"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p ~/backups
+cp ~/Documentos/planilha.ods ~/backups/
+echo "backup concluído"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 4 — Nome temporário e <code>trap</code> para limpar</h3>
+<p><strong>O que vamos fazer e por quê:</strong> duas ideias juntas. (1) O <code>tar</code> escreve num nome <strong>temporário</strong> que começa com ponto e termina em <code>.parcial</code>; só depois de terminar bem ele é renomeado para o nome final. Um backup pela metade nunca tem nome de backup. (2) Um <code>trap … EXIT</code> roda uma função de limpeza <strong>sempre</strong> que o script termina, inclusive quando o <code>set -e</code> o derruba no meio. Veja <a href="trap.html">trap e Sinais</a>.</p>
+
+<pre class="file" data-file="backup.sh (trechos novos da versão 4)">temp=""
+
+limpar() {
+  if [[ -n $temp &amp;&amp; -e $temp ]]; then
+    rm -f -- "$temp"
+    echo "removido o arquivo incompleto ${temp##*/}"
+  fi
+}
+trap limpar EXIT
+
+mkdir -p "$destino"
+temp=$destino/.$nome.parcial
+tar -czf "$temp" -C "$(dirname "$origem")" "$(basename "$origem")"
+mv -- "$temp" "$destino/$nome"
+temp=""
+echo "criado: $destino/$nome"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>Por quê</th></tr>
+<tr><td><code>temp=""</code> no começo</td><td>Com <code>set -u</code>, a função <code>limpar</code> não pode ler uma variável que nunca existiu. Começa vazia.</td></tr>
+<tr><td><code>trap limpar EXIT</code></td><td>"Quando o script sair, por qualquer motivo, chame <code>limpar</code>." <code>EXIT</code> é um pseudo-sinal do Bash.</td></tr>
+<tr><td><code>[[ -n $temp &amp;&amp; -e $temp ]]</code></td><td>Só apaga se há um temporário <strong>e</strong> ele existe.</td></tr>
+<tr><td><code>.$nome.parcial</code></td><td>O ponto no começo deixa o arquivo oculto, e o final <code>.parcial</code> não casa com <code>documentos-*.tar.gz</code>: a rotação nunca o conta.</td></tr>
+<tr><td><code>mv</code> e depois <code>temp=""</code></td><td>Renomear dentro da mesma pasta é instantâneo e "tudo ou nada". Esvaziar <code>temp</code> depois avisa ao <code>limpar</code> que não há mais nada a apagar.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ chmod 000 Documentos/notas.txt
+$ ./backup.sh
+tar: Documentos/notas.txt: Função open falhou: Permissão negada
+tar: Saindo com status de falha em razão de erros anteriores
+removido o arquivo incompleto .documentos-2026-10-15_103042.tar.gz.parcial      « o trap rodou
+$ echo $?
+2
+$ ls -A backups                                         « -A mostra até os ocultos: nada sobrou
+documentos-2026-10-10_020000.tar.gz  documentos-2026-10-13_020000.tar.gz
+documentos-2026-10-11_020000.tar.gz  documentos-2026-10-14_020000.tar.gz
+documentos-2026-10-12_020000.tar.gz
+$ chmod 644 Documentos/notas.txt                        « devolvemos a permissão
+$ ./backup.sh
+criado: /home/ana/backups/documentos-2026-10-15_103042.tar.gz
+rotação: apagado documentos-2026-10-10_020000.tar.gz
+$ echo $?
+0</pre>
+<p>Repare que o <code>trap</code> não muda o código de saída: o script ainda devolve o <code>2</code> do <code>tar</code>. E na execução que deu certo, o <code>limpar</code> também rodou, mas encontrou <code>temp</code> vazio e não fez nada.</p>
+
+<div class="tryscript" data-file="parcial.sh" data-goal="absent:~/backups/.teste.parcial,src:trap">
+<p class="try-task"><strong>Missão:</strong> este script cria <code>~/backups/.teste.parcial</code> e morre no <code>cp</code> (o <code>set -e</code> o derruba), deixando o lixo para trás. Escreva uma função <code>limpar</code> que apague <code>"$temp"</code> e registre-a com <code>trap limpar EXIT</code> antes de o arquivo ser criado.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p ~/backups
+temp=~/backups/.teste.parcial
+
+echo "dados" &gt; "$temp"
+cp ~/Documentos/nao-existe.txt "$temp"
+mv "$temp" ~/backups/teste.ok
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p ~/backups
+temp=~/backups/.teste.parcial
+
+limpar() {
+  rm -f -- "$temp"
+}
+trap limpar EXIT
+
+echo "dados" &gt; "$temp"
+cp ~/Documentos/nao-existe.txt "$temp"
+mv "$temp" ~/backups/teste.ok
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 5 — Mensagens para a saída de erro, resultado para a saída padrão</h3>
+<p><strong>O que vamos fazer e por quê:</strong> um bom programa de linha de comando separa as duas saídas. Na <strong>saída padrão</strong> (stdout, descritor 1) vai só o <em>resultado</em>: o caminho do backup criado. Na <strong>saída de erro</strong> (stderr, descritor 2) vão os avisos para o humano ("compactando…", "rotação…", erros). Assim outro script pode fazer <code>arquivo=$(./backup.sh)</code> e receber só o caminho. Aproveitamos para aceitar a origem e o destino como argumentos e checar se a origem existe.</p>
+
+<pre class="file" data-file="backup.sh (trechos novos da versão 5)">origem=${1:-$HOME/Documentos}
+destino=${2:-$HOME/backups}
+
+msg()   { printf 'backup: %s\n' "$*" &gt;&amp;2; }
+falha() { msg "ERRO: $*"; exit 1; }
+
+[[ -d $origem ]] || falha "a pasta '$origem' não existe"
+
+msg "compactando $origem…"
+# … tar, mv …
+msg "criado ${nome} ($(du -h "$destino/$nome" | cut -f1))"
+# … rotação, agora com msg "rotação: apagado …" …
+
+echo "$destino/$nome"          # a ÚNICA linha que vai para a saída padrão
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>${1:-$HOME/Documentos}</code></td><td>O primeiro argumento, ou <code>~/Documentos</code> se não veio nenhum. Usamos <code>$HOME</code> em vez de <code>~</code> porque, se alguém escrever <code>"${1:-~/Documentos}"</code> entre aspas, o til não é expandido e vira o texto <code>~/Documentos</code>; o <code>$HOME</code> funciona com ou sem aspas.</td></tr>
+<tr><td><code>msg() { printf 'backup: %s\n' "$*" &gt;&amp;2; }</code></td><td>Toda mensagem leva o prefixo <code>backup:</code> (para saber de quem é, num log com vários programas) e vai para o descritor 2. Veja <a href="redirecionamento.html">Redirecionamento</a>.</td></tr>
+<tr><td><code>falha() { …; exit 1; }</code></td><td>Mensagem de erro + código 1. Um <code>exit</code> dentro de uma função termina o script inteiro.</td></tr>
+<tr><td><code>[[ -d $origem ]] || falha …</code></td><td>"A origem é uma pasta, senão falhe." Sem isso, o <code>tar</code> daria uma mensagem menos clara.</td></tr>
+<tr><td><code>du -h … | cut -f1</code></td><td>O tamanho legível (<code>4,0K</code>); o <code>cut -f1</code> fica só com a primeira coluna (o <code>du</code> separa com TAB).</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./backup.sh
+backup: compactando /home/ana/Documentos…
+backup: criado documentos-2026-10-15_103057.tar.gz (4,0K)
+backup: rotação: apagado documentos-2026-10-10_020000.tar.gz
+/home/ana/backups/documentos-2026-10-15_103057.tar.gz      « a única linha no stdout
+$ echo $?
+0
+$ arquivo=$(./backup.sh 2&gt;/dev/null)                       « 2&gt;/dev/null: joga fora as mensagens
+$ echo "o backup novo é $arquivo"
+o backup novo é /home/ana/backups/documentos-2026-10-15_103057.tar.gz
+$ ./backup.sh ~/Documentoss
+backup: ERRO: a pasta '/home/ana/Documentoss' não existe
+$ echo $?
+1
+$ ./backup.sh &gt; /dev/null                                  « só o stdout vai para o lixo
+backup: compactando /home/ana/Documentos…
+backup: criado documentos-2026-10-15_103057.tar.gz (4,0K)</pre>
+<p>No terminal, as duas saídas aparecem misturadas e parecem iguais. A diferença surge quando você redireciona: <code>2&gt;/dev/null</code> some com as mensagens e deixa o resultado; <code>&gt; /dev/null</code> faz o contrário. (No último comando, a segunda execução no mesmo segundo gerou o mesmo nome e não houve rotação.)</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código de saída</th><th>Significa</th><th>Quem gera</th></tr>
+<tr><td><code>0</code></td><td>Backup criado e rotação feita.</td><td>O fim do script.</td></tr>
+<tr><td><code>1</code></td><td>Erro de uso: a origem não existe.</td><td>A função <code>falha</code>.</td></tr>
+<tr><td><code>2</code> (ou outro)</td><td>O <code>tar</code> ou o <code>mv</code> falhou.</td><td>O <code>set -e</code>, que repassa o código do comando que falhou.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="avisos.sh" data-goal="err:backup: compactando,out:/home/ana/backups/doc.tar.gz">
+<p class="try-task"><strong>Missão:</strong> mude a função <code>msg</code> para que as mensagens vão para a saída de erro. Só o caminho final deve sair na saída padrão (o simulador mostra as duas, mas separa na hora de conferir).</p>
+<pre class="script">#!/usr/bin/env bash
+msg() { printf 'backup: %s\n' "$*"; }
+
+msg "compactando /home/ana/Documentos…"
+msg "criado doc.tar.gz"
+echo "/home/ana/backups/doc.tar.gz"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+msg() { printf 'backup: %s\n' "$*" &gt;&amp;2; }
+
+msg "compactando /home/ana/Documentos…"
+msg "criado doc.tar.gz"
+echo "/home/ana/backups/doc.tar.gz"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 6 — Agendar para rodar sozinho</h3>
+<p><strong>O que vamos fazer e por quê:</strong> backup que depende de você lembrar não é backup. O jeito clássico de rodar algo todo dia é o <strong>cron</strong>. Esta etapa é <strong>ilustrativa</strong>: o cron não existe no simulador nem no laboratório do guia, e a aula <a href="agendar.html">Agendar Scripts</a> explica cron e os timers do systemd em detalhe.</p>
+<p>Primeiro, coloque o script num lugar fixo, por exemplo <code>~/.local/bin/backup.sh</code>. Depois, <code>crontab -e</code> abre a sua tabela do cron num editor. Acrescente a linha:</p>
+<pre class="file" data-file="crontab da ana">30 2 * * * $HOME/.local/bin/backup.sh &gt;&gt; $HOME/backup.log 2&gt;&amp;1</pre>
+
+<dl class="anatomy">
+  <dt>30 2 * * *</dt><dd>Minuto 30, hora 2, todo dia, todo mês, todo dia da semana: às 02:30.</dd>
+  <dt>$HOME/.local/bin/backup.sh</dt><dd>Caminho completo: o cron não usa o seu PATH nem o seu <code>.bashrc</code>.</dd>
+  <dt>&gt;&gt; $HOME/backup.log</dt><dd>Acrescenta a saída padrão (o caminho do backup) no log…</dd>
+  <dt>2&gt;&amp;1</dt><dd>…e manda a saída de erro (as mensagens <code>backup: …</code>) para o mesmo lugar. Sem isso, o cron tenta mandar as mensagens por e-mail local, que quase ninguém lê.</dd>
+</dl>
+
+<pre class="term">$ crontab -l
+30 2 * * * $HOME/.local/bin/backup.sh &gt;&gt; $HOME/backup.log 2&gt;&amp;1</pre>
+<p>(Saída ilustrativa.) No dia seguinte, confira <code>~/backup.log</code> e <code>ls ~/backups</code>. Se o computador estiver desligado às 02:30, o cron simplesmente pula aquele dia; os timers do systemd com <code>Persistent=true</code> não pulam. Os dois estão em <a href="agendar.html">Agendar Scripts</a>.</p>
+
+<div class="cenario">
+<strong>Funciona no terminal, mas não no cron</strong>
+<p><strong>O que aconteceu:</strong> no cron, o ambiente é mínimo: <code>PATH=/usr/bin:/bin</code>, sem as variáveis do seu <code>.bashrc</code>, e a pasta atual é a sua pasta pessoal. <strong>Como resolver:</strong> use caminhos completos no script, não dependa de aliases, e sempre redirecione a saída para um log (<code>&gt;&gt; log 2&gt;&amp;1</code>) para ver a mensagem de erro.</p>
+</div>
+</li>
+
+</ol>
+
+<hr>
+
+<h2>O script completo</h2>
+<p>Juntando as cinco etapas de código. Ele passa no <a href="shellcheck.html">ShellCheck</a> sem avisos. Duas pequenas novidades: o nome do backup sai do nome da pasta em minúsculas (<code>${nome,,}</code>), para o script servir para qualquer pasta, e a rotação usa esse mesmo prefixo.</p>
+
+<pre class="file" data-file="backup.sh">#!/usr/bin/env bash
+# backup.sh — compacta uma pasta (padrão: ~/Documentos) num .tar.gz com data
+# no nome, guardado em ~/backups, e mantém só os 5 backups mais recentes.
+# Uso: backup.sh [ORIGEM] [DESTINO]
+# Saída: o caminho do backup criado (stdout). Mensagens vão para stderr.
+# Códigos: 0 = ok, 1 = erro de uso/origem, outro = falha do tar/mv.
+set -euo pipefail
+
+origem=${1:-$HOME/Documentos}
+destino=${2:-$HOME/backups}
+manter=5
+data=$(date +%F_%H%M%S)
+nome=$(basename "$origem")
+nome=${nome,,}-$data.tar.gz
+temp=""
+
+msg()   { printf 'backup: %s\n' "$*" &gt;&amp;2; }
+falha() { msg "ERRO: $*"; exit 1; }
+
+limpar() {
+  if [[ -n $temp &amp;&amp; -e $temp ]]; then
+    rm -f -- "$temp"
+    msg "removido o arquivo incompleto ${temp##*/}"
+  fi
+}
+trap limpar EXIT
+
+[[ -d $origem ]] || falha "a pasta '$origem' não existe"
+mkdir -p -- "$destino"
+
+temp=$destino/.$nome.parcial
+msg "compactando $origem…"
+tar -czf "$temp" -C "$(dirname "$origem")" "$(basename "$origem")"
+mv -- "$temp" "$destino/$nome"
+temp=""
+msg "criado ${nome} ($(du -h "$destino/$nome" | cut -f1))"
+
+# Rotação: o curinga devolve os nomes em ordem alfabética, que aqui
+# é também a ordem cronológica (a data AAAA-MM-DD está no nome).
+prefixo=${nome%-"$data".tar.gz}
+backups=("$destino/$prefixo"-*.tar.gz)
+excesso=$(( ${#backups[@]} - manter ))
+if (( excesso &gt; 0 )); then
+  for velho in "${backups[@]:0:excesso}"; do
+    rm -f -- "$velho"
+    msg "rotação: apagado ${velho##*/}"
+  done
+fi
+
+echo "$destino/$nome"
+</pre>
+
+<pre class="term">$ shellcheck backup.sh
+$ echo $?
+0</pre>
+
+<p>Linha a linha, só o que ainda não foi explicado:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>nome=$(basename "$origem")</code> e <code>nome=${nome,,}-$data.tar.gz</code></td><td><code>/home/ana/Documentos</code> → <code>Documentos</code> → <code>documentos-2026-10-15_103057.tar.gz</code>. Veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</td></tr>
+<tr><td><code>prefixo=${nome%-"$data".tar.gz}</code></td><td>Tira do final o pedaço <code>-DATA.tar.gz</code> e sobra <code>documentos</code>. As aspas em <code>"$data"</code> fazem o valor ser comparado como texto, não como padrão.</td></tr>
+<tr><td><code>mkdir -p -- "$destino"</code></td><td>O <code>--</code> protege contra um destino que comece com <code>-</code>.</td></tr>
+</table>
+</div>
+
+<h2>Usar no seu computador</h2>
+<pre class="term">$ mkdir -p ~/.local/bin
+$ cp backup.sh ~/.local/bin/
+$ chmod +x ~/.local/bin/backup.sh
+$ backup.sh                         « funciona se ~/.local/bin está no PATH
+$ backup.sh ~/Imagens /media/ana/HD-EXTERNO/backups      « outra pasta, outro destino</pre>
+<p>Se aparecer "comando não encontrado", o <code>~/.local/bin</code> não está no seu PATH: veja <a href="path.html">PATH e Onde os Comandos Moram</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong><code>tar: Removendo `/' inicial dos nomes dos membros</code></strong>
+<p><strong>O que aconteceu:</strong> você trocou o <code>-C … "$(basename …)"</code> por <code>tar -czf x.tar.gz /home/ana/Documentos</code>. Não é erro: o tar só avisa que guardou os caminhos sem a <code>/</code> do começo (<code>home/ana/Documentos/…</code>), para que extrair nunca sobrescreva a pasta original por acidente. Com o <code>-C</code>, o aviso some e os caminhos ficam curtos.</p>
+</div>
+
+<div class="cenario">
+<strong><code>variável não associada</code></strong>
+<pre class="term">$ ./backup.sh ~/Nada
+backup: ERRO: a pasta '/home/ana/Nada' não existe
+./backup.sh: linha 20: temp: variável não associada
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o <code>set -u</code> encontrou o <code>limpar</code> lendo <code>$temp</code> antes de ela existir (por exemplo, a falha aconteceu antes da linha <code>temp=…</code> e você apagou o <code>temp=""</code> do começo). <strong>Como resolver:</strong> inicialize a variável no começo, ou use <code>${temp-}</code> (vazio se não existir). Veja <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>A rotação apagou backups que não devia</strong>
+<p><strong>O que aconteceu:</strong> os nomes não se ordenam pela data. Com <code>date +%d-%m-%Y</code> (dia primeiro), <code>01-11-2026</code> vem antes de <code>15-10-2026</code> em ordem alfabética, e o backup de novembro seria tratado como o mais velho. <strong>Como resolver:</strong> use sempre ano-mês-dia (<code>%F</code>) em nomes de arquivo.</p>
+</div>
+
+<div class="cenario">
+<strong>"Não apareceu nada" com <code>./backup.sh 2&gt;/dev/null &gt; /dev/null</code></strong>
+<p>Correto: as duas saídas foram descartadas. Confira o resultado pelo código, com <code>echo $?</code>, e pelo <code>ls ~/backups</code>.</p>
+</div>
+
+<hr>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li><strong>Compactação melhor:</strong> troque <code>-z</code> por <code>-J</code> (xz, arquivo <code>.tar.xz</code>, menor e mais lento) e ajuste a extensão e o curinga da rotação.</li>
+  <li><strong>Excluir lixo:</strong> acrescente <code>--exclude='*.tmp' --exclude='.cache'</code> ao <code>tar</code>.</li>
+  <li><strong>Opções de verdade:</strong> com <a href="getopts.html">getopts</a>, aceite <code>-k 10</code> (quantos manter) e <code>-n</code> (simular: mostrar o que a rotação apagaria).</li>
+  <li><strong>Conferir o backup:</strong> depois do <code>mv</code>, rode <code>tar -tzf "$destino/$nome" &gt; /dev/null</code>; se o arquivo estiver corrompido, o <code>set -e</code> derruba o script.</li>
+  <li><strong>Backup incremental:</strong> pesquise <code>tar --listed-incremental</code> ou o <code>rsync --link-dest</code>, que só copia o que mudou.</li>
+  <li><strong>Aviso de falha:</strong> no <code>trap … EXIT</code>, olhe o <code>$?</code> e, se for diferente de 0, mande uma notificação com <code>notify-send "Backup falhou"</code>.</li>
+</ul>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Data que se ordena</h3>
+<p>Complete o formato do <code>date</code> que dá <code>2026-10-15_103012</code>:</p>
+<div class="ex-code">data=$(date +<input data-answer="%F_%H%M%S|%Y-%m-%d_%H%M%S" aria-label="formato">)</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. Sem <code>set -e</code>, o <code>tar</code> falhou no meio. O que a versão 2 do script fez?</p>
+<label><input type="radio" name="q2"> Parou e mostrou o erro.</label>
+<label><input type="radio" name="q2"> Disse "criado", apagou um backup bom na rotação e saiu com código 0.</label>
+<label><input type="radio" name="q2"> Tentou de novo.</label>
+<label><input type="radio" name="q2"> Saiu com o código 2 do tar.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Limpeza garantida</h3>
+<p>Complete para a função <code>limpar</code> rodar sempre que o script terminar, dando certo ou errado:</p>
+<div class="ex-code">trap limpar <input data-answer="EXIT" aria-label="sinal"></div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Com 8 backups e <code>manter=5</code>, quais itens a fatia <code>"${backups[@]:0:excesso}"</code> devolve?</p>
+<label><input type="radio" name="q4"> Os 5 mais recentes.</label>
+<label><input type="radio" name="q4"> Só o mais antigo.</label>
+<label><input type="radio" name="q4"> Os 3 mais recentes.</label>
+<label><input type="radio" name="q4"> Os 3 mais antigos (posições 0, 1 e 2).</label>
+</div>
+
+<div class="exercise">
+<h3>5. Só o resultado</h3>
+<p>Complete para guardar em <code>arq</code> o caminho do backup, descartando as mensagens da saída de erro:</p>
+<div class="ex-code">arq=$(./backup.sh <input data-answer="2&gt;/dev/null|2&gt; /dev/null" aria-label="redirecionamento">)</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Por que o <code>tar</code> escreve primeiro em <code>.documentos-….tar.gz.parcial</code>?</p>
+<label><input type="radio" name="q6"> Para que um arquivo pela metade nunca tenha nome de backup nem seja contado pela rotação.</label>
+<label><input type="radio" name="q6"> Porque o tar não aceita nomes com data.</label>
+<label><input type="radio" name="q6"> Para compactar melhor.</label>
+<label><input type="radio" name="q6"> Para esconder o backup de outros usuários.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>tar -czf ARQ -C PAI PASTA</code> cria o backup; <code>tar -tzf</code> lista; <code>tar -xzf … -C destino</code> restaura. Teste a restauração com <code>diff -r</code>.</li>
+  <li>Data no nome com <code>%F_%H%M%S</code>: nomes únicos que se ordenam sozinhos, e rotação com curinga + fatia de array.</li>
+  <li><code>set -euo pipefail</code> faz o script parar no primeiro erro, com o código do comando que falhou.</li>
+  <li>Escreva num nome temporário, renomeie no fim e limpe com <code>trap … EXIT</code>.</li>
+  <li>Mensagens para <code>&gt;&amp;2</code>, resultado para a saída padrão, códigos de saída documentados.</li>
+  <li>Agende com cron ou timer do systemd, sempre com caminhos completos e um log.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
