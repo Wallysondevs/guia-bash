@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash case — escolher entre várias opções | Guia Bash</title>
+<meta name="description" content="case no Bash: case/esac, padrões com curingas, | para várias opções, *) como padrão, ;; ;&amp; e ;;&amp;, shopt -s nocasematch, menus, start|stop|restart, extensões de arquivo, case × if/elif e os erros de sintaxe reais, com missões no simulador.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">case</span></h1>
+
+<p class="intro">Quando você precisa comparar <strong>um único valor</strong> com várias possibilidades ("a opção foi 1, 2 ou 3?", "o arquivo é .jpg, .pdf ou .mp3?"), uma escada de <code>if/elif</code> fica longa e repetitiva. O <code>case</code> ("caso", em inglês) faz isso de forma limpa: você escreve o valor uma vez e lista os padrões, um embaixo do outro.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A estrutura <code>case … in … esac</code>, com <code>)</code> e <code>;;</code>.</li>
+  <li>Padrões com curingas, várias opções com <code>|</code> e o padrão "todo o resto", <code>*)</code>.</li>
+  <li>Os finais <code>;;</code>, <code>;&amp;</code> e <code>;;&amp;</code>, e o <code>shopt -s nocasematch</code>.</li>
+  <li>Usos clássicos: menus, <code>start|stop|restart</code>, tipos de arquivo.</li>
+  <li>Quando usar <code>case</code> e quando usar <code>if/elif</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: muitos <code>elif</code> para o mesmo valor</h2>
+<p>Imagine um script que recebe uma ação. Com <a href="if.html"><code>if</code></a>, cada linha repete a variável e o teste:</p>
+<pre class="file" data-file="com-if.sh">if [[ $1 == start ]]; then
+  echo "Iniciando"
+elif [[ $1 == stop ]]; then
+  echo "Parando"
+elif [[ $1 == restart || $1 == reload ]]; then
+  echo "Reiniciando"
+else
+  echo "Uso: ..."
+fi
+</pre>
+<p>Com <code>case</code>, o valor aparece uma vez e as opções ficam alinhadas, como um cardápio.</p>
+
+<h2>A estrutura</h2>
+<pre class="syntax">case VALOR in
+  PADRÃO1)
+    comandos
+    ;;
+  PADRÃO2|PADRÃO3)
+    comandos
+    ;;
+  *)
+    comandos para todo o resto
+    ;;
+esac</pre>
+
+<dl class="anatomy">
+  <dt>case</dt><dd>Começa a escolha.</dd>
+  <dt>$fruta</dt><dd>O valor a examinar (pode ser variável, argumento, texto).</dd>
+  <dt>in</dt><dd>"Em": a seguir vêm os casos.</dd>
+  <dt>banana)</dt><dd>Um padrão, terminado por <code>)</code>. Se o valor casar com ele, os comandos depois do <code>)</code> rodam.</dd>
+  <dt>echo "amarela"</dt><dd>Os comandos desse caso (um ou vários).</dd>
+  <dt>;;</dt><dd>Fim do caso: "pare aqui e vá para o <code>esac</code>".</dd>
+  <dt>esac</dt><dd>Fim do <code>case</code>. É <code>case</code> ao contrário, como <code>fi</code> é <code>if</code> ao contrário.</dd>
+</dl>
+
+<pre class="term">$ fruta=banana
+$ case $fruta in
+&gt;   banana) echo "amarela" ;;
+&gt;   uva) echo "roxa" ;;
+&gt; esac
+amarela</pre>
+
+<p>O Bash compara o valor com os padrões <strong>de cima para baixo</strong> e roda só o primeiro que casar. Se nenhum casar, nada acontece, e o código de saída é <code>0</code>:</p>
+<pre class="term">$ case $fruta in kiwi) echo "verde" ;; esac; echo "código: $?"
+código: 0</pre>
+
+<p>Como no exemplo acima, um caso curto pode ficar numa linha só: <code>padrão) comando ;;</code>.</p>
+
+<hr>
+
+<h2>Exemplo clássico: <code>start|stop|restart</code></h2>
+<p>Scripts que controlam serviços costumam receber uma ação como primeiro argumento. Este é o formato que você vai ver em muitos scripts de sistema:</p>
+
+<pre class="file" data-file="servico.sh">#!/usr/bin/env bash
+case $1 in
+  start)
+    echo "Iniciando o serviço..."
+    ;;
+  stop)
+    echo "Parando o serviço..."
+    ;;
+  restart|reload)
+    echo "Reiniciando o serviço..."
+    ;;
+  *)
+    echo "Uso: $0 {start|stop|restart}" &gt;&amp;2
+    exit 1
+    ;;
+esac
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td>2</td><td>Examina o 1º argumento.</td></tr>
+<tr><td>3–5</td><td>Se for exatamente <code>start</code>: mostra a mensagem e para no <code>;;</code>.</td></tr>
+<tr><td>9</td><td><code>restart|reload</code>: a barra quer dizer <strong>"ou"</strong>. Qualquer um dos dois cai aqui.</td></tr>
+<tr><td>12</td><td><code>*)</code>: o curinga <code>*</code> casa com qualquer coisa, inclusive vazio. Por estar por último, pega "todo o resto", como o <code>else</code>.</td></tr>
+<tr><td>13–14</td><td>Mostra o uso correto no canal de erros e sai com código 1. A mensagem <code>{start|stop|restart}</code> é só texto, uma convenção para "escolha um destes".</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash servico.sh start
+Iniciando o serviço...
+$ bash servico.sh reload
+Reiniciando o serviço...
+$ bash servico.sh xyz
+Uso: servico.sh {start|stop|restart}
+$ echo $?
+1
+$ bash servico.sh
+Uso: servico.sh {start|stop|restart}       « sem argumento, $1 vazio também cai no *)</pre>
+
+<div class="tryscript" data-file="servico.sh" data-args="status" data-goal="out:O serviço está rodando,src:status\)">
+<p class="try-task"><strong>Missão:</strong> acrescente uma ação <code>status</code> que mostre <code>O serviço está rodando</code>. Lembre do <code>;;</code> e de colocar o novo caso <strong>antes</strong> do <code>*)</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+case $1 in
+  start)
+    echo "Iniciando o serviço..."
+    ;;
+  stop)
+    echo "Parando o serviço..."
+    ;;
+  restart|reload)
+    echo "Reiniciando o serviço..."
+    ;;
+  *)
+    echo "Uso: $0 {start|stop|restart}" &gt;&amp;2
+    exit 1
+    ;;
+esac
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+case $1 in
+  start)
+    echo "Iniciando o serviço..."
+    ;;
+  stop)
+    echo "Parando o serviço..."
+    ;;
+  restart|reload)
+    echo "Reiniciando o serviço..."
+    ;;
+  status)
+    echo "O serviço está rodando"
+    ;;
+  *)
+    echo "Uso: $0 {start|stop|restart|status}" &gt;&amp;2
+    exit 1
+    ;;
+esac
+</pre>
+</div>
+
+<hr>
+
+<h2>Padrões com curingas</h2>
+<p>Os padrões do <code>case</code> são os mesmos <a href="curingas.html">curingas</a> dos nomes de arquivos (e do <code>==</code> em <a href="testes.html"><code>[[ ]]</code></a>), mas aplicados ao <strong>texto</strong>, não aos arquivos da pasta:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Padrão</th><th>Casa com</th><th>Exemplo</th></tr>
+<tr><td><code>*</code></td><td>qualquer texto, até vazio</td><td><code>*.jpg)</code> → <code>foto.jpg</code>, <code>.jpg</code></td></tr>
+<tr><td><code>?</code></td><td>exatamente um caractere</td><td><code>??)</code> → <code>ab</code>, <code>42</code></td></tr>
+<tr><td><code>[abc]</code></td><td>um caractere da lista</td><td><code>[sS])</code> → <code>s</code> ou <code>S</code></td></tr>
+<tr><td><code>[a-z]</code>, <code>[0-9]</code></td><td>um caractere do intervalo</td><td><code>[0-9])</code> → um dígito</td></tr>
+<tr><td><code>a|b</code></td><td><code>a</code> ou <code>b</code></td><td><code>q|Q)</code></td></tr>
+<tr><td><code>"texto"</code></td><td>o texto literal (aspas desligam os curingas)</td><td><code>"*")</code> → só um asterisco</td></tr>
+</table>
+</div>
+
+<pre class="term">$ case 7 in [0-9]) echo "um dígito" ;; [0-9][0-9]) echo "dois dígitos" ;; esac
+um dígito
+$ case 42 in [0-9]) echo "um dígito" ;; [0-9][0-9]) echo "dois dígitos" ;; esac
+dois dígitos
+$ case foto.jpg in "*.jpg") echo "literal" ;; *.jpg) echo "padrão" ;; esac
+padrão                « "*.jpg" entre aspas só casaria com o texto *.jpg</pre>
+
+<div class="warning">
+<strong><code>[1-12]</code> não é "de 1 a 12"</strong>
+<pre class="term">$ case 12 in [1-12]) echo "1 a 12?" ;; *) echo "não" ;; esac
+não</pre>
+<p>Colchetes sempre representam <strong>um único caractere</strong>. <code>[1-12]</code> quer dizer "o caractere 1 a 1, ou o 2", e <code>12</code> tem dois caracteres. Para faixas de números, use <code>if</code> com <code>(( ))</code>.</p>
+</div>
+
+<h3>Tipos de arquivo pela extensão</h3>
+<pre class="file" data-file="tipo.sh">#!/usr/bin/env bash
+for arq in "$@"; do
+  case $arq in
+    *.jpg|*.jpeg|*.png) tipo="imagem" ;;
+    *.mp3|*.ogg)        tipo="música" ;;
+    *.pdf|*.odt)        tipo="documento" ;;
+    *.zip|*.tar.gz)     tipo="compactado" ;;
+    *)                  tipo="desconhecido" ;;
+  esac
+  echo "$arq: $tipo"
+done
+</pre>
+<p>O <code>for</code> passa por cada argumento (ele é o assunto de <a href="for.html">for</a>); para cada um, o <code>case</code> escolhe o tipo. Alinhar os comandos em coluna, como acima, deixa a tabela fácil de ler.</p>
+<pre class="term">$ bash tipo.sh Downloads/* Imagens/* frutas.txt
+Downloads/foto.jpg: imagem
+Downloads/fotos-viagem.zip: compactado
+Downloads/manual.pdf: documento
+Downloads/musica.mp3: música
+Downloads/ubuntu-26.04-desktop-amd64.iso: desconhecido
+Imagens/ferias.jpg: imagem
+Imagens/perfil.png: imagem
+frutas.txt: desconhecido</pre>
+
+<p>Repare que o padrão casa com o valor <strong>inteiro</strong>, incluindo a pasta: <code>*.jpg</code> casa com <code>Downloads/foto.jpg</code> porque o <code>*</code> engole <code>Downloads/foto</code> (no <code>case</code>, o <code>*</code> passa por cima da <code>/</code>).</p>
+
+<div class="tryscript" data-file="tipo.sh" data-args="musica.mp3 perfil.png" data-goal="out:musica.mp3: música,src:\*\.mp3">
+<p class="try-task"><strong>Missão:</strong> o script ainda não reconhece música. Acrescente um caso para <code>*.mp3</code> (e, se quiser, <code>*.ogg</code>) com o tipo <code>música</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+for arq in "$@"; do
+  case $arq in
+    *.jpg|*.jpeg|*.png) tipo="imagem" ;;
+    *.pdf|*.odt)        tipo="documento" ;;
+    *)                  tipo="desconhecido" ;;
+  esac
+  echo "$arq: $tipo"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+for arq in "$@"; do
+  case $arq in
+    *.jpg|*.jpeg|*.png) tipo="imagem" ;;
+    *.mp3|*.ogg)        tipo="música" ;;
+    *.pdf|*.odt)        tipo="documento" ;;
+    *)                  tipo="desconhecido" ;;
+  esac
+  echo "$arq: $tipo"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Respostas do usuário: sim ou não</h2>
+<p>Com colchetes, você aceita maiúsculas e minúsculas sem repetir cada combinação. O <code>read</code> (de <a href="read.html">Ler do Teclado</a>) guarda o que a pessoa digitou:</p>
+<pre class="file" data-file="resp.sh">#!/usr/bin/env bash
+read -p "Continuar? (s/n) " resp
+case $resp in
+  [sS]|[sS][iI][mM]) echo "Continuando" ;;
+  [nN]|[nN][aã][oO]) echo "Cancelado" ;;
+  "")                echo "Você não respondeu" ;;
+  *)                 echo "Resposta inválida: $resp" ;;
+esac
+</pre>
+<pre class="term">$ bash resp.sh
+Continuar? (s/n) SIM
+Continuando
+$ bash resp.sh
+Continuar? (s/n) Não
+Cancelado
+$ bash resp.sh
+Continuar? (s/n) talvez
+Resposta inválida: talvez
+$ bash resp.sh
+Continuar? (s/n)
+Você não respondeu        « só apertou Enter: o valor vazio casa com ""</pre>
+
+<h3>Ignorar maiúsculas: <code>shopt -s nocasematch</code></h3>
+<p>Escrever <code>[sS][iI][mM]</code> cansa. A opção <code>nocasematch</code> (<em>no case match</em>, "não diferencie a caixa") faz o <code>case</code> e o <code>[[ == ]]</code> ignorarem maiúsculas e minúsculas:</p>
+<pre class="term">$ resp=SIM
+$ case $resp in sim) echo "casou" ;; *) echo "não casou" ;; esac
+não casou
+$ shopt -s nocasematch
+$ case $resp in sim) echo "casou" ;; *) echo "não casou" ;; esac
+casou
+$ [[ $resp == sim ]] &amp;&amp; echo "também no [[ ]]"
+também no [[ ]]
+$ shopt -u nocasematch                    « -u desliga (unset)</pre>
+<p>A opção vale até ser desligada (ou até o script terminar). Outra saída é converter antes: <code>case ${resp,,} in</code> (minúsculas, veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>). Mais opções do <code>shopt</code> em <a href="shopt.html">Opções do Shell</a>.</p>
+
+<div class="tryscript" data-file="resp.sh" data-stdin="SIM" data-goal="out:Continuando">
+<p class="try-task"><strong>Missão:</strong> o script só aceita <code>s</code> ou <code>sim</code> em minúsculas, e a resposta <code>SIM</code> cai em "inválida". Faça ele aceitar qualquer combinação de maiúsculas e minúsculas, com <code>shopt -s nocasematch</code> ou com <code>${resp,,}</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+read -p "Continuar? (s/n) " resp
+case $resp in
+  s|sim) echo "Continuando" ;;
+  n|não) echo "Cancelado" ;;
+  *)     echo "Resposta inválida: $resp" ;;
+esac
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+shopt -s nocasematch
+read -p "Continuar? (s/n) " resp
+case $resp in
+  s|sim) echo "Continuando" ;;
+  n|não) echo "Cancelado" ;;
+  *)     echo "Resposta inválida: $resp" ;;
+esac
+</pre>
+</div>
+
+<hr>
+
+<h2>Um menu de opções</h2>
+<p>Juntando <code>echo</code>, <code>read</code> e <code>case</code>, você tem um menu simples:</p>
+<pre class="file" data-file="menu.sh">#!/usr/bin/env bash
+echo "1) Listar Documentos"
+echo "2) Contar frutas"
+echo "3) Ver a data"
+echo "q) Sair"
+read -p "Escolha: " op
+
+case $op in
+  1)   ls Documentos ;;
+  2)   echo "A lista tem $(wc -l &lt; frutas.txt) frutas" ;;
+  3)   date +%d/%m/%Y ;;
+  q|Q) echo "Até logo!" ;;
+  *)   echo "Opção inválida: $op" ;;
+esac
+</pre>
+<pre class="term">$ bash menu.sh
+1) Listar Documentos
+2) Contar frutas
+3) Ver a data
+q) Sair
+Escolha: 2
+A lista tem 7 frutas
+$ bash menu.sh
+1) Listar Documentos
+2) Contar frutas
+3) Ver a data
+q) Sair
+Escolha: 9
+Opção inválida: 9</pre>
+<p>Para o menu voltar a aparecer depois de cada escolha, ele vai dentro de um laço <a href="while.html"><code>while</code></a>. O Bash também tem um comando pronto para menus, o <code>select</code>, visto em <a href="interativo.html">Menus e Cores</a>.</p>
+
+<div class="tryscript" data-file="menu.sh" data-stdin="2">
+<p class="try-task"><strong>Brinque:</strong> mude o valor da entrada e rode. Depois acrescente uma opção <code>4)</code> que mostre o conteúdo de <code>Documentos/notas.txt</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+echo "1) Listar Documentos"
+echo "2) Contar frutas"
+echo "3) Ver a data"
+echo "q) Sair"
+read -p "Escolha: " op
+
+case $op in
+  1)   ls Documentos ;;
+  2)   echo "A lista tem $(wc -l &lt; frutas.txt) frutas" ;;
+  3)   date +%d/%m/%Y ;;
+  q|Q) echo "Até logo!" ;;
+  *)   echo "Opção inválida: $op" ;;
+esac
+</pre>
+</div>
+
+<hr>
+
+<h2>Os três finais: <code>;;</code> <code>;&amp;</code> <code>;;&amp;</code></h2>
+<p>Quase sempre você vai usar <code>;;</code>. Os outros dois existem para casos especiais <span class="versao">bash 4.0+</span>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Final</th><th>Depois deste caso…</th><th>Uso</th></tr>
+<tr><td><code>;;</code></td><td>…sai do <code>case</code>.</td><td>O normal.</td></tr>
+<tr><td><code>;&amp;</code></td><td>…roda também os comandos do <strong>próximo</strong> caso, sem testar o padrão dele ("cair", <em>fall through</em>).</td><td>Níveis que acumulam.</td></tr>
+<tr><td><code>;;&amp;</code></td><td>…continua <strong>testando</strong> os padrões seguintes, e roda os que casarem.</td><td>Várias classificações para o mesmo valor.</td></tr>
+</table>
+</div>
+
+<p><strong><code>;&amp;</code></strong>: o nível 2 faz o que é do nível 2 e tudo o que é dos níveis abaixo:</p>
+<pre class="term">$ nivel=2
+$ case $nivel in
+&gt;   3) echo "- apagar logs antigos" ;&amp;
+&gt;   2) echo "- compactar logs" ;&amp;
+&gt;   1) echo "- listar logs" ;;
+&gt; esac
+- compactar logs
+- listar logs</pre>
+
+<p><strong><code>;;&amp;</code></strong>: o mesmo caractere passa por todos os testes:</p>
+<pre class="term">$ c=a
+$ case $c in
+&gt;   [a-z]) echo "letra minúscula" ;;&amp;
+&gt;   [aeiou]) echo "vogal" ;;&amp;
+&gt;   *) echo "um caractere qualquer" ;;
+&gt; esac
+letra minúscula
+vogal
+um caractere qualquer</pre>
+<p>Esses dois finais não existem no Bash 3.2 do macOS nem no <code>sh</code>. Se precisar de portabilidade, repita os comandos ou use <code>if</code>s separados.</p>
+
+<hr>
+
+<h2><code>case</code> × <code>if/elif</code></h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th><th>Por quê</th></tr>
+<tr><td>Um valor, várias opções fixas (<code>start</code>, <code>stop</code>…)</td><td><code>case</code></td><td>O valor aparece uma vez; as opções ficam alinhadas.</td></tr>
+<tr><td>Padrões de texto (<code>*.jpg</code>, <code>[sS]*</code>)</td><td><code>case</code></td><td>Padrões são nativos; com <code>|</code> fica curto.</td></tr>
+<tr><td>Faixas de números (<code>nota &gt;= 7</code>)</td><td><code>if/elif</code></td><td>O <code>case</code> só compara texto com padrão.</td></tr>
+<tr><td>Testes de arquivo (<code>-f</code>, <code>-d</code>)</td><td><code>if</code></td><td>O <code>case</code> não roda comandos para decidir.</td></tr>
+<tr><td>Condições sobre coisas diferentes (<code>$1</code> e depois <code>$idade</code>)</td><td><code>if/elif</code></td><td>Cada ramo pode testar algo diferente.</td></tr>
+<tr><td>Testar se um comando deu certo (<code>grep -q</code>)</td><td><code>if</code></td><td>Só o <code>if</code> olha códigos de saída.</td></tr>
+<tr><td>Script que precisa rodar em <code>sh</code></td><td>os dois</td><td><code>case</code> é POSIX (sem <code>;&amp;</code>/<code>;;&amp;</code>), e evita depender de <code>[[ ]]</code>.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Esqueceu o <code>;;</code></strong>
+<pre class="file" data-file="c1.sh">#!/usr/bin/env bash
+case $1 in
+  start) echo "Iniciando"
+  stop)  echo "Parando" ;;
+esac
+</pre>
+<pre class="term">$ bash c1.sh start
+c1.sh: linha 4: erro de sintaxe próximo ao token inesperado `)'
+c1.sh: linha 4: `  stop)  echo "Parando" ;;'</pre>
+<p><strong>O que aconteceu:</strong> sem o <code>;;</code>, o Bash achou que <code>stop</code> era mais um argumento do <code>echo</code> da linha 3, e o <code>)</code> ficou sem sentido. O erro aponta para a linha seguinte à que tem o problema.</p>
+<p><strong>Como resolver:</strong> termine cada caso com <code>;;</code>. (Só no <strong>último</strong> caso antes do <code>esac</code> o <code>;;</code> é opcional, mas é bom costume pôr sempre.)</p>
+</div>
+
+<div class="cenario">
+<strong>Esqueceu o <code>)</code></strong>
+<pre class="term">$ bash c2.sh start
+c2.sh: linha 3: erro de sintaxe próximo ao token inesperado `echo'
+c2.sh: linha 3: `  start echo "Iniciando" ;;'</pre>
+<p><strong>O que aconteceu:</strong> depois do padrão <code>start</code> o Bash esperava <code>)</code> (ou <code>|</code>), e encontrou <code>echo</code>.</p>
+<p><strong>Como resolver:</strong> <code>start) echo "Iniciando" ;;</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Esqueceu o <code>esac</code></strong>
+<pre class="file" data-file="c3.sh">#!/usr/bin/env bash
+case $1 in
+  start) echo "Iniciando" ;;
+  stop)  echo "Parando" ;;
+
+echo fim
+</pre>
+<pre class="term">$ bash c3.sh start
+c3.sh: linha 6: erro de sintaxe próximo ao token inesperado `fim'
+c3.sh: linha 6: `echo fim'</pre>
+<p><strong>O que aconteceu:</strong> sem o <code>esac</code>, o Bash continuou dentro do <code>case</code> e leu <code>echo</code> como se fosse mais um <strong>padrão</strong>; depois dele esperava <code>)</code> e encontrou <code>fim</code>. Se o <code>case</code> for a última coisa do arquivo, a mensagem muda para "fim inesperado do arquivo".</p>
+<p><strong>Como resolver:</strong> feche com <code>esac</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Esqueceu o <code>in</code></strong>
+<pre class="term">$ bash c4.sh start
+c4.sh: linha 3: erro de sintaxe próximo ao token inesperado `start'
+c4.sh: linha 3: `  start) echo "Iniciando" ;;'</pre>
+<p><strong>Como resolver:</strong> <code>case $1 in</code>, sempre com o <code>in</code> na mesma linha.</p>
+</div>
+
+<div class="cenario">
+<strong>Sempre cai no <code>*)</code> (ou num caso errado)</strong>
+<p><strong>O que aconteceu:</strong> causas comuns: o <code>*)</code> está <strong>antes</strong> dos outros casos (ele casa com tudo, então os de baixo nunca rodam); maiúsculas e minúsculas diferentes (<code>SIM</code> × <code>sim</code>); espaço no fim do valor (<code>"sim "</code>); padrão entre aspas, que desliga os curingas.</p>
+<p><strong>Como confirmar:</strong> mostre o valor entre colchetes antes do <code>case</code>: <code>echo "[$resp]"</code>.</p>
+<p><strong>Como resolver:</strong> deixe o <code>*)</code> por último, use <code>nocasematch</code> ou <code>${resp,,}</code>, e tire as aspas dos padrões que usam curingas.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Significa</th></tr>
+<tr><td><code>case VALOR in … esac</code></td><td>Escolhe entre os casos</td></tr>
+<tr><td><code>padrão) cmds ;;</code></td><td>Um caso</td></tr>
+<tr><td><code>a|b)</code></td><td><code>a</code> ou <code>b</code></td></tr>
+<tr><td><code>*)</code></td><td>Qualquer outro valor (por último)</td></tr>
+<tr><td><code>*.jpg)</code>, <code>[sS])</code>, <code>??)</code></td><td>Padrões com curingas</td></tr>
+<tr><td><code>"")</code></td><td>Valor vazio</td></tr>
+<tr><td><code>;&amp;</code></td><td>Roda também o próximo caso (bash 4+)</td></tr>
+<tr><td><code>;;&amp;</code></td><td>Continua testando os próximos padrões (bash 4+)</td></tr>
+<tr><td><code>shopt -s nocasematch</code></td><td>Ignora maiúsculas/minúsculas no <code>case</code> e no <code>[[ == ]]</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Fechar o case</h3>
+<p>Complete:</p>
+<div class="ex-code">case $op in 1) echo um <input data-answer=";;" aria-label="fim do caso"> *) echo outro ;; <input data-answer="esac" aria-label="fim do case"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Duas opções no mesmo caso</h3>
+<p>Complete para que <code>sair</code> e <code>q</code> caiam no mesmo caso:</p>
+<div class="ex-code">sair<input data-answer="|" aria-label="separador">q) exit 0 ;;</div>
+</div>
+
+<div class="exercise">
+<h3>3. Todo o resto</h3>
+<p>Complete o padrão que pega qualquer valor não listado:</p>
+<div class="ex-code"><input data-answer="*" aria-label="padrão">) echo "Opção inválida" ;;</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O que acontece se o <code>*)</code> for o primeiro caso?</p>
+<label><input type="radio" name="q4"> Erro de sintaxe.</label>
+<label><input type="radio" name="q4"> Todos os valores caem nele, e os casos de baixo nunca rodam.</label>
+<label><input type="radio" name="q4"> Ele só é usado se nenhum outro casar.</label>
+<label><input type="radio" name="q4"> O <code>case</code> ignora o <code>*)</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Para decidir entre "aprovado" (nota ≥ 7) e "reprovado", o que é mais adequado?</p>
+<label><input type="radio" name="q5"> <code>case $nota in [7-10]) …</code></label>
+<label><input type="radio" name="q5"> <code>case $nota in &gt;=7) …</code></label>
+<label><input type="radio" name="q5"> <code>case</code> com <code>;&amp;</code></label>
+<label><input type="radio" name="q5"> <code>if (( nota &gt;= 7 ))</code>, porque <code>case</code> compara texto com padrões, não faixas de números.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. <code>esac</code> e <code>fi</code> têm o que em comum?</p>
+<label><input type="radio" name="q6"> São as palavras de abertura (<code>case</code>, <code>if</code>) escritas ao contrário, e fecham o bloco.</label>
+<label><input type="radio" name="q6"> São comandos externos.</label>
+<label><input type="radio" name="q6"> São opcionais no Bash 5.</label>
+<label><input type="radio" name="q6"> Devolvem sempre código 1.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>case VALOR in padrão) comandos ;; esac</code>: compara um valor com padrões, de cima para baixo, e roda só o primeiro que casar.</li>
+  <li><code>|</code> junta opções; <code>*)</code> no fim pega todo o resto; curingas (<code>* ? [ ]</code>) funcionam nos padrões.</li>
+  <li><code>;;</code> encerra o caso; <code>;&amp;</code> cai no próximo; <code>;;&amp;</code> continua testando (bash 4+).</li>
+  <li><code>shopt -s nocasematch</code> ou <code>${var,,}</code> para ignorar maiúsculas.</li>
+  <li><code>case</code> para opções e padrões de texto; <code>if</code> para números, arquivos e códigos de saída.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
