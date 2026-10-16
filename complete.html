@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Completar Programável — complete, compgen e COMPREPLY | Guia Bash</title>
+<meta name="description" content="Ensine o Tab do Bash a completar os seus próprios comandos: complete -W, -f, -d, -A, -o default/filenames/nospace, funções de completação com COMP_WORDS, COMP_CWORD e COMPREPLY, compgen para listar coisas e onde instalar.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Completar Programável</span></h1>
+
+<p class="intro">Você já usa o <kbd>Tab</kbd> para completar nomes de arquivos e comandos (aula <a href="completar.html">Completar com Tab</a>). Com o comando interno <code>complete</code>, você ensina o Tab a completar <strong>os seus</strong> comandos: as opções do seu script, os nomes dos seus backups, os subcomandos da sua ferramenta. E o <code>compgen</code>, que faz o trabalho pesado por trás, também serve sozinho para listar comandos, aliases, variáveis e arquivos.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Dar uma lista fixa de palavras para o Tab com <code>complete -W</code>.</li>
+  <li>Completar com arquivos, pastas e outras coisas: <code>-f</code>, <code>-d</code>, <code>-A</code>, e ajustar com <code>-o default</code>, <code>-o filenames</code>, <code>-o nospace</code>.</li>
+  <li>Escrever uma função de completação com <code>COMP_WORDS</code>, <code>COMP_CWORD</code> e <code>COMPREPLY</code>.</li>
+  <li>Usar <code>compgen</code> para listar comandos, aliases, builtins, variáveis e arquivos, e para testar uma completação sem apertar Tab.</li>
+  <li>Onde guardar a completação para ela carregar sozinha.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Como o Tab decide o que mostrar</h2>
+<p>Quando você aperta <kbd>Tab</kbd>, o Bash olha o <strong>primeiro</strong> nome da linha (o comando) e pergunta: "existe uma regra de completação para este comando?". Se existe, ele segue a regra. Se não existe, faz o padrão: completa nomes de arquivos. É como uma recepção com uma lista de "instruções especiais" por visitante: quem não está na lista recebe o atendimento padrão.</p>
+
+<p>Essas regras se chamam <strong>especificações de completação</strong> (<em>completion specs</em>), e o comando <code>complete</code> cria, lista e apaga essas regras. Por enquanto, a Ana não tem nenhuma para o <code>ls</code>:</p>
+
+<pre class="term">$ complete -p ls
+bash: complete: ls: nenhuma especificação de completação</pre>
+
+<p>O <code>-p</code> (de <em>print</em>) mostra a regra de um comando, no formato do comando que a criaria. Num Ubuntu, Debian ou Fedora de verdade, o pacote <strong>bash-completion</strong> já traz regras para centenas de comandos (<code>git</code>, <code>apt</code>, <code>ssh</code>, <code>systemctl</code>…); é por isso que, no seu terminal, <code>git che</code><kbd>Tab</kbd> já completa <code>checkout</code>.</p>
+
+<hr>
+
+<h2>A forma mais simples: uma lista de palavras (<code>-W</code>)</h2>
+<p>A Ana tem um script <code>meuscript</code> que aceita <code>start</code>, <code>stop</code> ou <code>status</code>. Para o Tab oferecer essas três palavras:</p>
+
+<dl class="anatomy">
+  <dt>complete</dt><dd>Cria uma regra de completação.</dd>
+  <dt>-W "start stop status"</dt><dd>A regra: completar com estas palavras (<em>wordlist</em>, "lista de palavras"), separadas por espaço.</dd>
+  <dt>meuscript</dt><dd>O comando a que a regra se aplica.</dd>
+</dl>
+
+<pre class="term">$ complete -W "start stop status" meuscript
+$ meuscript st                     « aqui a Ana apertou Tab duas vezes
+start   status  stop
+$ meuscript stop                   « digitou "sto" + Tab: o Bash completou e pôs um espaço</pre>
+
+<ul>
+  <li><strong>Um</strong> Tab completa, se só houver uma opção. Se houver várias, ele completa só a parte comum e apita.</li>
+  <li><strong>Dois</strong> Tabs seguidos mostram todas as opções que combinam com o que já foi digitado, e o Bash redesenha a linha para você continuar.</li>
+  <li>A regra vale para o <strong>nome</strong> <code>meuscript</code>, seja ele um script no <a href="path.html">PATH</a>, uma função ou um alias.</li>
+</ul>
+
+<pre class="term">$ complete -p meuscript
+complete -W 'start stop status' meuscript</pre>
+
+<p>A regra vive só neste terminal. Fechou, perdeu. No fim da aula você vê onde guardá-la. Para apagar antes disso: <code>complete -r meuscript</code> (de <em>remove</em>).</p>
+
+<hr>
+
+<h2><code>compgen</code>: o motor por trás do Tab</h2>
+<p>O <code>compgen</code> (<em>completion generator</em>, "gerador de completações") aceita quase as mesmas opções do <code>complete</code>, mas, em vez de criar uma regra, <strong>mostra na tela</strong> o que seria oferecido. É o jeito de testar sem apertar Tab:</p>
+
+<dl class="anatomy">
+  <dt>compgen</dt><dd>Gere a lista de completações…</dd>
+  <dt>-W "start stop status"</dt><dd>…a partir destas palavras…</dd>
+  <dt>--</dt><dd>"Acabaram as opções" (o que vem depois não é opção, mesmo começando com <code>-</code>).</dd>
+  <dt>st</dt><dd>…filtrando as que começam com isto (o que o usuário já digitou).</dd>
+</dl>
+
+<pre class="term">$ compgen -W "start stop status" -- st
+start
+stop
+status
+$ compgen -W "start stop status" -- sto
+stop
+$ compgen -W "start stop status" -- x; echo "código $?"
+código 1                           « nada combinou: nenhuma linha e código 1</pre>
+
+<div class="try" data-goal="ran:^\s*complete +-W,ran:^\s*compgen +-W,out:status" data-solucao="complete -W &quot;start stop status&quot; servico;;compgen -W &quot;start stop status&quot; -- sta">
+<p class="try-task"><strong>Missão:</strong> crie uma regra para que o Tab do comando <code>servico</code> ofereça <code>start</code>, <code>stop</code> e <code>status</code>. Depois, use o <code>compgen</code> com a mesma lista para ver o que seria oferecido quando o usuário já digitou <code>sta</code>.</p>
+</div>
+
+<h3>Listar coisas com <code>compgen</code></h3>
+<p>Mesmo sem nada a ver com Tab, o <code>compgen</code> é ótimo para perguntar ao Bash "o que existe?":</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Lista</th><th>Equivale a <code>-A …</code></th></tr>
+<tr><td><code>-c</code></td><td>Comandos (programas no PATH, builtins, funções, aliases, palavras reservadas)</td><td><code>-A command</code></td></tr>
+<tr><td><code>-a</code></td><td>Aliases</td><td><code>-A alias</code></td></tr>
+<tr><td><code>-b</code></td><td>Comandos internos (builtins)</td><td><code>-A builtin</code></td></tr>
+<tr><td><code>-k</code></td><td>Palavras reservadas (<code>if</code>, <code>then</code>…)</td><td><code>-A keyword</code></td></tr>
+<tr><td><code>-v</code></td><td>Variáveis</td><td><code>-A variable</code></td></tr>
+<tr><td><code>-f</code></td><td>Arquivos (e pastas)</td><td><code>-A file</code></td></tr>
+<tr><td><code>-d</code></td><td>Só pastas</td><td><code>-A directory</code></td></tr>
+<tr><td><code>-u</code></td><td>Usuários do sistema</td><td><code>-A user</code></td></tr>
+<tr><td>(sem letra)</td><td>Funções / sinais / opções do <code>shopt</code></td><td><code>-A function</code> / <code>-A signal</code> / <code>-A shopt</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ compgen -a
+grep
+l
+la
+ll
+ls                                 « os aliases do .bashrc da Ana
+$ compgen -b | wc -l
+61                                 « o Bash 5.3 tem 61 comandos internos
+$ compgen -v BASH_V
+BASH_VERSINFO
+BASH_VERSION
+$ compgen -d D
+Documentos
+Downloads
+$ compgen -A signal SIGT
+SIGTRAP
+SIGTERM
+SIGTSTP
+SIGTTIN
+SIGTTOU
+$ compgen -c gre
+grep
+grep
+gresource
+grep
+gresource</pre>
+
+<p>No último, o <code>grep</code> aparece três vezes: uma como alias e duas como programa, porque ele está em duas pastas do PATH (<code>/usr/bin</code> e <code>/bin</code>, que no Ubuntu são a mesma pasta). Para uma lista limpa: <code>compgen -c gre | sort -u</code>.</p>
+
+<p>Dois truques úteis: <code>-X padrão</code> <strong>tira</strong> da lista o que casar com o padrão, e <code>-G padrão</code> lista o que casar com um <a href="curingas.html">curinga</a>:</p>
+
+<pre class="term">$ compgen -f -X "*.txt" -- Documentos/
+Documentos/alunos.csv
+Documentos/acesso.log
+Documentos/relatorio.odt
+Documentos/projetos
+$ compgen -G "Documentos/*.csv"
+Documentos/alunos.csv</pre>
+
+<p>Repare que o <code>compgen -f</code> não ordena a lista: ela vem na ordem em que o sistema guarda os arquivos na pasta. O Tab, na hora de mostrar, ordena.</p>
+
+<hr>
+
+<h2>Arquivos, pastas e outras listas prontas</h2>
+<p>As mesmas letras funcionam no <code>complete</code>. Dois exemplos de comandos que a Ana criou:</p>
+
+<pre class="term">$ complete -d irpara               « irpara só aceita pastas
+$ complete -A variable mostrar     « mostrar recebe nomes de variáveis</pre>
+
+<pre class="term">$ irpara Do                        « Tab Tab
+Documentos/ Downloads/</pre>
+<p>Só pastas aparecem, já com a <code>/</code> no fim.</p>
+
+<h3>Ajustes com <code>-o</code></h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>O que muda</th><th>Quando usar</th></tr>
+<tr><td><code>-o default</code></td><td>Se a regra não achar nada, completa nomes de arquivos (o padrão do Bash)</td><td>Comandos que, além das suas palavras, também aceitam arquivos</td></tr>
+<tr><td><code>-o filenames</code></td><td>Trata o resultado como nomes de arquivo: põe <code>/</code> no fim das pastas e escapa espaços</td><td>Funções que devolvem caminhos</td></tr>
+<tr><td><code>-o nospace</code></td><td>Não põe espaço depois de completar</td><td>Opções no formato <code>--nome=</code>, caminhos que vão continuar</td></tr>
+<tr><td><code>-o bashdefault</code></td><td>Se a regra não achar nada, usa as completações do Bash (variáveis, <code>~</code>…)</td><td>Raro</td></tr>
+</table>
+</div>
+
+<p>O <code>-o nospace</code> na prática:</p>
+
+<pre class="term">$ complete -W "--cor= --tamanho=" opcoes
+$ opcoes --cor=                    « Tab completou e pôs um espaço depois do =
+$ complete -o nospace -W "--cor= --tamanho=" opcoes
+$ opcoes --cor=                    « agora o cursor fica colado no =, pronto para o valor</pre>
+
+<p>(Nas duas linhas a Ana digitou <code>opcoes --c</code> e apertou Tab; a diferença é o espaço invisível no fim da primeira.)</p>
+
+<hr>
+
+<h2>Funções de completação: <code>complete -F</code></h2>
+<p>Uma lista fixa não basta quando a resposta <strong>depende</strong> do que já foi digitado. A Ana tem um comando <code>backup</code> com três subcomandos: <code>criar</code>, <code>listar</code> e <code>restaurar</code>. Depois de <code>restaurar</code>, o Tab deveria oferecer os arquivos que estão em <code>~/backups</code>:</p>
+
+<pre class="term">$ ls backups
+docs-2026-10-01.tar.gz  docs-2026-10-08.tar.gz  fotos-2026-10-01.tar.gz</pre>
+
+<p>Para isso, você escreve uma <a href="funcoes.html">função</a> e diz ao <code>complete</code> para chamá-la a cada Tab (<code>-F</code>, de <em>function</em>). O Bash entrega à função três variáveis especiais e espera a resposta numa quarta:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>O que tem</th><th>Em <code>backup restaurar do|</code></th></tr>
+<tr><td><code>COMP_WORDS</code></td><td>Array com as palavras da linha</td><td><code>(backup restaurar do)</code></td></tr>
+<tr><td><code>COMP_CWORD</code></td><td>Índice da palavra onde está o cursor (<em>current word</em>)</td><td><code>2</code></td></tr>
+<tr><td><code>COMP_LINE</code></td><td>A linha inteira, como texto</td><td><code>backup restaurar do</code></td></tr>
+<tr><td><code>COMPREPLY</code></td><td><strong>A resposta</strong>: array que a função preenche com as opções</td><td><code>(docs-2026-10-01.tar.gz docs-2026-10-08.tar.gz)</code></td></tr>
+</table>
+</div>
+
+<pre class="file" data-file="backup-completar.bash"># completar para o comando "backup"
+_backup() {
+  local atual=${COMP_WORDS[COMP_CWORD]}
+  local anterior=${COMP_WORDS[COMP_CWORD-1]}
+
+  if (( COMP_CWORD == 1 )); then
+    COMPREPLY=( $(compgen -W "criar listar restaurar" -- "$atual") )
+  elif [[ $anterior == restaurar ]]; then
+    COMPREPLY=( $(cd ~/backups &amp;&amp; compgen -G "$atual*.tar.gz") )
+  fi
+}
+complete -F _backup backup
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>_backup() {</code></td><td>A função. Por costume, o nome é <code>_</code> + o nome do comando.</td></tr>
+<tr><td><code>local atual=${COMP_WORDS[COMP_CWORD]}</code></td><td>A palavra que está sendo digitada (pode ser vazia, se o cursor está depois de um espaço).</td></tr>
+<tr><td><code>local anterior=${COMP_WORDS[COMP_CWORD-1]}</code></td><td>A palavra antes dela. Dentro de <code>[ ]</code> de array, a conta <code>COMP_CWORD-1</code> é feita sozinha.</td></tr>
+<tr><td><code>if (( COMP_CWORD == 1 ))</code></td><td>Se estamos na 1ª palavra depois do comando: é o subcomando.</td></tr>
+<tr><td><code>COMPREPLY=( $(compgen -W … -- "$atual") )</code></td><td>Filtra a lista de subcomandos pelo que já foi digitado e põe o resultado no array de resposta.</td></tr>
+<tr><td><code>elif [[ $anterior == restaurar ]]</code></td><td>Se a palavra anterior é <code>restaurar</code>: é hora de oferecer arquivos.</td></tr>
+<tr><td><code>cd ~/backups &amp;&amp; compgen -G "$atual*.tar.gz"</code></td><td>Dentro de <code>$( )</code> (um <a href="subshell.html">subshell</a>, então o <code>cd</code> não afeta o terminal), lista os <code>.tar.gz</code> que começam com o que foi digitado.</td></tr>
+<tr><td><code>complete -F _backup backup</code></td><td>Liga a função ao comando <code>backup</code>.</td></tr>
+</table>
+</div>
+
+<p>A Ana carrega o arquivo com <code>source</code> e experimenta (cada <kbd>Tab</kbd> está anotado):</p>
+
+<pre class="term">$ source backup-completar.bash
+$ backup                           « Tab Tab
+criar      listar     restaurar
+$ backup restaurar                 « digitou r + Tab: completou o subcomando; depois Tab Tab
+docs-2026-10-01.tar.gz   docs-2026-10-08.tar.gz   fotos-2026-10-01.tar.gz
+$ backup restaurar docs-2026-10-0  « digitou d + Tab: completou até onde os dois docs são iguais; Tab Tab
+docs-2026-10-01.tar.gz  docs-2026-10-08.tar.gz
+$ backup restaurar docs-2026-10-08.tar.gz   « digitou 8 + Tab</pre>
+
+<h3>Testar a função sem apertar Tab</h3>
+<p>Dá para chamar a função "na mão": preencha <code>COMP_WORDS</code> e <code>COMP_CWORD</code> como o Bash faria, chame a função e olhe <code>COMPREPLY</code>. É a melhor forma de depurar:</p>
+
+<pre class="term">$ COMP_WORDS=(backup restaurar f); COMP_CWORD=2
+$ _backup; printf "%s\n" "${COMPREPLY[@]}"
+fotos-2026-10-01.tar.gz
+$ COMP_WORDS=(backup ""); COMP_CWORD=1; _backup; printf "%s\n" "${COMPREPLY[@]}"
+criar
+listar
+restaurar</pre>
+
+<div class="tryscript" data-file="tarefa-completar.sh" data-goal="out:feita,src:apagar">
+<p class="try-task"><strong>Missão:</strong> o comando <code>tarefa</code> ganhou dois subcomandos novos: <code>feita</code> e <code>apagar</code>. Atualize a função de completação para oferecê-los também. O teste no fim do script simula o Tab depois de <code>tarefa f</code> e deve mostrar <code>feita</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+_tarefa() {
+  local atual=${COMP_WORDS[COMP_CWORD]}
+  COMPREPLY=( $(compgen -W "nova lista" -- "$atual") )
+}
+# teste: o que o Tab mostraria depois de "tarefa f"?
+COMP_WORDS=(tarefa f)
+COMP_CWORD=1
+_tarefa
+printf "%s\n" "${COMPREPLY[@]}"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+_tarefa() {
+  local atual=${COMP_WORDS[COMP_CWORD]}
+  COMPREPLY=( $(compgen -W "nova lista feita apagar" -- "$atual") )
+}
+# teste: o que o Tab mostraria depois de "tarefa f"?
+COMP_WORDS=(tarefa f)
+COMP_CWORD=1
+_tarefa
+printf "%s\n" "${COMPREPLY[@]}"
+</pre>
+</div>
+
+<h3><code>-o default</code> com uma função</h3>
+<p>Com a regra acima, <code>backup criar Doc</code><kbd>Tab</kbd> não faz nada (só apita): a função não tem resposta para a 2ª palavra de <code>criar</code>. Se <code>criar</code> recebe uma pasta, deixe o Bash cair no padrão quando a função não responder:</p>
+
+<pre class="term">$ complete -o default -F _backup backup
+$ backup criar Documentos/         « digitou Doc + Tab: completou a pasta</pre>
+
+<div class="tip">
+<strong>Nomes com espaço</strong>
+<p><code>COMPREPLY=( $(compgen …) )</code> é a forma mais comum, mas ela separa os resultados em qualquer espaço (o <a href="shellcheck.html">ShellCheck</a> avisa com o SC2207). Se as opções podem ter espaço, use <code>mapfile -t COMPREPLY &lt; &lt;(compgen … -- "$atual")</code>, que separa só nas quebras de linha (veja <a href="mapfile.html">mapfile</a>), e acrescente <code>-o filenames</code> ao <code>complete</code> para o Bash escapar os espaços na linha.</p>
+</div>
+
+<hr>
+
+<h2>Onde instalar</h2>
+<p>Uma regra criada no terminal some quando ele fecha. Para que ela carregue sozinha, há dois caminhos. Os dois são <strong>ilustrativos</strong> aqui: o laboratório e o simulador não carregam o bash-completion.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Onde</th><th>Como</th><th>Quando carrega</th></tr>
+<tr><td><code>~/.bashrc</code></td><td>Cole a função e o <code>complete</code> no fim, ou <code>source ~/caminho/backup-completar.bash</code></td><td>Em todo terminal novo (veja <a href="inicializacao.html">Arquivos de Inicialização</a>)</td></tr>
+<tr><td><code>~/.local/share/bash-completion/completions/backup</code></td><td>Salve o arquivo com o <strong>nome exato do comando</strong>, sem extensão</td><td>Só na primeira vez que você aperta Tab depois de <code>backup</code> (precisa do pacote bash-completion)</td></tr>
+<tr><td><code>/usr/share/bash-completion/completions/</code></td><td>Onde os pacotes do sistema instalam as suas</td><td>Igual à anterior, para todos os usuários (não mexa à mão)</td></tr>
+</table>
+</div>
+
+<pre class="term">$ mkdir -p ~/.local/share/bash-completion/completions
+$ cp backup-completar.bash ~/.local/share/bash-completion/completions/backup</pre>
+
+<p>A segunda forma é a mais organizada: o bash-completion só lê o arquivo quando precisa, então o terminal abre rápido mesmo com dezenas de regras. Para ver de onde veio uma regra que já existe: <code>complete -p git</code>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"nenhuma especificação de completação"</strong>
+<pre class="term">$ complete -p ls
+bash: complete: ls: nenhuma especificação de completação</pre>
+<p><strong>O que aconteceu:</strong> não há regra para esse comando (ainda). Com o bash-completion, muitas regras só são carregadas na primeira vez que você aperta Tab depois do comando.</p>
+<p><strong>Como resolver:</strong> aperte Tab uma vez depois do comando e rode <code>complete -p</code> de novo; ou crie a regra.</p>
+</div>
+
+<div class="cenario">
+<strong>O Tab só apita e não mostra nada</strong>
+<p><strong>O que aconteceu:</strong> a função devolveu <code>COMPREPLY</code> vazio. Erros dentro da função de completação não aparecem na tela.</p>
+<p><strong>Como confirmar:</strong> chame a função na mão, com <code>COMP_WORDS</code> e <code>COMP_CWORD</code> preenchidos, e olhe o <code>COMPREPLY</code>. Rode também com <code>set -x</code> antes de chamar (veja <a href="depuracao.html">Depurar</a>).</p>
+<p><strong>Como resolver:</strong> confira o índice (<code>COMP_CWORD</code> começa em 1 para a primeira palavra depois do comando) e o filtro (<code>-- "$atual"</code>). Se quiser cair nos arquivos quando não houver resposta, use <code>-o default</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Funcionou, mas sumiu no outro terminal</strong>
+<p><strong>O que aconteceu:</strong> regras de <code>complete</code> valem só no shell em que foram criadas.</p>
+<p><strong>Como resolver:</strong> instale num dos lugares da tabela "Onde instalar".</p>
+</div>
+
+<div class="cenario">
+<strong>Com <code>--cor=</code> a palavra atual não é o que eu esperava</strong>
+<p><strong>O que aconteceu:</strong> o Bash quebra as palavras de <code>COMP_WORDS</code> também em <code>=</code> e <code>:</code> (a lista fica em <code>COMP_WORDBREAKS</code>). Em <code>opcoes --cor=az</code>, <code>COMP_WORDS</code> vira <code>(opcoes --cor = az)</code> e <code>COMP_CWORD</code> vale 3, e não 1.</p>
+<p><strong>Como resolver:</strong> leve isso em conta nos índices, ou use as funções prontas do bash-completion (<code>_init_completion</code>), que juntam essas partes.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>complete -W "a b c" cmd</code></td><td>Completa <code>cmd</code> com uma lista fixa</td></tr>
+<tr><td><code>complete -f cmd</code> / <code>-d</code> / <code>-A tipo</code></td><td>Com arquivos / pastas / outro tipo (<code>variable</code>, <code>function</code>, <code>user</code>, <code>signal</code>…)</td></tr>
+<tr><td><code>complete -F função cmd</code></td><td>Chama a função a cada Tab</td></tr>
+<tr><td><code>complete -o default|filenames|nospace|bashdefault</code></td><td>Ajustes de comportamento</td></tr>
+<tr><td><code>complete -p [cmd]</code> / <code>complete -r cmd</code></td><td>Mostra as regras / remove uma</td></tr>
+<tr><td><code>compgen -W "lista" -- texto</code></td><td>Filtra a lista pelo texto (o que o Tab ofereceria)</td></tr>
+<tr><td><code>compgen -c -a -b -k -v -f -d -u</code></td><td>Lista comandos, aliases, builtins, palavras reservadas, variáveis, arquivos, pastas, usuários</td></tr>
+<tr><td><code>compgen -G 'curinga'</code> / <code>-X 'padrão'</code></td><td>Lista o que casa / remove o que casa</td></tr>
+<tr><td><code>COMP_WORDS</code>, <code>COMP_CWORD</code>, <code>COMP_LINE</code></td><td>O que o usuário digitou (entrada da função)</td></tr>
+<tr><td><code>COMPREPLY</code></td><td>As opções que a função devolve</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Lista fixa</h3>
+<p>Complete para que o Tab do comando <code>cor</code> ofereça <code>azul</code>, <code>verde</code> e <code>vermelho</code>:</p>
+<div class="ex-code">complete <input data-answer="-W" aria-label="opção" style="width:3em"> "azul verde vermelho" cor</div>
+</div>
+
+<div class="exercise">
+<h3>2. Só pastas</h3>
+<p>Complete para que o comando <code>entrar</code> complete só nomes de pastas:</p>
+<div class="ex-code">complete <input data-answer="-d|-A directory" aria-label="opção" style="width:7em"> entrar</div>
+</div>
+
+<div class="exercise">
+<h3>3. A resposta da função</h3>
+<p>Em qual variável a função de completação coloca as opções que o Tab vai mostrar?</p>
+<div class="ex-code"><input data-answer="COMPREPLY" aria-label="variável"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O que mostra <code>compgen -W "criar listar restaurar" -- l</code>?</p>
+<label><input type="radio" name="q4"> As três palavras.</label>
+<label><input type="radio" name="q4"> Só <code>listar</code>.</label>
+<label><input type="radio" name="q4"> Nada, porque falta o <code>complete</code>.</label>
+<label><input type="radio" name="q4"> Os arquivos que começam com <code>l</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Em <code>backup restaurar do</code> (cursor no fim), quanto vale <code>COMP_CWORD</code>?</p>
+<label><input type="radio" name="q5"> 0</label>
+<label><input type="radio" name="q5"> 1</label>
+<label><input type="radio" name="q5"> 3</label>
+<label><input type="radio" name="q5"> 2</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Você salvou a completação em <code>~/.local/share/bash-completion/completions/</code>, mas ela não carrega. Qual a causa mais provável?</p>
+<label><input type="radio" name="q6"> O arquivo não tem exatamente o nome do comando (por exemplo, ficou <code>backup.bash</code> em vez de <code>backup</code>).</label>
+<label><input type="radio" name="q6"> Faltou dar permissão de execução ao arquivo.</label>
+<label><input type="radio" name="q6"> A função precisa se chamar <code>COMPREPLY</code>.</label>
+<label><input type="radio" name="q6"> O <code>complete</code> só funciona como root.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>complete</code> cria regras de Tab por comando; <code>complete -p</code> mostra, <code>complete -r</code> remove.</li>
+  <li>Lista fixa: <code>-W "…"</code>. Prontas: <code>-f</code>, <code>-d</code>, <code>-A tipo</code>. Ajustes: <code>-o default</code>, <code>-o filenames</code>, <code>-o nospace</code>.</li>
+  <li>Função: <code>complete -F _cmd cmd</code>; ela lê <code>COMP_WORDS</code>/<code>COMP_CWORD</code> e responde em <code>COMPREPLY</code>, quase sempre com <code>compgen -W … -- "$atual"</code>.</li>
+  <li><code>compgen</code> lista coisas (<code>-c -a -b -v -f -d</code>) e testa completações sem Tab.</li>
+  <li>Para durar: <code>~/.bashrc</code> ou <code>~/.local/share/bash-completion/completions/NOME-DO-COMANDO</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
