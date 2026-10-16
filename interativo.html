@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Menus e Cores — select, cores ANSI e tput | Guia Bash</title>
+<meta name="description" content="Deixe seus scripts interativos: menus com select (PS3, REPLY, break), cores ANSI com printf, tput (setaf, bold, sgr0, cols, lines), detectar terminal com [[ -t 1 ]] e NO_COLOR, barra de progresso, spinner, pergunta sim/não e senha com read -s.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Menus e Cores</span></h1>
+
+<p class="intro">Alguns scripts conversam com uma pessoa: mostram um menu, perguntam "tem certeza?", pintam de vermelho o que deu errado, mostram uma barra de progresso. Nesta aula você vai ver as ferramentas do Bash para isso (<code>select</code>, as sequências de cores ANSI, o <code>tput</code>, o <code>read</code>) e, tão importante quanto, <strong>quando não usar cores</strong>, para não sujar arquivos e pipes.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A montar um menu numerado com <code>select</code>, <code>PS3</code> e <code>REPLY</code>.</li>
+  <li>A colorir textos com sequências ANSI (<code>\e[31m</code>) e com <code>tput</code>.</li>
+  <li>A usar cores só quando a saída é um terminal (<code>[[ -t 1 ]]</code>) e a respeitar <code>NO_COLOR</code>.</li>
+  <li>A fazer barra de progresso e spinner com <code>\r</code>.</li>
+  <li>A perguntar sim/não e a ler senhas sem mostrá-las (<code>read -s</code>).</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Menus com <code>select</code></h2>
+<p>O <code>select</code> é um laço que <strong>mostra uma lista numerada, lê o número digitado e guarda a opção escolhida</strong> numa variável. Ele repete até encontrar um <code>break</code>. A Ana fez um menu para a lista de frutas:</p>
+
+<pre class="file" data-file="menu.sh">#!/usr/bin/env bash
+PS3="Escolha uma opção (número): "
+select opcao in "Ver frutas" "Contar frutas" "Sair"; do
+  case $opcao in
+    "Ver frutas") sort -u frutas.txt ;;
+    "Contar frutas") wc -l &lt; frutas.txt ;;
+    "Sair") echo "Tchau!"; break ;;
+    *) echo "Opção inválida: $REPLY" ;;
+  esac
+done
+</pre>
+
+<dl class="anatomy">
+  <dt>PS3="…"</dt><dd>O texto da pergunta. É o terceiro prompt do Bash (o <code>PS1</code> é o do terminal, o <code>PS2</code> o de continuação). Sem ele, o <code>select</code> mostra só <code>#? </code>.</dd>
+  <dt>select opcao in A B C</dt><dd>Mostra <code>1) A</code>, <code>2) B</code>, <code>3) C</code> e espera um número. Itens com espaço vão entre aspas.</dd>
+  <dt>opcao</dt><dd>Recebe o <strong>texto</strong> do item escolhido (<code>Contar frutas</code>), ou fica vazia se o número não existir.</dd>
+  <dt>$REPLY</dt><dd>O que a pessoa <strong>digitou</strong>, exatamente (<code>2</code>, <code>7</code>, <code>abc</code>…).</dd>
+  <dt>case … esac</dt><dd>Decide o que fazer com cada opção (<a href="case.html">case</a>). O <code>*)</code> pega números inválidos.</dd>
+  <dt>break</dt><dd>Sai do laço do <code>select</code>. Sem ele, o menu nunca termina (a não ser com Ctrl+D).</dd>
+</dl>
+
+<p>Esta sessão foi feita num terminal de verdade, digitando <code>2</code>, <code>7</code>, Enter vazio, <code>1</code> e <code>3</code>:</p>
+
+<pre class="term">$ bash menu.sh
+1) Ver frutas
+2) Contar frutas
+3) Sair
+Escolha uma opção (número): 2
+7                                              « wc -l: 7 linhas
+Escolha uma opção (número): 7
+Opção inválida: 7                              « $opcao vazia; $REPLY guarda o que foi digitado
+Escolha uma opção (número):                    « Enter vazio: o select mostra o menu de novo
+1) Ver frutas
+2) Contar frutas
+3) Sair
+Escolha uma opção (número): 1
+banana
+laranja
+maçã
+uva
+Escolha uma opção (número): 3
+Tchau!
+$ echo $?
+0</pre>
+
+<p>Repare: depois de cada resposta, o <code>select</code> mostra só a pergunta, e não o menu inteiro. O menu volta quando a pessoa aperta Enter sem digitar nada. O menu e a pergunta saem na <strong>saída de erro</strong>, para não se misturarem ao resultado se você redirecionar a saída do script.</p>
+
+<div class="tryscript" data-file="menu.sh" data-stdin="2\n3\n" data-goal="src:Contar frutas,out:Total: 7 frutas">
+<p class="try-task"><strong>Missão:</strong> acrescente ao menu uma opção <code>"Contar frutas"</code> entre "Ver frutas" e "Sair", que mostre <code>Total: 7 frutas</code> (use <code>$(wc -l &lt; frutas.txt)</code>). A entrada já está preenchida com <code>2</code> e depois <code>3</code>: com a opção nova, o 2 conta e o 3 sai.</p>
+<pre class="script">#!/usr/bin/env bash
+PS3="Escolha: "
+select opcao in "Ver frutas" "Sair"; do
+  case $opcao in
+    "Ver frutas") sort -u frutas.txt ;;
+    "Sair") break ;;
+    *) echo "Opção inválida: $REPLY" ;;
+  esac
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+PS3="Escolha: "
+select opcao in "Ver frutas" "Contar frutas" "Sair"; do
+  case $opcao in
+    "Ver frutas") sort -u frutas.txt ;;
+    "Contar frutas") echo "Total: $(wc -l &lt; frutas.txt) frutas" ;;
+    "Sair") break ;;
+    *) echo "Opção inválida: $REPLY" ;;
+  esac
+done
+</pre>
+</div>
+
+<div class="tip">
+<strong>A lista pode vir de um array ou de um curinga</strong>
+<p><code>select arq in *.txt; do …</code> monta um menu com os arquivos da pasta. <code>select item in "${opcoes[@]}"; do …</code> usa um <a href="arrays.html">array</a>. Assim o menu se adapta sozinho.</p>
+</div>
+
+<hr>
+
+<h2>Cores com sequências ANSI</h2>
+<p>Terminais entendem <strong>sequências de escape ANSI</strong>: códigos que não aparecem na tela, mas mudam a cor ou o estilo do texto seguinte. Todas começam com o caractere ESC (código 27), escrito <code>\e</code> (ou <code>\033</code>) no <code>printf</code>, seguido de <code>[</code>, números e <code>m</code>:</p>
+
+<pre class="syntax">\e[31m   texto vermelho   \e[0m
+│ │ │                   └── 0 = volta ao normal (reset)
+│ │ └ m = "fim do código de cor"
+│ └ 31 = vermelho
+└ ESC (caractere 27)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Efeito</th><th>Código</th><th>Efeito</th></tr>
+<tr><td><code>0</code></td><td>Volta ao normal (<em>reset</em>)</td><td><code>30</code></td><td>Texto preto</td></tr>
+<tr><td><code>1</code></td><td>Negrito</td><td><code>31</code></td><td>Texto vermelho</td></tr>
+<tr><td><code>2</code></td><td>Fraco (<em>dim</em>)</td><td><code>32</code></td><td>Texto verde</td></tr>
+<tr><td><code>3</code></td><td>Itálico (nem todo terminal)</td><td><code>33</code></td><td>Texto amarelo</td></tr>
+<tr><td><code>4</code></td><td>Sublinhado</td><td><code>34</code></td><td>Texto azul</td></tr>
+<tr><td><code>7</code></td><td>Inverte frente e fundo</td><td><code>35</code></td><td>Texto magenta</td></tr>
+<tr><td><code>40</code>–<code>47</code></td><td>Cor de <strong>fundo</strong> (mesma ordem)</td><td><code>36</code></td><td>Texto ciano</td></tr>
+<tr><td><code>90</code>–<code>97</code></td><td>Texto em versão clara</td><td><code>37</code></td><td>Texto branco</td></tr>
+<tr><td><code>38;5;N</code></td><td>Uma das 256 cores (N de 0 a 255)</td><td><code>1;32</code></td><td>Vários juntos, com <code>;</code>: negrito verde</td></tr>
+</table>
+</div>
+
+<p>Para ver o que realmente é enviado, passe a saída pelo <code>cat -v</code>, que mostra o ESC como <code>^[</code>:</p>
+
+<pre class="term">$ printf '\e[31mvermelho\e[0m normal\n' | cat -v
+^[[31mvermelho^[[0m normal
+$ echo -e '\e[1;32mnegrito verde\e[0m' | cat -v
+^[[1;32mnegrito verde^[[0m</pre>
+
+<p>No terminal (sem o <code>cat -v</code>), o resultado é este:</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ printf '\e[31mvermelho\e[0m normal\n'
+<span style="color:#ef2929">vermelho</span> normal
+ana@notebook:~$ echo -e '\e[1;32mnegrito verde\e[0m'
+<span class="c-x">negrito verde</span></pre></div>
+
+<dl class="anatomy">
+  <dt>printf '\e[31m…'</dt><dd>O <a href="printf.html"><code>printf</code></a> entende <code>\e</code> no formato. É a forma recomendada.</dd>
+  <dt>echo -e '\e[…'</dt><dd>O <code>echo</code> só entende com <code>-e</code>, e o <code>-e</code> não existe em todo shell.</dd>
+  <dt>$'\e[31m'</dt><dd>As aspas <code>$'…'</code> criam o caractere ESC já na hora de guardar numa variável: <code>vermelho=$'\e[31m'</code>.</dd>
+</dl>
+
+<div class="warning">
+<strong>Sempre feche com <code>\e[0m</code></strong>
+<p>Se o script esquecer o reset (ou morrer no meio), o terminal continua colorido depois que ele termina. Se isso acontecer, rode <code>tput sgr0</code> (ou <code>reset</code>, que reinicia o terminal inteiro).</p>
+</div>
+
+<hr>
+
+<h2>O jeito portável: <code>tput</code></h2>
+<p>Os códigos ANSI funcionam em praticamente todo terminal moderno, mas o jeito "oficial" de pedir uma capacidade ao terminal é o <code>tput</code>. Ele consulta o banco de dados <em>terminfo</em> (pelo valor de <code>$TERM</code>) e imprime a sequência certa para aquele terminal:</p>
+
+<pre class="term">$ tput setaf 1 | cat -v; echo
+^[[31m                                         « setaf 1 = a mesma sequência do \e[31m
+$ tput bold | cat -v; echo
+^[[1m
+$ tput sgr0 | cat -v; echo
+^[(B^[[m                                       « o reset completo do terminfo
+$ tput cols; tput lines
+80
+24
+$ tput colors
+256</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Equivalente ANSI</th></tr>
+<tr><td><code>tput setaf N</code></td><td>Cor do texto (<em>set ANSI foreground</em>): 0 preto, 1 vermelho, 2 verde, 3 amarelo, 4 azul, 5 magenta, 6 ciano, 7 branco</td><td><code>\e[3Nm</code></td></tr>
+<tr><td><code>tput setab N</code></td><td>Cor de fundo (<em>background</em>)</td><td><code>\e[4Nm</code></td></tr>
+<tr><td><code>tput bold</code></td><td>Negrito</td><td><code>\e[1m</code></td></tr>
+<tr><td><code>tput smul</code> / <code>rmul</code></td><td>Liga / desliga sublinhado</td><td><code>\e[4m</code> / <code>\e[24m</code></td></tr>
+<tr><td><code>tput sgr0</code></td><td>Volta ao normal</td><td><code>\e[0m</code></td></tr>
+<tr><td><code>tput cols</code> / <code>lines</code></td><td>Largura e altura do terminal</td><td>—</td></tr>
+<tr><td><code>tput clear</code></td><td>Limpa a tela (como o comando <code>clear</code>)</td><td><code>\e[H\e[2J\e[3J</code></td></tr>
+<tr><td><code>tput cup L C</code></td><td>Move o cursor para a linha L, coluna C (contando de 0)</td><td><code>\e[L+1;C+1H</code></td></tr>
+<tr><td><code>tput civis</code> / <code>cnorm</code></td><td>Esconde / mostra o cursor</td><td>—</td></tr>
+<tr><td><code>tput colors</code></td><td>Quantas cores o terminal suporta</td><td>—</td></tr>
+</table>
+</div>
+
+<p>Um uso prático do <code>tput cols</code>: uma linha separadora que ocupa a largura toda do terminal:</p>
+
+<pre class="file" data-file="trecho.sh">largura=$(tput cols)
+printf '%*s\n' "$largura" '' | tr ' ' '-'
+</pre>
+
+<p>O <code>%*s</code> do <code>printf</code> imprime um texto vazio com a largura pedida (só espaços), e o <code>tr</code> troca os espaços por <code>-</code>.</p>
+
+<hr>
+
+<h2>Cores só no terminal: <code>[[ -t 1 ]]</code> e <code>NO_COLOR</code></h2>
+<p>As sequências de cor são caracteres de verdade. Se a saída do script for para um arquivo ou para outro programa, elas vão junto, como lixo: <code>^[[31m</code> no meio do texto, um <code>grep</code> que não acha a palavra. Comandos bem-educados, como o <code>ls --color=auto</code>, só usam cores quando a saída é um terminal. O teste <code>-t</code> faz essa pergunta:</p>
+
+<dl class="anatomy">
+  <dt>[[ -t 1 ]]</dt><dd>Verdadeiro se o canal 1 (saída) está ligado a um terminal (<em>tty</em>). <code>-t 2</code> testa a saída de erro; <code>-t 0</code>, a entrada.</dd>
+  <dt>${NO_COLOR:-}</dt><dd><code>NO_COLOR</code> é uma convenção (no-color.org): se a variável existir com qualquer valor, o usuário não quer cores. O <code>:-</code> evita erro com <code>set -u</code>.</dd>
+</dl>
+
+<pre class="file" data-file="cores.sh">#!/usr/bin/env bash
+if [[ -t 1 &amp;&amp; -z ${NO_COLOR:-} ]]; then
+  vermelho=$'\e[31m' verde=$'\e[32m' negrito=$'\e[1m' normal=$'\e[0m'
+else
+  vermelho='' verde='' negrito='' normal=''
+fi
+printf '%sOK%s  backup concluído\n' "$verde" "$normal"
+printf '%sERRO%s  disco cheio\n' "$negrito$vermelho" "$normal"
+</pre>
+
+<p>As cores ficam em variáveis. Se a saída não for um terminal (ou se <code>NO_COLOR</code> estiver definida), as variáveis ficam vazias e o mesmo <code>printf</code> sai sem cor. Sessão num terminal de verdade, mostrando os bytes com <code>cat -v</code>:</p>
+
+<pre class="term">$ bash cores.sh | cat -v                       « a saída é um pipe: sem cores
+OK  backup concluído
+ERRO  disco cheio
+$ NO_COLOR=1 bash cores.sh                     « no terminal, mas o usuário pediu sem cor
+OK  backup concluído
+ERRO  disco cheio
+$ [[ -t 1 ]] &amp;&amp; echo "terminal" || echo "não é terminal"
+terminal
+$ { [[ -t 1 ]] &amp;&amp; echo "terminal" || echo "não é terminal"; } | cat
+não é terminal</pre>
+
+<p>E rodando <code>bash cores.sh</code> direto no terminal:</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ bash cores.sh
+<span class="c-g">OK</span>  backup concluído
+<span class="c-r">ERRO</span>  disco cheio</pre></div>
+
+<div class="tip">
+<strong>E as mensagens de erro?</strong>
+<p>Se você colore mensagens que vão para a saída de erro, teste <code>[[ -t 2 ]]</code>: é possível que a saída normal vá para um arquivo e os erros continuem na tela, ou o contrário.</p>
+</div>
+
+<hr>
+
+<h2>Barra de progresso: o <code>\r</code></h2>
+<p>O caractere <code>\r</code> (<em>carriage return</em>, "retorno do carro", herança das máquinas de escrever) volta o cursor para o <strong>começo da mesma linha</strong>, sem pular para a próxima. Escrevendo de novo por cima, a linha parece se atualizar:</p>
+
+<pre class="file" data-file="progresso.sh">#!/usr/bin/env bash
+total=20
+for ((i = 1; i &lt;= total; i++)); do
+  pct=$(( i * 100 / total ))
+  cheio=$(( i * 30 / total ))
+  barra=$(printf '%*s' "$cheio" '' | tr ' ' '#')
+  printf '\r[%-30s] %3d%%' "$barra" "$pct"
+  sleep 0.05
+done
+printf '\n'
+</pre>
+
+<dl class="anatomy">
+  <dt>cheio=$(( i * 30 / total ))</dt><dd>Quantos <code>#</code> a barra de 30 posições deve ter agora.</dd>
+  <dt>printf '%*s' "$cheio" '' | tr ' ' '#'</dt><dd>Gera <code>cheio</code> espaços e troca por <code>#</code>.</dd>
+  <dt>\r</dt><dd>Volta ao início da linha antes de desenhar.</dd>
+  <dt>%-30s</dt><dd>A barra alinhada à esquerda num espaço de 30, completada com espaços.</dd>
+  <dt>%3d%%</dt><dd>A porcentagem com 3 posições, e <code>%%</code> para escrever o próprio <code>%</code>.</dd>
+  <dt>printf '\n'</dt><dd>No fim, pula a linha, para o prompt não grudar na barra.</dd>
+</dl>
+
+<p>No terminal, você vê uma única linha que vai enchendo até:</p>
+
+<pre class="term">$ bash progresso.sh
+[##############################] 100%</pre>
+
+<p>Por baixo, são 20 desenhos separados por <code>\r</code>, que o <code>cat -v</code> mostra como <code>^M</code>:</p>
+
+<pre class="term">$ bash progresso.sh | cat -v
+^M[#                             ]   5%^M[###                           ]  10%^M[####                          ]  15%…
+…                                              « encurtado: 20 desenhos ao todo, na mesma linha</pre>
+
+<h3>Spinner</h3>
+<p>Quando não dá para saber quanto falta, um "spinner" (pião) mostra que o script está vivo. Este acompanha um comando em segundo plano (<code>&amp;</code>) e gira enquanto ele existir:</p>
+
+<pre class="file" data-file="spinner.sh">#!/usr/bin/env bash
+sleep 1 &amp;
+pid=$!
+quadros='|/-\'
+i=0
+while kill -0 "$pid" 2&gt;/dev/null; do
+  printf '\r%s trabalhando...' "${quadros:i++%4:1}"
+  sleep 0.1
+done
+printf '\rpronto!          \n'
+</pre>
+
+<dl class="anatomy">
+  <dt>sleep 1 &amp;</dt><dd>O "trabalho" demorado, em segundo plano. <code>$!</code> é o PID dele (<a href="jobs.html">Jobs</a>).</dd>
+  <dt>kill -0 "$pid"</dt><dd>O sinal 0 não faz nada; só testa se o processo ainda existe (<a href="trap.html">Sinais</a>).</dd>
+  <dt>${quadros:i++%4:1}</dt><dd>Pega 1 caractere da posição <code>i % 4</code> e soma 1 em <code>i</code>: <code>| / - \</code> em rodízio (<a href="strings.html">Manipular Strings</a>).</dd>
+  <dt>'\rpronto!          '</dt><dd>Os espaços apagam o resto do texto anterior, que era mais comprido.</dd>
+</dl>
+
+<hr>
+
+<h2>Perguntar sim ou não</h2>
+<pre class="file" data-file="simnao.sh">#!/usr/bin/env bash
+confirmar() {
+  local resp
+  while true; do
+    read -rp "$1 [s/n] " resp
+    case ${resp,,} in
+      s|sim) return 0 ;;
+      n|não|nao) return 1 ;;
+      *) echo "Responda s ou n." ;;
+    esac
+  done
+}
+if confirmar "Apagar os arquivos temporários?"; then
+  echo "Apagando..."
+else
+  echo "Nada foi apagado."
+fi
+</pre>
+
+<dl class="anatomy">
+  <dt>read -rp "…" resp</dt><dd><code>-p</code> mostra a pergunta; <code>-r</code> não interpreta barras (<a href="read.html">read</a>).</dd>
+  <dt>${resp,,}</dt><dd>A resposta em minúsculas, para aceitar <code>S</code>, <code>Sim</code>, <code>SIM</code>. <span class="versao">bash 4.0+</span></dd>
+  <dt>return 0 / return 1</dt><dd>A função vira um "teste": dá para usar direto no <code>if</code>.</dd>
+  <dt>while true</dt><dd>Repete a pergunta até vir uma resposta válida.</dd>
+</dl>
+
+<pre class="term">$ bash simnao.sh
+Apagar os arquivos temporários? [s/n] talvez
+Responda s ou n.
+Apagar os arquivos temporários? [s/n] S
+Apagando...</pre>
+
+<p>Uma variação comum é ter uma resposta <strong>padrão</strong> para o Enter vazio, indicada em maiúscula: <code>[S/n]</code> (Enter = sim) ou <code>[s/N]</code> (Enter = não). Para isso, inclua o texto vazio num dos casos: <code>s|sim|"")</code>.</p>
+
+<hr>
+
+<h2>Senhas: <code>read -s</code></h2>
+<p>A opção <code>-s</code> (<em>silent</em>) não mostra o que é digitado:</p>
+
+<pre class="file" data-file="senha.sh">#!/usr/bin/env bash
+read -rsp "Senha: " senha
+echo
+echo "A senha tem ${#senha} caracteres."
+</pre>
+
+<pre class="term">$ bash senha.sh
+Senha:                                         « a pessoa digitou 10 caracteres; nada aparece
+A senha tem 10 caracteres.</pre>
+
+<p>O <code>echo</code> logo depois do <code>read</code> pula a linha, porque o Enter digitado também não foi mostrado. Lembre que a senha fica numa variável comum: não a mostre, não a passe como argumento de outro comando (argumentos aparecem no <code>ps</code>) e não a grave em arquivos.</p>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tarefa</th><th>Forma simples</th><th>Alternativa</th><th>Use quando</th></tr>
+<tr><td>Cores</td><td><code>printf '\e[31m…\e[0m'</code></td><td><code>tput setaf 1</code> … <code>tput sgr0</code></td><td>ANSI é mais rápido e funciona em todo terminal moderno; <code>tput</code> é o mais correto para terminais incomuns.</td></tr>
+<tr><td>Menu</td><td><code>select</code></td><td><code>read</code> + <code>case</code></td><td><code>select</code> para listas; <code>read</code> quando as teclas são letras (<code>[a]brir [s]air</code>).</td></tr>
+<tr><td>Menu "gráfico"</td><td>—</td><td><code>whiptail</code>, <code>dialog</code></td><td>Janelas com setas e caixas no terminal (programas externos, nem sempre instalados).</td></tr>
+<tr><td>Progresso</td><td><code>printf '\r…'</code></td><td><code>pv</code></td><td><code>pv</code> mostra o progresso de dados num pipe (externo).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Aparece <code>\e[31m</code> ou <code>^[[31m</code> no texto, em vez da cor</strong>
+<p><strong>O que aconteceu:</strong> com <code>\e[31m</code> literal, o comando não interpretou o escape: <code>echo</code> sem <code>-e</code>, ou aspas simples comuns numa variável (<code>c='\e[31m'</code>). Com <code>^[[31m</code>, o escape foi gerado, mas a saída foi para um arquivo ou para o <code>less</code>, que não interpretam cores.</p>
+<p><strong>Como resolver:</strong> use <code>printf</code> ou <code>$'\e[31m'</code>; para o arquivo, desligue as cores fora do terminal com <code>[[ -t 1 ]]</code>. No <code>less</code>, a opção <code>-R</code> mostra as cores.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal ficou todo colorido depois do script</strong>
+<p><strong>O que aconteceu:</strong> faltou o <code>\e[0m</code> no fim de uma mensagem, ou o script foi interrompido no meio.</p>
+<p><strong>Como resolver:</strong> <code>tput sgr0</code> agora; no script, feche cada cor e, por segurança, ponha <code>trap 'tput sgr0' EXIT</code> (<a href="trap.html">trap</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>select</code> não para nunca</strong>
+<p><strong>O que aconteceu:</strong> falta o <code>break</code> no caso de saída, ou o <code>case</code> compara com um texto diferente do item (<code>"sair"</code> × <code>"Sair"</code>).</p>
+<p><strong>Como resolver:</strong> confira o texto exato; Ctrl+D (fim da entrada) também encerra o <code>select</code>, com código 1.</p>
+</div>
+
+<div class="cenario">
+<strong><code>tput: No value for $TERM and no -T specified</code> (no cron ou em CI)</strong>
+<p><strong>O que aconteceu:</strong> sem terminal, não há <code>TERM</code>, e o <code>tput</code> não sabe o que responder.</p>
+<p><strong>Como resolver:</strong> só use <code>tput</code> depois de testar <code>[[ -t 1 ]]</code>; para a largura, use um padrão: <code>largura=$(tput cols 2&gt;/dev/null || echo 80)</code>. Veja <a href="agendar.html">Agendar Scripts</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>A barra de progresso vira dezenas de linhas</strong>
+<p><strong>O que aconteceu:</strong> o <code>printf</code> tem <code>\n</code> no fim (ou foi usado <code>echo</code>), então cada desenho pula de linha.</p>
+<p><strong>Como resolver:</strong> só <code>\r</code> no começo, sem <code>\n</code> no fim; um único <code>printf '\n'</code> depois do laço.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>select v in A B C; do …; done</code></td><td>Menu numerado; <code>$v</code> = item, <code>$REPLY</code> = o que foi digitado.</td></tr>
+<tr><td><code>PS3="…"</code></td><td>A pergunta do <code>select</code>.</td></tr>
+<tr><td><code>printf '\e[1;31m…\e[0m'</code></td><td>Negrito vermelho e volta ao normal.</td></tr>
+<tr><td><code>tput setaf N</code> / <code>bold</code> / <code>sgr0</code></td><td>Cor / negrito / normal, pelo terminfo.</td></tr>
+<tr><td><code>tput cols</code> / <code>lines</code> / <code>clear</code> / <code>cup L C</code></td><td>Largura, altura, limpar, posicionar o cursor.</td></tr>
+<tr><td><code>[[ -t 1 ]]</code></td><td>A saída é um terminal?</td></tr>
+<tr><td><code>${NO_COLOR:-}</code></td><td>O usuário pediu sem cores?</td></tr>
+<tr><td><code>printf '\r…'</code></td><td>Reescreve a linha atual.</td></tr>
+<tr><td><code>read -rp "…" v</code></td><td>Pergunta e lê.</td></tr>
+<tr><td><code>read -rsp "…" v</code></td><td>Lê sem mostrar (senha).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A pergunta do menu</h3>
+<p>Complete para que o <code>select</code> pergunte "Opção: ":</p>
+<div class="ex-code"><input data-answer="PS3" aria-label="variável">="Opção: "</div>
+</div>
+
+<div class="exercise">
+<h3>2. Voltar ao normal</h3>
+<p>Complete a sequência que desliga todas as cores e estilos:</p>
+<div class="ex-code">printf 'feito\e[<input data-answer="0m|m" aria-label="código">\n'</div>
+</div>
+
+<div class="exercise">
+<h3>3. Só no terminal</h3>
+<p>Complete o teste que é verdadeiro quando a saída padrão é um terminal:</p>
+<div class="ex-code">if [[ <input data-answer="-t 1" aria-label="teste"> ]]; then</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. No <code>select</code>, a pessoa digitou <code>9</code>, mas só há 3 opções. O que acontece?</p>
+<label><input type="radio" name="q4"> O script termina com erro.</label>
+<label><input type="radio" name="q4"> A variável do <code>select</code> fica vazia e <code>$REPLY</code> vale <code>9</code>.</label>
+<label><input type="radio" name="q4"> A variável recebe o último item.</label>
+<label><input type="radio" name="q4"> O menu é mostrado de novo sem passar pelo corpo do laço.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Por que um script não deve colorir a saída quando ela vai para um arquivo?</p>
+<label><input type="radio" name="q5"> Porque arquivos não aceitam caracteres especiais.</label>
+<label><input type="radio" name="q5"> Porque o script fica mais lento.</label>
+<label><input type="radio" name="q5"> Porque as sequências de escape vão parar no arquivo como texto, atrapalhando quem o lê ou processa.</label>
+<label><input type="radio" name="q5"> Porque o <code>&gt;</code> apaga as cores e dá erro.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Qual caractere uma barra de progresso usa para redesenhar a mesma linha?</p>
+<label><input type="radio" name="q6"> <code>\r</code></label>
+<label><input type="radio" name="q6"> <code>\n</code></label>
+<label><input type="radio" name="q6"> <code>\t</code></label>
+<label><input type="radio" name="q6"> <code>\e</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>select</code> + <code>case</code> monta menus numerados; <code>PS3</code> é a pergunta, <code>$REPLY</code> o que foi digitado, <code>break</code> sai.</li>
+  <li>Cores: <code>\e[31m</code> (vermelho), <code>\e[1m</code> (negrito), <code>\e[0m</code> (normal), com <code>printf</code> ou <code>$'…'</code>; ou <code>tput setaf/bold/sgr0</code>.</li>
+  <li>Só use cores quando <code>[[ -t 1 ]]</code> for verdadeiro e <code>NO_COLOR</code> não estiver definida.</li>
+  <li><code>\r</code> redesenha a linha: barra de progresso e spinner.</li>
+  <li><code>read -rp</code> pergunta; <code>read -rsp</code> lê senhas sem mostrar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
