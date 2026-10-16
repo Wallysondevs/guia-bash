@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash for — repetir para cada item, arquivo ou número | Guia Bash</title>
+<meta name="description" content="Aprenda o laço for do Bash: listas, arquivos com curinga, nullglob, {1..10}, &quot;$@&quot;, for (( )), seq, renomear em lote e nomes com espaço, com saídas reais explicadas e missões no simulador.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">for</span></h1>
+
+<p class="intro">O <code>for</code> repete um bloco de comandos <strong>uma vez para cada item</strong> de uma lista: cada nome, cada arquivo, cada número. É o laço que você mais vai usar em scripts, porque quase toda tarefa repetitiva ("faça isto com todas as fotos") cabe nele.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A forma <code>for x in lista; do … done</code>, parte por parte, e como escrevê-la numa linha só.</li>
+  <li>Como percorrer arquivos com curingas, e o que acontece quando nenhum arquivo combina (<code>nullglob</code>).</li>
+  <li>Como contar com <code>{1..10}</code>, com <code>for ((i=0; i&lt;5; i++))</code> e com <code>seq</code>.</li>
+  <li>Como percorrer os argumentos do script com <code>"$@"</code>.</li>
+  <li>Por que <code>for linha in $(cat arquivo)</code> e <code>for f in $(ls)</code> quebram nomes com espaço, e como renomear arquivos em lote com segurança.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: fazer a mesma coisa várias vezes</h2>
+<p>A Ana quer cumprimentar três amigos. Sem laço, ela escreve três comandos quase iguais:</p>
+
+<pre class="file" data-file="sem-laco.sh">echo "Olá, Ana!"
+echo "Olá, Bruno!"
+echo "Olá, Carla!"</pre>
+
+<p>Funciona, mas e se fossem 300 nomes? Ou 300 fotos para renomear? Repare que só uma parte muda (o nome). O <code>for</code> deixa você escrever o comando <strong>uma vez</strong>, com uma variável no lugar da parte que muda, e o Bash repete para cada item.</p>
+
+<hr>
+
+<h2>A forma mais simples: <code>for x in lista</code></h2>
+
+<pre class="syntax">for VARIÁVEL in ITEM1 ITEM2 ITEM3; do
+  comandos que usam $VARIÁVEL
+done</pre>
+
+<p>Os nomes vêm do inglês: <strong>for</strong> = "para (cada)", <strong>in</strong> = "em", <strong>do</strong> = "faça" e <strong>done</strong> = "feito". Lido em voz alta: "para cada fruta em maçã, banana e uva, faça… feito".</p>
+
+<pre class="term">$ for fruta in maçã banana uva; do
+&gt;   echo "Eu gosto de $fruta"
+&gt; done
+Eu gosto de maçã           « 1ª volta: fruta=maçã
+Eu gosto de banana         « 2ª volta: fruta=banana
+Eu gosto de uva            « 3ª volta: fruta=uva
+$ echo $?
+0                          « o laço terminou bem</pre>
+
+<dl class="anatomy">
+  <dt>for</dt><dd>Palavra que abre o laço.</dd>
+  <dt>fruta</dt><dd>O nome da variável que recebe um item a cada volta. Sem <code>$</code> aqui: você está <em>dando nome</em> a ela, não lendo o valor.</dd>
+  <dt>in maçã banana uva</dt><dd>A lista. São três palavras, separadas por espaço, então serão três voltas.</dd>
+  <dt>; do</dt><dd>Fim da lista e começo do corpo. O <code>;</code> é necessário porque o <code>do</code> está na mesma linha da lista.</dd>
+  <dt>echo "Eu gosto de $fruta"</dt><dd>O <strong>corpo</strong>: o que se repete. Aqui você usa <code>$fruta</code>, com <code>$</code>, para ler o valor da vez.</dd>
+  <dt>done</dt><dd>Fim do corpo. O Bash volta para o <code>for</code>, pega o próximo item e repete. Quando os itens acabam, segue para o que vem depois do <code>done</code>.</dd>
+</dl>
+
+<p>Enquanto você digita no terminal, o Bash mostra <code>&gt;</code> no começo das linhas: é o prompt de continuação, avisando que o <code>for</code> ainda não foi fechado. Você não digita esse sinal. Só quando aparece o <code>done</code> o laço inteiro roda.</p>
+
+<h3>O que o <code>for</code> devolve</h3>
+<p>O código de saída de um <code>for</code> é o do <strong>último comando que rodou</strong> dentro dele. Se a lista estiver vazia e o corpo não rodar nenhuma vez, o código é <code>0</code>. E a variável continua existindo depois do laço, com o último valor:</p>
+
+<pre class="term">$ echo "$fruta"
+uva                        « ficou com o valor da última volta</pre>
+
+<h3>Tudo numa linha</h3>
+<p>Para laços curtos no terminal, escreva tudo numa linha. A regra é: <strong>antes de <code>do</code> e antes de <code>done</code> vai um <code>;</code></strong> (ou uma quebra de linha).</p>
+
+<pre class="term">$ for fruta in maçã banana uva; do echo "Eu gosto de $fruta"; done
+Eu gosto de maçã
+Eu gosto de banana
+Eu gosto de uva</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Onde</th><th>Em várias linhas</th><th>Numa linha</th></tr>
+<tr><td>Entre a lista e o <code>do</code></td><td>quebra de linha (ou <code>; do</code> na mesma linha)</td><td><code>;</code></td></tr>
+<tr><td>Entre um comando e outro do corpo</td><td>quebra de linha</td><td><code>;</code></td></tr>
+<tr><td>Entre o último comando e o <code>done</code></td><td>quebra de linha</td><td><code>;</code></td></tr>
+</table>
+</div>
+
+<p>Quando você aperta a seta para cima depois de um <code>for</code> de várias linhas, o histórico mostra exatamente essa versão de uma linha. É assim que o Bash guarda o laço.</p>
+
+<div class="tryscript" data-file="saudar.sh" data-goal="out:Olá\, Carla!,out:Olá\, Diego!,src:\bfor\b">
+<p class="try-task"><strong>Missão:</strong> use um <code>for</code> para cumprimentar Ana, Bruno, Carla e Diego, um por linha, no formato <code>Olá, Nome!</code>. Clique em Rodar.</p>
+<pre class="script">#!/usr/bin/env bash
+# troque estas linhas por um for
+echo "Olá, Ana!"
+echo "Olá, Bruno!"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+for nome in Ana Bruno Carla Diego; do
+  echo "Olá, $nome!"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Percorrer arquivos com curingas</h2>
+<p>O uso mais comum do <code>for</code> é "para cada arquivo". Em vez de escrever os nomes, você usa um curinga (veja <a href="curingas.html">Curingas</a>). O Bash troca o curinga pela lista de arquivos que combinam, em ordem alfabética, <strong>antes</strong> de o laço começar.</p>
+
+<pre class="term">$ cd Documentos
+$ for arq in *; do
+&gt;   echo "Encontrei: $arq"
+&gt; done
+Encontrei: acesso.log
+Encontrei: alunos.csv
+Encontrei: notas.txt
+Encontrei: projetos            « pastas também entram no *
+Encontrei: relatorio.odt</pre>
+
+<p>Você pode colocar vários curingas na lista, e usar o arquivo da vez em qualquer comando:</p>
+
+<pre class="term">$ for arq in *.csv *.txt; do
+&gt;   echo "$arq tem $(wc -l &lt; "$arq") linhas"
+&gt; done
+alunos.csv tem 6 linhas          « primeiro tudo que combinou com *.csv…
+notas.txt tem 4 linhas           « …depois tudo que combinou com *.txt</pre>
+
+<dl class="anatomy">
+  <dt>*.csv *.txt</dt><dd>Dois curingas. O Bash expande cada um e junta as listas: <code>alunos.csv notas.txt</code>.</dd>
+  <dt>"$arq"</dt><dd>O arquivo da vez, <strong>entre aspas</strong>. Se o nome tiver espaço, as aspas mantêm o nome inteiro como uma coisa só.</dd>
+  <dt>$(wc -l &lt; "$arq")</dt><dd>Roda <code>wc -l</code> com o arquivo como entrada e coloca o número no texto (veja <a href="substituicao-comando.html">Substituição de Comando</a>).</dd>
+</dl>
+
+<div class="tip">
+<strong>Curingas são seguros com espaços</strong>
+<p>Quando o Bash expande <code>*.jpg</code>, cada nome vira <strong>um item inteiro</strong> da lista, mesmo que tenha espaço. O perigo aparece depois, se você usar <code>$arq</code> sem aspas dentro do corpo. Regra de ouro: <code>for f in *.jpg</code> sem aspas no curinga, e <code>"$f"</code> com aspas no corpo.</p>
+</div>
+
+<h3>E quando nenhum arquivo combina?</h3>
+<p>A pasta <code>Documentos</code> não tem nenhum vídeo. Veja o que acontece:</p>
+
+<pre class="term">$ for video in *.mp4; do
+&gt;   echo "Achei o vídeo: $video"
+&gt; done
+Achei o vídeo: *.mp4           « o laço rodou uma vez, com o próprio texto "*.mp4"</pre>
+
+<p>Quando um curinga não combina com nada, o Bash deixa o texto do jeito que está. O laço roda <strong>uma vez</strong>, com a variável valendo <code>*.mp4</code>. Num script que apaga ou move arquivos, isso vira um erro do tipo <code>mv: não foi possível obter estado de '*.mp4'</code>. Há duas soluções.</p>
+
+<p><strong>Solução 1: ligar o <code>nullglob</code>.</strong> Com essa opção, um curinga sem resultado vira <strong>nada</strong>, e o laço simplesmente não roda:</p>
+
+<pre class="term">$ shopt -s nullglob
+$ for video in *.mp4; do
+&gt;   echo "Achei o vídeo: $video"
+&gt; done
+$ echo $?
+0                              « nenhuma volta, nenhuma mensagem, código 0
+$ shopt -u nullglob            « desliga de novo</pre>
+
+<dl class="anatomy">
+  <dt>shopt</dt><dd>Liga e desliga opções do Bash (<em>shell options</em>). Veja <a href="shopt.html">Opções do Shell</a>.</dd>
+  <dt>-s</dt><dd>Liga (<em>set</em>). O <code>-u</code> desliga (<em>unset</em>).</dd>
+  <dt>nullglob</dt><dd>"Curinga sem resultado vira nulo." Em scripts, ligue no começo e esqueça.</dd>
+</dl>
+
+<p><strong>Solução 2: conferir se o arquivo existe.</strong> Funciona sem mexer em opções, e também em outros shells:</p>
+
+<pre class="term">$ cd ~/Downloads
+$ for f in *.mp4; do
+&gt;   [[ -e $f ]] || continue
+&gt;   echo "Vídeo: $f"
+&gt; done
+$ echo "status: $?"
+status: 0</pre>
+
+<p>O <code>[[ -e $f ]]</code> testa se o arquivo existe (<a href="testes.html">Testes</a>); se não existir, o <code>continue</code> pula para a próxima volta (<a href="break-continue.html">break e continue</a>). Como <code>*.mp4</code> não é um arquivo de verdade, o corpo é pulado.</p>
+
+<hr>
+
+<h2>Contar com chaves: <code>{1..10}</code></h2>
+<p>A expansão de chaves (veja <a href="chaves.html">Chaves</a>) gera sequências. Dentro de um <code>for</code>, vira o jeito mais curto de "repetir N vezes":</p>
+
+<pre class="term">$ for i in {1..5}; do echo "Volta $i"; done
+Volta 1
+Volta 2
+Volta 3
+Volta 4
+Volta 5
+$ for i in {10..0..5}; do echo -n "$i "; done; echo
+10 5 0                         « de 10 até 0, de 5 em 5
+$ for n in {01..03}; do echo "foto-$n.jpg"; done
+foto-01.jpg                    « o zero à esquerda é mantido
+foto-02.jpg
+foto-03.jpg</pre>
+
+<dl class="anatomy">
+  <dt>{1..5}</dt><dd>Início <code>..</code> fim. Vira <code>1 2 3 4 5</code>.</dd>
+  <dt>{10..0..5}</dt><dd>Um terceiro número é o passo. Pode contar para trás.</dd>
+  <dt>{01..03}</dt><dd>Com zero à esquerda, todos os números ficam com a mesma largura.</dd>
+  <dt>echo -n</dt><dd>Escreve sem pular linha, para os números ficarem lado a lado. O <code>echo</code> final só pula a linha.</dd>
+</dl>
+
+<h3>A pegadinha: chaves não aceitam variáveis</h3>
+
+<pre class="term">$ fim=5
+$ for i in {1..$fim}; do echo "Volta $i"; done
+Volta {1..5}                   « uma volta só, com o texto literal!</pre>
+
+<p>As chaves são expandidas <strong>antes</strong> das variáveis (veja <a href="ordem-expansoes.html">A Ordem das Expansões</a>). Quando o Bash olha <code>{1..$fim}</code>, ainda não sabe que <code>$fim</code> vale 5, então não reconhece uma sequência e deixa o texto como está. Quando o limite está numa variável, use o <code>for</code> no estilo C, logo abaixo, ou o <code>seq</code>.</p>
+
+<hr>
+
+<h2>O <code>for</code> estilo C: <code>for (( ; ; ))</code></h2>
+<p>Quem vem de C, Java ou JavaScript conhece este formato. Em vez de uma lista, você dá três instruções de conta, separadas por <code>;</code>:</p>
+
+<pre class="syntax">for (( INÍCIO; CONDIÇÃO; PASSO )); do
+  comandos
+done</pre>
+
+<pre class="term">$ for ((i = 0; i &lt; 5; i++)); do echo "i vale $i"; done
+i vale 0
+i vale 1
+i vale 2
+i vale 3
+i vale 4                       « 5 não entra: a condição é i &lt; 5</pre>
+
+<dl class="anatomy">
+  <dt>(( … ))</dt><dd>Parênteses duplos: lá dentro vale a aritmética do Bash (veja <a href="aritmetica.html">Contas</a>). Não precisa de <code>$</code> antes das variáveis, e espaços são livres.</dd>
+  <dt>i = 0</dt><dd><strong>Início</strong>: roda uma vez, antes da primeira volta.</dd>
+  <dt>i &lt; 5</dt><dd><strong>Condição</strong>: testada antes de cada volta. Enquanto for verdadeira, o corpo roda; quando ficar falsa, o laço acaba.</dd>
+  <dt>i++</dt><dd><strong>Passo</strong>: roda no fim de cada volta. <code>i++</code> soma 1 a <code>i</code>.</dd>
+</dl>
+
+<p>A ordem real é: início → condição → corpo → passo → condição → corpo → passo… até a condição falhar. O passo pode ser qualquer conta, e você pode controlar duas variáveis de uma vez, separando com vírgula:</p>
+
+<pre class="term">$ for ((i = 10; i &gt; 0; i -= 3)); do echo -n "$i "; done; echo
+10 7 4 1                       « tira 3 a cada volta; -2 já não passa em i &gt; 0
+$ for ((i = 1, j = 10; i &lt;= 3; i++, j--)); do echo "$i e $j"; done
+1 e 10
+2 e 9
+3 e 8</pre>
+
+<p>E, diferente das chaves, aqui a variável funciona como limite:</p>
+
+<pre class="term">$ for ((i = 1; i &lt;= fim; i++)); do echo "Volta $i"; done
+Volta 1
+Volta 2
+Volta 3
+Volta 4
+Volta 5</pre>
+
+<div class="tryscript" data-file="tabuada.sh" data-args="7" data-goal="out:7 x 10 = 70,out:7 x 1 = 7,src:for *\(\(">
+<p class="try-task"><strong>Missão:</strong> o script recebe um número como argumento. Complete-o com um <code>for ((…))</code> que mostre a tabuada desse número de 1 a 10, no formato <code>7 x 1 = 7</code>. Dica: a conta é <code>$((n * i))</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+n=$1
+# escreva o for aqui
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+n=$1
+for ((i = 1; i &lt;= 10; i++)); do
+  echo "$n x $i = $((n * i))"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Percorrer os argumentos do script: <code>"$@"</code></h2>
+<p>Um script recebe argumentos em <code>$1</code>, <code>$2</code>… (veja <a href="argumentos.html">Argumentos</a>). Para tratar <strong>todos</strong>, não importa quantos sejam, use <code>"$@"</code> como lista:</p>
+
+<pre class="file" data-file="saudar.sh">#!/usr/bin/env bash
+echo "Recebi $# nomes."
+for nome in "$@"; do
+  echo "Olá, $nome!"
+done</pre>
+
+<pre class="term">$ bash saudar.sh Ana "Bruno Lima" Carla
+Recebi 3 nomes.
+Olá, Ana!
+Olá, Bruno Lima!               « as aspas de "$@" mantêm "Bruno Lima" inteiro
+Olá, Carla!
+$ bash saudar.sh
+Recebi 0 nomes.                « nenhum argumento: o laço não roda nenhuma vez</pre>
+
+<p>Agora veja o mesmo script com <code>$@</code> <strong>sem aspas</strong> (<code>for nome in $@; do</code>):</p>
+
+<pre class="term">$ bash saudar.sh Ana "Bruno Lima" Carla
+Recebi 3 nomes.                « o script recebeu 3 argumentos…
+Olá, Ana!
+Olá, Bruno!                    « …mas o for quebrou o segundo em dois
+Olá, Lima!
+Olá, Carla!</pre>
+
+<p>Sem aspas, o Bash separa de novo cada argumento nos espaços. Escreva sempre <code>"$@"</code>, com aspas. Existe ainda um atalho: <code>for nome; do</code>, sem o <code>in</code>, percorre <code>"$@"</code> automaticamente.</p>
+
+<pre class="term">$ set -- Ana "Bruno Lima"      « set -- define $1 e $2 no terminal, para testar
+$ for nome; do echo "Olá, $nome"; done
+Olá, Ana
+Olá, Bruno Lima</pre>
+
+<hr>
+
+<h2>Percorrer a saída de um comando (e o erro clássico)</h2>
+<p>Você pode usar a saída de um comando como lista, com <code>$( )</code>. Para extrair só os nomes dos alunos (a primeira coluna do <code>alunos.csv</code>, com <code>cut</code> — veja <a href="ferramentas-texto.html">grep, sed, awk e cia.</a>):</p>
+
+<pre class="term">$ cd ~/Documentos
+$ for nome in $(cut -d, -f1 alunos.csv); do echo "Aluno: $nome"; done
+Aluno: nome                    « o cabeçalho também veio
+Aluno: Ana
+Aluno: Bruno
+Aluno: Carla
+Aluno: Diego
+Aluno: Elisa</pre>
+
+<p>Funcionou porque cada nome é uma palavra só. Mas o <code>for</code> <strong>não</strong> percorre linhas: ele percorre <strong>palavras</strong>. A saída de <code>$( )</code> sem aspas é cortada em todo espaço, tab e quebra de linha. Veja o que acontece com a linha da Elisa, que mora em Porto Alegre:</p>
+
+<pre class="term">$ for linha in $(cat alunos.csv); do echo "Linha: $linha"; done
+Linha: nome,idade,cidade,nota
+Linha: Ana,29,Recife,9.5
+Linha: Bruno,34,Curitiba,7.0
+Linha: Carla,22,Salvador,8.5
+Linha: Diego,41,Manaus,6.0
+Linha: Elisa,27,Porto          « a linha foi cortada no espaço…
+Linha: Alegre,10.0             « …e virou duas "linhas"
+$ for linha in $(cat notas.txt); do echo "[$linha]"; done
+[Comprar]                      « cada palavra virou uma volta
+[café]
+[Ligar]
+[para]
+…</pre>
+
+<div class="warning">
+<strong>Para ler linhas, não use <code>for</code></strong>
+<p><code>for linha in $(cat arquivo)</code> é um dos erros mais comuns em scripts. Além de cortar nos espaços, ele também expande curingas que estiverem no texto (uma linha com <code>*</code> vira a lista de arquivos da pasta). O jeito certo de ler um arquivo linha por linha é <code>while IFS= read -r linha</code>, explicado em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+</div>
+
+<p>O mesmo vale para <code>for f in $(ls)</code>: a saída do <code>ls</code> é texto, e nomes com espaço se partem. Para arquivos, use sempre o curinga:</p>
+
+<pre class="term">$ cd ~/fotos
+$ for f in $(ls); do echo "$f"; done
+aniversario.jpg
+festa                          « errado: um arquivo virou dois
+junina.jpg
+praia.jpg
+$ for f in *; do echo "$f"; done
+aniversario.jpg
+festa junina.jpg               « certo
+praia.jpg</pre>
+
+<hr>
+
+<h2>Renomear arquivos em lote</h2>
+<p>Agora juntamos tudo numa tarefa real. A Ana tem uma pasta <code>fotos</code> com arquivos <code>.jpg</code>, um deles com espaço no nome, e quer trocar a extensão para <code>.jpeg</code>.</p>
+
+<pre class="term">$ cd ~/fotos
+$ ls
+ aniversario.jpg  'festa junina.jpg'   praia.jpg     « o ls mostra entre aspas o nome com espaço</pre>
+
+<h3>Passo 1: ensaie com <code>echo</code></h3>
+<p>Antes de mover qualquer coisa, coloque <code>echo</code> na frente do <code>mv</code>. Assim o laço só <strong>mostra</strong> os comandos que rodaria:</p>
+
+<pre class="term">$ for f in *.jpg; do echo mv "$f" "${f%.jpg}.jpeg"; done
+mv aniversario.jpg aniversario.jpeg
+mv festa junina.jpg festa junina.jpeg          « o echo não mostra as aspas, mas elas estão lá
+mv praia.jpg praia.jpeg</pre>
+
+<dl class="anatomy">
+  <dt>for f in *.jpg</dt><dd>Para cada arquivo terminado em <code>.jpg</code>.</dd>
+  <dt>echo mv</dt><dd>Ensaio: mostra o comando em vez de executá-lo. Tire o <code>echo</code> quando a lista estiver certa.</dd>
+  <dt>"$f"</dt><dd>O nome atual, entre aspas.</dd>
+  <dt>"${f%.jpg}.jpeg"</dt><dd><code>${f%.jpg}</code> é o nome sem o <code>.jpg</code> do final (<code>festa junina</code>); depois colamos <code>.jpeg</code>. Essa forma de "cortar o fim" é explicada em <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</dd>
+</dl>
+
+<h3>Passo 2: o erro de esquecer as aspas</h3>
+<p>Veja o que acontece se a Ana rodar a versão sem aspas:</p>
+
+<pre class="term">$ for f in *.jpg; do mv $f ${f%.jpg}.jpeg; done
+mv: alvo 'junina.jpeg': Arquivo ou diretório inexistente
+$ ls
+ aniversario.jpeg  'festa junina.jpg'   praia.jpeg    « duas renomeadas, uma ficou para trás</pre>
+
+<p>Sem aspas, <code>mv $f ${f%.jpg}.jpeg</code> virou <code>mv festa junina.jpg festa junina.jpeg</code>: <strong>quatro</strong> argumentos. Com mais de dois, o <code>mv</code> entende "mova os três primeiros para dentro da pasta <code>junina.jpeg</code>", que não existe. Por sorte deu erro; com outros nomes, poderia ter movido arquivos para o lugar errado.</p>
+
+<h3>Passo 3: a versão certa</h3>
+
+<pre class="term">$ for f in *.jpg; do mv "$f" "${f%.jpg}.jpeg"; done
+$ ls
+ aniversario.jpeg  'festa junina.jpeg'   praia.jpeg    « todas renomeadas</pre>
+
+<p>Nenhuma mensagem: o <code>mv</code> não fala nada quando dá certo. E repare que, na segunda vez, o <code>*.jpg</code> só pegou o arquivo que tinha sobrado. Os outros já eram <code>.jpeg</code>.</p>
+
+<div class="tip">
+<strong>Nome que começa com hífen</strong>
+<p>Se um arquivo se chamar <code>-foto.jpg</code>, o <code>mv</code> acha que é uma opção. Para scripts à prova disso, escreva <code>mv -- "$f" "${f%.jpg}.jpeg"</code>: o <code>--</code> avisa que acabaram as opções.</p>
+</div>
+
+<div class="try" data-setup="mkdir relatorios;;touch relatorios/jan.txt relatorios/fev.txt 'relatorios/mar abr.txt'" data-goal="file:~/relatorios/jan.bak,file:~/relatorios/mar abr.bak,absent:~/relatorios/fev.txt,absent:~/relatorios/mar abr.txt" data-solucao="cd relatorios;;for f in *.txt; do mv &quot;$f&quot; &quot;${f%.txt}.bak&quot;; done">
+<p class="try-task"><strong>Missão:</strong> na pasta <code>relatorios</code> há três arquivos <code>.txt</code>, um deles com espaço no nome. Com um único <code>for</code>, troque a extensão de todos para <code>.bak</code>. Ensaie primeiro com <code>echo mv</code>; confira com <code>ls</code>.</p>
+</div>
+
+<hr>
+
+<h2>O comando <code>seq</code></h2>
+<p>O <code>seq</code> (de <em>sequence</em>) é um programa que imprime números, um por linha. Ele existe fora do Bash e aceita variáveis, já que é um comando comum:</p>
+
+<pre class="term">$ seq 5
+1
+2
+3
+4
+5
+$ seq 2 5                      « início e fim
+2
+3
+4
+5
+$ seq 0 10 30                  « início, passo, fim (o passo fica no meio!)
+0
+10
+20
+30
+$ seq -w 8 11                  « -w: mesma largura, com zeros
+08
+09
+10
+11
+$ seq -s ' ' 1 5               « -s: separador entre os números
+1 2 3 4 5</pre>
+
+<p>Dentro de um <code>for</code>:</p>
+
+<pre class="term">$ for i in $(seq 1 3); do echo "Volta $i"; done
+Volta 1
+Volta 2
+Volta 3</pre>
+
+<p>Aqui o <code>$( )</code> sem aspas não atrapalha, porque números não têm espaço. Repare também que o <code>seq</code> respeita o idioma do sistema: com <code>LANG=pt_BR.UTF-8</code>, números quebrados saem com vírgula.</p>
+
+<pre class="term">$ seq 0.5 0.5 2
+0,5                            « vírgula, por causa do idioma pt_BR
+1,0
+1,5
+2,0</pre>
+
+<p>Hoje o <code>seq</code> é menos necessário: <code>{1..10}</code> e <code>for ((…))</code> fazem o mesmo sem chamar um programa externo. Ele ainda é útil para passos quebrados (<code>0.5</code>) e no <code>sh</code> (que não tem chaves nem <code>(( ))</code>).</p>
+
+<hr>
+
+<h2>Qual <code>for</code> usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer percorrer…</th><th>Use</th><th>Exemplo</th></tr>
+<tr><td>Alguns itens que você conhece</td><td>lista escrita</td><td><code>for s in web db cache; do</code></td></tr>
+<tr><td>Arquivos</td><td>curinga (+ <code>nullglob</code>)</td><td><code>for f in *.jpg; do</code></td></tr>
+<tr><td>Números fixos</td><td>chaves</td><td><code>for i in {1..10}; do</code></td></tr>
+<tr><td>Números até uma variável</td><td>estilo C</td><td><code>for ((i=1; i&lt;=n; i++)); do</code></td></tr>
+<tr><td>Números quebrados ou com largura fixa</td><td><code>seq</code></td><td><code>for x in $(seq 0.5 0.5 2); do</code></td></tr>
+<tr><td>Os argumentos do script</td><td><code>"$@"</code></td><td><code>for arg in "$@"; do</code></td></tr>
+<tr><td>Os itens de um array</td><td><code>"${a[@]}"</code></td><td><code>for x in "${lista[@]}"; do</code> (veja <a href="arrays.html">Arrays</a>)</td></tr>
+<tr><td>As <strong>linhas</strong> de um arquivo ou comando</td><td><strong>não use for</strong></td><td><code>while IFS= read -r linha</code> (<a href="ler-linhas.html">Ler Linhas</a>)</td></tr>
+<tr><td>"Enquanto algo for verdade", sem saber quantas vezes</td><td><code>while</code></td><td>veja <a href="while.html">while e until</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado `done'"</strong>
+<pre class="term">$ for x in 1 2 3 do echo $x; done
+bash: erro de sintaxe próximo ao token inesperado `done'</pre>
+<p><strong>O que aconteceu:</strong> faltou o <code>;</code> antes do <code>do</code>. O Bash achou que <code>do</code>, <code>echo</code> e <code>$x</code> eram mais itens da lista, e depois do <code>;</code> esperava um <code>do</code>, mas encontrou <code>done</code>.</p>
+<p><strong>Como resolver:</strong> <code>for x in 1 2 3; do echo $x; done</code>. Se a mensagem fala do token <code>`echo'</code>, quem faltou foi o próprio <code>do</code>:</p>
+<pre class="term">$ for i in 1 2 3; echo $i; done
+bash: erro de sintaxe próximo ao token inesperado `echo'</pre>
+</div>
+
+<div class="cenario">
+<strong>"não é um identificador válido"</strong>
+<pre class="term">$ for $i in 1 2 3; do echo $i; done
+bash: `$i': não é um identificador válido</pre>
+<p><strong>O que aconteceu:</strong> no <code>for</code>, você <em>dá nome</em> à variável, então ela vai <strong>sem</strong> <code>$</code>. O <code>$</code> só aparece quando você lê o valor, dentro do corpo.</p>
+<p><strong>Como resolver:</strong> <code>for i in 1 2 3; do echo $i; done</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal ficou mostrando <code>&gt;</code> e não roda</strong>
+<pre class="term">$ for i in 1 2 3; do echo $i done
+&gt; done
+1 done
+2 done
+3 done</pre>
+<p><strong>O que aconteceu:</strong> faltou o <code>;</code> antes do <code>done</code>. Sem ele, <code>done</code> virou só uma palavra para o <code>echo</code>, e o Bash ficou esperando o <code>done</code> de verdade (o <code>&gt;</code> é o prompt de continuação). Quando a Ana digitou <code>done</code> na linha seguinte, o laço rodou, imprimindo "done" a cada volta.</p>
+<p><strong>Como resolver:</strong> se estiver preso no <code>&gt;</code> e não souber o que falta, aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para cancelar e digite de novo com <code>; done</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"fim inesperado do arquivo" num script</strong>
+<pre class="term">$ bash semdone.sh
+semdone.sh: linha 4: erro de sintaxe: fim inesperado do arquivo do comando `for' na linha 2</pre>
+<p><strong>O que aconteceu:</strong> o <code>for</code> da linha 2 nunca foi fechado. O Bash leu o arquivo até o fim (a "linha 4" é depois da última) procurando o <code>done</code>.</p>
+<p><strong>Como resolver:</strong> confira se cada <code>for … do</code> tem o seu <code>done</code>. Indentar o corpo (2 espaços) ajuda a enxergar onde cada laço termina. <code>bash -n script.sh</code> confere a sintaxe sem rodar (veja <a href="depuracao.html">Depurar</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>O laço rodou uma vez só, com o texto literal</strong>
+<pre class="term">$ for i in 1..5; do echo $i; done
+1..5
+$ cd ~/Imagens
+$ for f in "*.jpg"; do echo "$f"; done
+*.jpg</pre>
+<p><strong>O que aconteceu:</strong> no primeiro, faltaram as chaves: o certo é <code>{1..5}</code>. No segundo, as aspas em volta do curinga desligaram o <code>*</code>, e a lista virou o texto <code>*.jpg</code>. O mesmo sintoma aparece com <code>{1..$n}</code> e quando o curinga não encontra arquivos (sem <code>nullglob</code>).</p>
+<p><strong>Como resolver:</strong> <code>{1..5}</code> com chaves; <code>for f in *.jpg</code> sem aspas no curinga; <code>for ((i=1; i&lt;=n; i++))</code> quando o limite é variável; <code>shopt -s nullglob</code> para pastas que podem estar vazias.</p>
+</div>
+
+<div class="cenario">
+<strong>Um nome com espaço virou dois</strong>
+<p><strong>O que aconteceu:</strong> a lista veio de <code>$(ls)</code> ou <code>$(cat …)</code>, ou você usou <code>$f</code> / <code>$@</code> sem aspas. Veja as sessões acima com <code>festa junina.jpg</code> e <code>Porto Alegre</code>.</p>
+<p><strong>Como resolver:</strong> arquivos → curinga; linhas → <a href="ler-linhas.html"><code>while read</code></a>; argumentos → <code>"$@"</code>; dentro do corpo → sempre <code>"$f"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>for x in a b c; do … done</code></td><td>Uma volta para cada palavra da lista.</td></tr>
+<tr><td><code>for f in *.txt; do</code></td><td>Uma volta para cada arquivo que combina com o curinga.</td></tr>
+<tr><td><code>shopt -s nullglob</code></td><td>Curinga sem resultado vira lista vazia (o laço não roda).</td></tr>
+<tr><td><code>for i in {1..10}; do</code></td><td>Números de 1 a 10 (não aceita variáveis).</td></tr>
+<tr><td><code>for i in {0..100..10}; do</code></td><td>De 0 a 100, de 10 em 10.</td></tr>
+<tr><td><code>for ((i=0; i&lt;n; i++)); do</code></td><td>Estilo C: início; condição; passo.</td></tr>
+<tr><td><code>for arg in "$@"; do</code> / <code>for arg; do</code></td><td>Cada argumento do script ou da função.</td></tr>
+<tr><td><code>for x in $(comando); do</code></td><td>Cada <strong>palavra</strong> da saída (não cada linha!).</td></tr>
+<tr><td><code>seq [início [passo]] fim</code></td><td>Imprime uma sequência de números (<code>-w</code> largura fixa, <code>-s</code> separador).</td></tr>
+<tr><td><code>break</code> / <code>continue</code></td><td>Sai do laço / pula para a próxima volta (<a href="break-continue.html">break e continue</a>).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Complete o laço</h3>
+<p>Complete para mostrar cada cor numa linha:</p>
+<div class="ex-code">for cor in azul verde rosa; <input data-answer="do" aria-label="palavra que abre o corpo"> echo "$cor"; <input data-answer="done" aria-label="palavra que fecha o laço"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Todos os arquivos .log</h3>
+<p>Complete para percorrer todos os arquivos terminados em <code>.log</code> da pasta atual:</p>
+<div class="ex-code">for arq in <input data-answer="*.log" aria-label="curinga">; do wc -l "$arq"; done</div>
+</div>
+
+<div class="exercise">
+<h3>3. Contagem com variável</h3>
+<p>O limite está em <code>$n</code>. Complete o <code>for</code> estilo C para contar de 1 até <code>n</code>:</p>
+<div class="ex-code">for ((i = 1; <input data-answer="i &lt;= n|i&lt;=n|i &lt;= $n|i&lt;=$n" aria-label="condição">; i++)); do echo $i; done</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Quantas vezes o corpo roda em <code>for linha in $(cat alunos.csv)</code>, sabendo que o arquivo tem 6 linhas e só a linha da Elisa tem um espaço ("Porto Alegre")?</p>
+<label><input type="radio" name="q4"> 6</label>
+<label><input type="radio" name="q4"> 5</label>
+<label><input type="radio" name="q4"> 7</label>
+<label><input type="radio" name="q4"> 1</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Numa pasta sem nenhum <code>.mp4</code> e sem <code>nullglob</code>, o que <code>for v in *.mp4; do echo "$v"; done</code> mostra?</p>
+<label><input type="radio" name="q5"> Nada.</label>
+<label><input type="radio" name="q5"> <code>*.mp4</code></label>
+<label><input type="radio" name="q5"> Uma mensagem de erro.</label>
+<label><input type="radio" name="q5"> A lista de todos os arquivos da pasta.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Qual linha renomeia com segurança todos os <code>.jpg</code> para <code>.jpeg</code>, inclusive nomes com espaço?</p>
+<label><input type="radio" name="q6"> <code>for f in *.jpg; do mv "$f" "${f%.jpg}.jpeg"; done</code></label>
+<label><input type="radio" name="q6"> <code>for f in $(ls *.jpg); do mv "$f" "${f%.jpg}.jpeg"; done</code></label>
+<label><input type="radio" name="q6"> <code>for f in *.jpg; do mv $f ${f%.jpg}.jpeg; done</code></label>
+<label><input type="radio" name="q6"> <code>for f in "*.jpg"; do mv "$f" "${f%.jpg}.jpeg"; done</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>for x in lista; do … done</code> roda o corpo uma vez para cada item; a variável vai sem <code>$</code> no <code>for</code> e com <code>$</code> no corpo.</li>
+  <li>Para arquivos, use curingas (<code>for f in *.jpg</code>) e <code>"$f"</code> com aspas; ligue <code>shopt -s nullglob</code> para pastas sem arquivos.</li>
+  <li>Para contar: <code>{1..10}</code> (números fixos), <code>for ((i=0; i&lt;n; i++))</code> (limite variável) ou <code>seq</code>.</li>
+  <li><code>for arg in "$@"</code> percorre os argumentos, mantendo os que têm espaço.</li>
+  <li>O <code>for</code> percorre <strong>palavras</strong>: nunca use <code>$(cat arquivo)</code> nem <code>$(ls)</code>. Para linhas, use <a href="ler-linhas.html"><code>while IFS= read -r</code></a>.</li>
+  <li>Antes de mover ou apagar em lote, ensaie com <code>echo</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

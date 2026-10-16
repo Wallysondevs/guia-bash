@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash while e until — repetir enquanto (ou até) algo acontecer | Guia Bash</title>
+<meta name="description" content="Aprenda while e until no Bash: contadores, while (( )), while true com break, menus que repetem, esperar um arquivo aparecer, laço infinito e Ctrl+C, com saídas reais explicadas e missões no simulador.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">while</span> e <span class="hl">until</span></h1>
+
+<p class="intro">O <code>for</code> repete para cada item de uma lista que você já tem. O <code>while</code> repete <strong>enquanto uma condição for verdadeira</strong>, sem saber de antemão quantas voltas serão: enquanto a senha estiver errada, enquanto o usuário não escolher "Sair", enquanto o arquivo não aparecer. O <code>until</code> é o mesmo laço com a condição ao contrário: repete <strong>até</strong> ela ficar verdadeira.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como o <code>while</code> decide se dá mais uma volta (o código de saída da condição).</li>
+  <li>A diferença entre <code>while</code> e <code>until</code>, e quando cada um lê melhor.</li>
+  <li>Contadores com <code>[[ ]]</code> e com <code>while (( … ))</code>.</li>
+  <li>O padrão <code>while true</code> + <code>break</code>: senhas, menus que repetem e esperas.</li>
+  <li>Como parar um laço infinito com <kbd>Ctrl</kbd>+<kbd>C</kbd>, e como escolher entre <code>while</code> e <code>for</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: repetir enquanto for verdade</h2>
+<p>Pense numa receita: "<em>enquanto</em> a água não ferver, espere". Você não sabe se vão ser 3 ou 8 minutos; você só sabe a condição de parada. É isso que o <code>while</code> (inglês para "enquanto") faz:</p>
+
+<pre class="syntax">while CONDIÇÃO; do
+  comandos
+done</pre>
+
+<p>A <strong>condição</strong> é um comando qualquer. O Bash roda esse comando e olha o <a href="codigo-saida.html">código de saída</a> dele:</p>
+<ul>
+  <li><strong>0</strong> (deu certo, "verdadeiro") → roda o corpo e volta a testar.</li>
+  <li><strong>diferente de 0</strong> ("falso") → o laço acaba e o script segue depois do <code>done</code>.</li>
+</ul>
+<p>É a mesma regra do <a href="if.html"><code>if</code></a>. A diferença é que o <code>if</code> testa uma vez; o <code>while</code> testa de novo a cada volta.</p>
+
+<hr>
+
+<h2>O contador: o <code>while</code> mais simples</h2>
+
+<pre class="term">$ i=1
+$ while [[ $i -le 3 ]]; do
+&gt;   echo "Volta $i"
+&gt;   i=$((i + 1))
+&gt; done
+Volta 1
+Volta 2
+Volta 3
+$ echo "Depois do laço, i vale $i"
+Depois do laço, i vale 4             « foi o 4 que fez a condição falhar</pre>
+
+<dl class="anatomy">
+  <dt>i=1</dt><dd>Prepara o contador <strong>antes</strong> do laço. O <code>while</code> não faz isso por você.</dd>
+  <dt>while</dt><dd>"Enquanto…"</dd>
+  <dt>[[ $i -le 3 ]]</dt><dd>A condição: "i é menor ou igual (<em>less or equal</em>) a 3?". Os testes estão em <a href="testes.html">Testes</a>.</dd>
+  <dt>; do</dt><dd>Fim da condição, começo do corpo.</dd>
+  <dt>echo "Volta $i"</dt><dd>O trabalho de cada volta.</dd>
+  <dt>i=$((i + 1))</dt><dd>Soma 1 ao contador. <strong>Sem esta linha, <code>i</code> seria 1 para sempre e o laço nunca acabaria.</strong></dd>
+  <dt>done</dt><dd>Volta para o <code>while</code>, que testa a condição de novo.</dd>
+</dl>
+
+<p>Volta por volta, o que o Bash faz:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Teste</th><th><code>i</code> vale</th><th><code>[[ $i -le 3 ]]</code></th><th>O que acontece</th></tr>
+<tr><td>1º</td><td>1</td><td>verdadeiro (0)</td><td>mostra "Volta 1", i passa a 2</td></tr>
+<tr><td>2º</td><td>2</td><td>verdadeiro (0)</td><td>mostra "Volta 2", i passa a 3</td></tr>
+<tr><td>3º</td><td>3</td><td>verdadeiro (0)</td><td>mostra "Volta 3", i passa a 4</td></tr>
+<tr><td>4º</td><td>4</td><td>falso (1)</td><td>o laço acaba</td></tr>
+</table>
+</div>
+
+<h3>Se a condição já começa falsa</h3>
+<p>O <code>while</code> testa <strong>antes</strong> de cada volta, inclusive da primeira. Se a condição já é falsa, o corpo não roda nem uma vez, e o código de saída do laço é 0:</p>
+
+<pre class="term">$ x=10
+$ while [[ $x -lt 3 ]]; do echo "x=$x"; done
+$ while false; do echo "nunca"; done
+$ echo $?
+0                                    « nenhuma volta não é erro</pre>
+
+<p>Quando o corpo roda, o código de saída do <code>while</code> é o do último comando do corpo que rodou.</p>
+
+<hr>
+
+<h2>Contas na condição: <code>while (( … ))</code></h2>
+<p>Quando a condição é uma comparação de números, os parênteses duplos (<a href="aritmetica.html">aritmética</a>) leem mais naturalmente: dá para usar <code>&gt;</code>, <code>&lt;=</code>, <code>==</code> e escrever as variáveis sem <code>$</code>.</p>
+
+<pre class="term">$ n=5
+$ while (( n &gt; 0 )); do echo -n "$n... "; ((n--)); done; echo "Fogo!"
+5... 4... 3... 2... 1... Fogo!</pre>
+
+<dl class="anatomy">
+  <dt>(( n &gt; 0 ))</dt><dd>Devolve 0 (verdadeiro) se a conta der verdadeiro, e 1 se der falso. Dentro de <code>(( ))</code>, <code>&gt;</code> é "maior que", não um redirecionamento.</dd>
+  <dt>((n--))</dt><dd>Diminui <code>n</code> em 1. É o mesmo que <code>n=$((n - 1))</code>.</dd>
+  <dt>echo -n</dt><dd>Escreve sem pular linha, para a contagem ficar lado a lado.</dd>
+</dl>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Condição com <code>[[ ]]</code></th><th>A mesma com <code>(( ))</code></th></tr>
+<tr><td><code>[[ $i -le 3 ]]</code></td><td><code>(( i &lt;= 3 ))</code></td></tr>
+<tr><td><code>[[ $n -gt 0 ]]</code></td><td><code>(( n &gt; 0 ))</code></td></tr>
+<tr><td><code>[[ $a -eq $b ]]</code></td><td><code>(( a == b ))</code></td></tr>
+<tr><td><code>[[ $x -ne 0 ]]</code></td><td><code>(( x != 0 ))</code> ou só <code>(( x ))</code></td></tr>
+</table>
+</div>
+
+<p>Para números, prefira <code>(( ))</code>. Para textos e arquivos (<code>== "sim"</code>, <code>-f arquivo</code>), use <code>[[ ]]</code>.</p>
+
+<div class="tryscript" data-file="regressiva.sh" data-goal="outre:5\n4\n3\n2\n1\nJá!,src:\b(while|until)\b">
+<p class="try-task"><strong>Missão:</strong> complete o script com um <code>while</code> que mostre os números de 5 até 1, um por linha, antes do "Já!". Não esqueça de diminuir <code>n</code> a cada volta.</p>
+<pre class="script">#!/usr/bin/env bash
+n=5
+# escreva aqui o while
+echo "Já!"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+n=5
+while (( n &gt;= 1 )); do
+  echo "$n"
+  ((n--))
+done
+echo "Já!"
+</pre>
+</div>
+
+<hr>
+
+<h2><code>until</code>: repetir <em>até</em> algo acontecer</h2>
+<p><code>until</code> é inglês para "até que". Ele é o <code>while</code> com a condição invertida: roda o corpo enquanto a condição for <strong>falsa</strong> e para quando ela fica verdadeira.</p>
+
+<pre class="term">$ i=1
+$ until [[ $i -gt 3 ]]; do
+&gt;   echo "Volta $i"
+&gt;   ((i++))
+&gt; done
+Volta 1
+Volta 2
+Volta 3</pre>
+
+<p>O resultado é igual ao primeiro exemplo: "até i passar de 3" é o mesmo que "enquanto i for no máximo 3". Os dois são sempre trocáveis:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th><code>until</code></th><th>O mesmo com <code>while</code></th></tr>
+<tr><td><code>until [[ $i -gt 3 ]]</code></td><td><code>while [[ $i -le 3 ]]</code></td></tr>
+<tr><td><code>until [[ -f pronto.txt ]]</code></td><td><code>while [[ ! -f pronto.txt ]]</code></td></tr>
+<tr><td><code>until (( saldo &lt;= 0 ))</code></td><td><code>while (( saldo &gt; 0 ))</code></td></tr>
+</table>
+</div>
+
+<p>Use o que ler melhor em português. "Espere <strong>até</strong> o arquivo existir" pede <code>until</code>; "repita <strong>enquanto</strong> houver saldo" pede <code>while</code>. Um exemplo com <code>until</code>:</p>
+
+<pre class="term">$ saldo=100
+$ until (( saldo &lt;= 0 )); do
+&gt;   echo "Saldo: $saldo"
+&gt;   (( saldo -= 40 ))
+&gt; done
+Saldo: 100
+Saldo: 60
+Saldo: 20
+$ echo "Saldo final: $saldo"
+Saldo final: -20                     « o teste só acontece no começo de cada volta</pre>
+
+<p>Repare no <code>-20</code>: o laço não "vê" o saldo ficar negativo no meio da volta. Ele só confere na hora de começar a próxima. Se o saldo não pudesse ficar negativo, você teria que testar antes de descontar.</p>
+
+<hr>
+
+<h2><code>while true</code> + <code>break</code>: quando a saída fica no meio</h2>
+<p>Às vezes a decisão de parar só pode ser tomada <strong>no meio</strong> do corpo, depois de ler algo. Por exemplo, pedir a senha: primeiro você lê, depois confere. Para isso existe o padrão "laço infinito com uma porta de saída":</p>
+
+<pre class="file" data-file="senha.sh">#!/usr/bin/env bash
+tentativas=0
+while true; do
+  read -rp "Senha: " senha
+  ((tentativas++))
+  if [[ $senha == "bash123" ]]; then
+    echo "Entrou! ($tentativas tentativas)"
+    break
+  fi
+  echo "Senha errada, tente de novo."
+done
+echo "Fim do script."</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>while true; do</code></td><td><code>true</code> é um comando que não faz nada e sempre devolve 0. A condição nunca fica falsa: o laço só termina por dentro.</td></tr>
+<tr><td><code>read -rp "Senha: " senha</code></td><td>Mostra "Senha: " e guarda o que a pessoa digitar em <code>senha</code> (veja <a href="read.html">read</a>).</td></tr>
+<tr><td><code>((tentativas++))</code></td><td>Conta mais uma tentativa.</td></tr>
+<tr><td><code>if [[ $senha == "bash123" ]]</code></td><td>Senha certa?</td></tr>
+<tr><td><code>break</code></td><td>Sai do laço na hora e pula para depois do <code>done</code> (veja <a href="break-continue.html">break e continue</a>).</td></tr>
+<tr><td><code>echo "Senha errada…"</code></td><td>Só chega aqui quem errou. Depois o <code>done</code> volta para o <code>while true</code>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash senha.sh
+Senha: abc
+Senha errada, tente de novo.
+Senha: 1234
+Senha errada, tente de novo.
+Senha: bash123
+Entrou! (3 tentativas)               « o break tirou do laço…
+Fim do script.                       « …e o script continuou depois do done</pre>
+
+<div class="tip">
+<strong><code>while :</code></strong>
+<p>Em scripts antigos você vai ver <code>while :; do</code>. O <code>:</code> é um comando que, como o <code>true</code>, não faz nada e devolve 0. Os dois funcionam igual; <code>true</code> é mais fácil de ler.</p>
+</div>
+
+<h3>Um menu que repete</h3>
+<p>O mesmo padrão, com um <a href="case.html"><code>case</code></a> dentro, faz um menu que volta a aparecer depois de cada escolha, até a pessoa pedir para sair:</p>
+
+<pre class="file" data-file="menu.sh">#!/usr/bin/env bash
+while true; do
+  echo "--- MENU ---"
+  echo "1) Ver data"
+  echo "2) Contar frutas"
+  echo "3) Sair"
+  read -rp "Escolha: " opcao
+  case $opcao in
+    1) date "+Hoje é %d/%m/%Y" ;;
+    2) echo "frutas.txt tem $(wc -l &lt; frutas.txt) linhas" ;;
+    3) echo "Tchau!"; break ;;
+    *) echo "Opção inválida: $opcao" ;;
+  esac
+done</pre>
+
+<pre class="term">$ bash menu.sh
+--- MENU ---
+1) Ver data
+2) Contar frutas
+3) Sair
+Escolha: 2
+frutas.txt tem 7 linhas
+--- MENU ---                         « o laço voltou ao começo
+1) Ver data
+2) Contar frutas
+3) Sair
+Escolha: 9
+Opção inválida: 9                    « o *) pega qualquer outra coisa
+--- MENU ---
+1) Ver data
+2) Contar frutas
+3) Sair
+Escolha: 3
+Tchau!                               « o break da opção 3 encerra o laço</pre>
+
+<p>Repare que o <code>break</code> dentro do <code>case</code> sai do <strong>laço</strong> <code>while</code>. O <code>;;</code> é o que termina cada opção do <code>case</code>. Para menus numerados prontos, o Bash ainda tem o <code>select</code> (veja <a href="interativo.html">Menus e Cores</a>).</p>
+
+<div class="tryscript" data-file="menu.sh" data-stdin="4\n3\n" data-goal="out:Fazer backup das fotos,out:Tchau!">
+<p class="try-task"><strong>Missão:</strong> acrescente ao menu a opção <code>4</code>, que mostra o conteúdo de <code>Documentos/notas.txt</code> com <code>cat</code>. A entrada já vem preparada: escolhe 4 e depois 3. Rode e confira.</p>
+<pre class="script">#!/usr/bin/env bash
+while true; do
+  echo "1) Contar frutas  3) Sair"
+  read -rp "Escolha: " opcao
+  case $opcao in
+    1) echo "frutas.txt tem $(wc -l &lt; frutas.txt) linhas" ;;
+    3) echo "Tchau!"; break ;;
+    *) echo "Opção inválida: $opcao" ;;
+  esac
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+while true; do
+  echo "1) Contar frutas  3) Sair  4) Ver notas"
+  read -rp "Escolha: " opcao
+  case $opcao in
+    1) echo "frutas.txt tem $(wc -l &lt; frutas.txt) linhas" ;;
+    3) echo "Tchau!"; break ;;
+    4) cat Documentos/notas.txt ;;
+    *) echo "Opção inválida: $opcao" ;;
+  esac
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Esperar algo acontecer</h2>
+<p>Um uso clássico do <code>until</code> é esperar: um arquivo ser criado por outro programa, um download terminar, um serviço responder. A receita é "teste; se ainda não, durma um pouco; teste de novo".</p>
+
+<pre class="file" data-file="espera.sh">#!/usr/bin/env bash
+echo "Esperando o arquivo pronto.txt..."
+until [[ -f pronto.txt ]]; do
+  sleep 1
+done
+echo "Chegou! Conteúdo: $(cat pronto.txt)"</pre>
+
+<dl class="anatomy">
+  <dt>until [[ -f pronto.txt ]]</dt><dd>"Até existir o arquivo comum <code>pronto.txt</code>." O teste <code>-f</code> está em <a href="testes.html">Testes</a>.</dd>
+  <dt>sleep 1</dt><dd>Espera 1 segundo antes de testar de novo. <strong>Não tire o <code>sleep</code></strong>: sem ele, o laço testaria milhares de vezes por segundo e deixaria o processador a 100%.</dd>
+</dl>
+
+<p>A Ana roda o script num terminal. Ele fica parado esperando. Em outro terminal, ela cria o arquivo:</p>
+
+<pre class="term" data-title="Terminal 2">$ echo "backup ok" &gt; pronto.txt</pre>
+
+<p>Em até um segundo, o primeiro terminal termina:</p>
+
+<pre class="term" data-title="Terminal 1">$ bash espera.sh
+Esperando o arquivo pronto.txt...
+Chegou! Conteúdo: backup ok</pre>
+
+<h3>Esperar, mas não para sempre</h3>
+<p>E se o arquivo nunca aparecer? O script ficaria preso. Um script bem feito tem um limite de tempo:</p>
+
+<pre class="file" data-file="espera2.sh">#!/usr/bin/env bash
+segundos=0
+until [[ -f pronto.txt ]]; do
+  if (( segundos &gt;= 5 )); then
+    echo "Desisti depois de $segundos segundos." &gt;&amp;2
+    exit 1
+  fi
+  sleep 1
+  ((segundos++))
+done
+echo "Chegou depois de $segundos segundos."</pre>
+
+<pre class="term">$ bash espera2.sh
+Desisti depois de 5 segundos.        « ninguém criou o arquivo
+$ echo $?
+1                                    « o exit 1 avisa quem chamou que deu errado</pre>
+
+<p>O <code>exit 1</code> encerra o script inteiro (não só o laço), com código 1. O <code>&gt;&amp;2</code> manda a mensagem para a saída de erro (veja <a href="redirecionamento.html">Redirecionamento</a>).</p>
+
+<hr>
+
+<h2>Laço infinito e <kbd>Ctrl</kbd>+<kbd>C</kbd></h2>
+<p>Um laço que nunca termina não é sempre um erro: um monitor que confere algo a cada minuto deve rodar até você mandar parar. Para interromper qualquer laço no terminal, aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>:</p>
+
+<pre class="term">$ while true; do echo "rodando..."; sleep 1; done
+rodando...
+rodando...
+rodando...
+^C                                   « a Ana apertou Ctrl+C
+$ echo $?
+130                                  « 128 + 2 (o sinal INT, "interromper")</pre>
+
+<p>O <code>^C</code> é o jeito de o terminal mostrar que você apertou <kbd>Ctrl</kbd>+<kbd>C</kbd>. Isso manda o sinal <strong>INT</strong> (<em>interrupt</em>) para o que está rodando, e o Bash abandona o laço inteiro. O código 130 significa "terminado pelo sinal 2". Sinais e como reagir a eles num script estão em <a href="trap.html">trap e Sinais</a>.</p>
+
+<div class="warning">
+<strong>O laço infinito por engano</strong>
+<p>O laço infinito acidental quase sempre é um contador que nunca muda: você esqueceu o <code>((i++))</code>, ou mudou a variável errada. Se a tela começar a encher sozinha, <kbd>Ctrl</kbd>+<kbd>C</kbd> e confira se a condição consegue ficar falsa algum dia.</p>
+</div>
+
+<hr>
+
+<h2><code>while</code> ou <code>for</code>?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th><th>Por quê</th></tr>
+<tr><td>Cada arquivo, cada nome, cada argumento</td><td><a href="for.html"><code>for x in …</code></a></td><td>A lista já existe; o <code>for</code> anda por ela sozinho.</td></tr>
+<tr><td>Contar de 1 a N</td><td><code>for ((i=1; i&lt;=n; i++))</code></td><td>Início, fim e passo ficam numa linha só; impossível esquecer o incremento.</td></tr>
+<tr><td>Repetir sem saber quantas vezes</td><td><code>while</code> / <code>until</code></td><td>Só a condição de parada importa.</td></tr>
+<tr><td>Pedir algo até a resposta ser válida; menus</td><td><code>while true</code> + <code>break</code></td><td>A decisão de sair vem depois de ler.</td></tr>
+<tr><td>Esperar um arquivo, processo ou serviço</td><td><code>until … ; do sleep N; done</code></td><td>Lê como "espere até".</td></tr>
+<tr><td>Cada <strong>linha</strong> de um arquivo</td><td><code>while IFS= read -r linha</code></td><td>O <code>for</code> quebra nos espaços. Veja <a href="ler-linhas.html">Ler Linhas</a>.</td></tr>
+<tr><td>Rodar para sempre (monitor)</td><td><code>while true; do …; sleep N; done</code></td><td>Para com <kbd>Ctrl</kbd>+<kbd>C</kbd> ou um sinal.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>A tela não para de encher</strong>
+<pre class="term">$ i=1
+$ while [[ $i -le 3 ]]; do echo "Volta $i"; done
+Volta 1
+Volta 1
+Volta 1
+…
+^C</pre>
+<p><strong>O que aconteceu:</strong> o corpo não muda <code>i</code>, então a condição é verdadeira para sempre.</p>
+<p><strong>Como resolver:</strong> <kbd>Ctrl</kbd>+<kbd>C</kbd>, e acrescente o incremento: <code>while [[ $i -le 3 ]]; do echo "Volta $i"; ((i++)); done</code>. Quando o laço é uma contagem simples, <code>for ((i=1; i&lt;=3; i++))</code> evita esse erro.</p>
+</div>
+
+<div class="cenario">
+<strong>"[: -le: esperava operador unário"</strong>
+<pre class="term">$ unset k
+$ while [ $k -le 3 ]; do echo $k; k=$((k+1)); done
+bash: [: -le: esperava operador unário</pre>
+<p><strong>O que aconteceu:</strong> a variável <code>k</code> não existia. Sem aspas, <code>$k</code> sumiu e o <code>[</code> recebeu só <code>-le 3</code>, que não faz sentido. O teste falhou com código 2, e o laço nem começou.</p>
+<p><strong>Como resolver:</strong> inicialize o contador antes do laço (<code>k=1</code>). Usar <code>[[ ]]</code> ou <code>(( ))</code> também evita essa mensagem, porque eles tratam variável vazia sem quebrar.</p>
+</div>
+
+<div class="cenario">
+<strong>"[[4: comando não encontrado"</strong>
+<pre class="term">$ while [[$i -le 3]]; do echo oi; done
+bash: [[4: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> faltaram os espaços depois de <code>[[</code> e antes de <code>]]</code>. O Bash juntou <code>[[</code> com o valor de <code>$i</code> (4) e procurou um comando chamado <code>[[4</code>. Como o comando falhou, a condição é falsa e o laço não rodou.</p>
+<p><strong>Como resolver:</strong> <code>while [[ $i -le 3 ]]; do</code>, com espaço dos dois lados.</p>
+</div>
+
+<div class="cenario">
+<strong>O laço não rodou nenhuma vez (e não apareceu nada)</strong>
+<p><strong>O que aconteceu:</strong> a condição já era falsa no primeiro teste. Causas comuns: contador iniciado com o valor errado; <code>while</code> e <code>until</code> trocados; comparação ao contrário (<code>-gt</code> no lugar de <code>-lt</code>).</p>
+<p><strong>Como confirmar:</strong> rode a condição sozinha e veja o código: <code>[[ $i -le 3 ]]; echo $?</code>. Se der 1, ela é falsa agora. Ou rode o script com <code>bash -x</code> (veja <a href="depuracao.html">Depurar</a>) para ver cada teste.</p>
+</div>
+
+<div class="cenario">
+<strong>Com <code>set -e</code>, o script morre no <code>((i++))</code></strong>
+<pre class="term">$ i=0
+$ ((i++))
+$ echo $?
+1                                    « i++ devolve o valor ANTIGO (0), que conta como "falso"</pre>
+<p><strong>O que aconteceu:</strong> <code>(( ))</code> devolve 1 quando o resultado da conta é 0. Em <code>i++</code>, o resultado é o valor de antes de somar. Com <code>set -e</code> (veja <a href="modo-estrito.html">set -euo pipefail</a>), esse 1 encerra o script.</p>
+<p><strong>Como resolver:</strong> use <code>((++i))</code>, que devolve o valor novo, ou <code>i=$((i + 1))</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>while COND; do … done</code></td><td>Repete enquanto COND devolver 0.</td></tr>
+<tr><td><code>until COND; do … done</code></td><td>Repete enquanto COND devolver diferente de 0 (até ficar verdadeira).</td></tr>
+<tr><td><code>while [[ $i -le 10 ]]</code></td><td>Condição com teste.</td></tr>
+<tr><td><code>while (( i &lt;= 10 ))</code></td><td>Condição com aritmética.</td></tr>
+<tr><td><code>while true</code> / <code>while :</code></td><td>Laço infinito; sai com <code>break</code>, <code>exit</code> ou <kbd>Ctrl</kbd>+<kbd>C</kbd>.</td></tr>
+<tr><td><code>until [[ -f arq ]]; do sleep 1; done</code></td><td>Espera um arquivo aparecer.</td></tr>
+<tr><td><code>while IFS= read -r linha; do … done &lt; arq</code></td><td>Lê um arquivo linha por linha (<a href="ler-linhas.html">Ler Linhas</a>).</td></tr>
+<tr><td><code>break</code> / <code>continue</code></td><td>Sai do laço / pula para o próximo teste (<a href="break-continue.html">break e continue</a>).</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Interrompe o laço no terminal (código 130).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Complete o contador</h3>
+<p>Complete para mostrar os números de 1 a 5:</p>
+<div class="ex-code">i=1; <input data-answer="while" aria-label="laço"> (( i &lt;= 5 )); do echo $i; <input data-answer="((i++))|((++i))|i=$((i+1))|i=$((i + 1))|((i+=1))|let i++" aria-label="incremento">; done</div>
+</div>
+
+<div class="exercise">
+<h3>2. Troque por until</h3>
+<p>Reescreva <code>while [[ $n -lt 10 ]]</code> com <code>until</code>, completando o operador:</p>
+<div class="ex-code">until [[ $n <input data-answer="-ge" aria-label="operador"> 10 ]]</div>
+</div>
+
+<div class="exercise">
+<h3>3. Esperar o download</h3>
+<p>Complete para esperar até o arquivo <code>video.mp4</code> existir, testando a cada 2 segundos:</p>
+<div class="ex-code"><input data-answer="until" aria-label="laço"> [[ -f video.mp4 ]]; do <input data-answer="sleep 2" aria-label="esperar"> ; done</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O que mostra <code>x=5; while (( x &lt; 3 )); do echo oi; done; echo $?</code>?</p>
+<label><input type="radio" name="q4"> <code>oi</code> três vezes e depois <code>0</code></label>
+<label><input type="radio" name="q4"> <code>oi</code> para sempre</label>
+<label><input type="radio" name="q4"> Só <code>0</code></label>
+<label><input type="radio" name="q4"> Só <code>1</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Num menu com <code>while true</code> e <code>case</code>, o que faz a opção <code>3) echo "Tchau!"; break ;;</code>?</p>
+<label><input type="radio" name="q5"> Sai só do <code>case</code> e mostra o menu de novo.</label>
+<label><input type="radio" name="q5"> Mostra "Tchau!" e sai do laço <code>while</code>.</label>
+<label><input type="radio" name="q5"> Encerra o terminal.</label>
+<label><input type="radio" name="q5"> Dá erro, porque <code>break</code> não pode ficar dentro de <code>case</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Por que o laço de espera tem <code>sleep 1</code> dentro?</p>
+<label><input type="radio" name="q6"> Porque o <code>until</code> exige pelo menos um comando <code>sleep</code>.</label>
+<label><input type="radio" name="q6"> Para o arquivo ter tempo de ser lido.</label>
+<label><input type="radio" name="q6"> Para o <kbd>Ctrl</kbd>+<kbd>C</kbd> funcionar.</label>
+<label><input type="radio" name="q6"> Para não testar sem parar e ocupar o processador à toa.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>while COND</code> repete enquanto a condição devolver 0; <code>until COND</code> repete até ela devolver 0.</li>
+  <li>A condição é testada antes de cada volta; se já começa falsa, o corpo não roda.</li>
+  <li>Num contador, prepare a variável antes e mude-a dentro do laço; para números, <code>(( ))</code> lê melhor.</li>
+  <li><code>while true</code> + <code>break</code> serve quando a decisão de parar vem no meio (senhas, menus).</li>
+  <li>Para esperar algo, use <code>until …; do sleep N; done</code>, de preferência com limite de tempo.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>C</kbd> interrompe qualquer laço (código 130). Para listas, prefira o <a href="for.html"><code>for</code></a>; para linhas de arquivo, <a href="ler-linhas.html"><code>while read</code></a>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
