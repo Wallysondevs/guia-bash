@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Anatomia de um Comando — comando, opções e argumentos | Guia Bash</title>
+<meta name="description" content="Como um comando do Bash é montado: nome, opções curtas, longas, combinadas e com valor, argumentos, o -- que encerra as opções, espaços separando palavras, maiúsculas, comando interno x programa e comandos em várias linhas com a barra invertida.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Anatomia de um Comando</span></h1>
+
+<p class="intro">Quase todo comando que você vai digitar segue a mesma receita: um <strong>nome</strong>, depois <strong>opções</strong> que mudam o comportamento e, por fim, <strong>argumentos</strong> que dizem em que trabalhar. Quem entende essa receita consegue ler qualquer comando, até os que nunca viu.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As três partes de um comando: nome, opções e argumentos.</li>
+  <li>Opções curtas (<code>-l</code>), longas (<code>--lines</code>), combinadas (<code>-lw</code>) e com valor (<code>-n 2</code>).</li>
+  <li>Por que os espaços e as maiúsculas importam, e para que serve o <code>--</code>.</li>
+  <li>A diferença entre comando interno e programa externo (<code>type</code>).</li>
+  <li>Como quebrar um comando comprido em várias linhas com <code>\</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A receita geral</h2>
+<p>Pense num pedido na padaria: "<strong>pão</strong>, <strong>bem passado</strong>, <strong>seis</strong>". Há o que você quer (o pão), um jeito de preparar (bem passado) e a quantidade. Um comando é igual:</p>
+
+<pre class="syntax">comando [opções] [argumentos]</pre>
+
+<p>Os colchetes querem dizer "opcional": há comandos sem opções e comandos sem argumentos. Vamos ver as partes com o <code>wc</code> (de <em>word count</em>, "contagem de palavras"), que conta linhas, palavras e bytes de um arquivo.</p>
+
+<h3>Só o nome e um argumento</h3>
+<dl class="anatomy">
+  <dt>wc</dt><dd>O <strong>nome do comando</strong>: sempre a primeira palavra da linha.</dd>
+  <dt>frutas.txt</dt><dd>Um <strong>argumento</strong>: em que o comando vai trabalhar.</dd>
+</dl>
+
+<pre class="term">$ wc frutas.txt
+ 7  7 47 frutas.txt                « linhas, palavras, bytes e o nome</pre>
+
+<p>Sem opções, o <code>wc</code> mostra três números: 7 linhas, 7 palavras (uma fruta por linha) e 47 bytes. "Bytes" é o tamanho; as letras com acento ocupam 2 bytes cada.</p>
+
+<h3>Uma opção curta</h3>
+<p>Uma <strong>opção</strong> muda o comportamento do comando. As opções curtas têm <strong>um hífen e uma letra</strong>. Normalmente a letra é a inicial de uma palavra em inglês.</p>
+
+<dl class="anatomy">
+  <dt>wc</dt><dd>O comando.</dd>
+  <dt>-l</dt><dd>Opção curta: <em>lines</em>, "linhas". Só conte as linhas.</dd>
+  <dt>frutas.txt</dt><dd>O argumento.</dd>
+</dl>
+
+<pre class="term">$ wc -l frutas.txt
+7 frutas.txt</pre>
+
+<h3>A mesma opção, por extenso</h3>
+<p>Muitos programas oferecem também uma <strong>opção longa</strong>: <strong>dois hífens e uma palavra</strong>. Ela faz exatamente o mesmo que a curta, mas é mais fácil de ler.</p>
+
+<pre class="term">$ wc --lines frutas.txt
+7 frutas.txt</pre>
+
+<h3>Juntando opções curtas</h3>
+<p>Várias opções curtas podem ir separadas ou coladas atrás de um hífen só. As três formas abaixo são iguais: <code>-l</code> (linhas) e <code>-w</code> (<em>words</em>, palavras).</p>
+
+<pre class="term">$ wc -l -w frutas.txt
+ 7  7 frutas.txt                   « linhas e palavras
+$ wc -lw frutas.txt
+ 7  7 frutas.txt                   « mesma coisa, com as letras coladas</pre>
+
+<p>Repare que o resultado não segue a ordem que você digitou: o <code>wc</code> sempre mostra linhas, depois palavras, depois bytes.</p>
+
+<h3>Opções que pedem um valor</h3>
+<p>Algumas opções precisam de uma informação extra. O <code>head</code> ("cabeça") mostra o começo de um arquivo, e a opção <code>-n</code> (<em>number</em>, "número") diz quantas linhas:</p>
+
+<dl class="anatomy">
+  <dt>head</dt><dd>O comando: mostra as primeiras linhas.</dd>
+  <dt>-n</dt><dd>A opção: "quantas linhas".</dd>
+  <dt>2</dt><dd>O <strong>valor da opção</strong>: pertence ao <code>-n</code>, não é um argumento do comando.</dd>
+  <dt>frutas.txt</dt><dd>O argumento: o arquivo.</dd>
+</dl>
+
+<pre class="term">$ head -n 2 frutas.txt
+banana
+maçã
+$ head -n2 frutas.txt                « valor colado na letra
+banana
+maçã
+$ head --lines=2 frutas.txt          « forma longa: valor depois de =
+banana
+maçã</pre>
+
+<h3>Vários argumentos</h3>
+<p>Muitos comandos aceitam vários argumentos e fazem o trabalho para cada um. O <code>wc</code> ainda soma tudo no fim:</p>
+
+<pre class="term">$ wc -l frutas.txt Documentos/notas.txt
+  7 frutas.txt
+  4 Documentos/notas.txt
+ 11 total                          « a soma, porque havia mais de um arquivo</pre>
+
+<h3>Qual forma usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td>Curta</td><td><code>wc -l</code></td><td>Você digita no terminal: é rápida.</td></tr>
+<tr><td>Curtas coladas</td><td><code>wc -lw</code>, <code>ls -la</code></td><td>Várias opções sem valor, no dia a dia.</td></tr>
+<tr><td>Longa</td><td><code>wc --lines</code></td><td>Em scripts e tutoriais: quem lê entende sem consultar o manual.</td></tr>
+<tr><td>Com valor separado</td><td><code>head -n 2</code></td><td>Sempre funciona, em qualquer sistema.</td></tr>
+<tr><td>Com valor colado / com <code>=</code></td><td><code>head -n2</code>, <code>head --lines=2</code></td><td>Mais compacto; o <code>=</code> deixa claro que o valor é da opção.</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Nem todo comando segue a regra à risca</strong>
+<p>A receita "hífen + letra, dois hífens + palavra" é um costume, não uma lei. Alguns programas antigos usam outras formas: <code>find -name</code> (um hífen e uma palavra), <code>tar xzf</code> (sem hífen), <code>dd if=arquivo</code>. E nem todo programa tem opções longas. Quando estranhar, consulte a ajuda (<a href="ajuda.html">Obtendo Ajuda</a>).</p>
+</div>
+
+<div class="try" data-goal="ran:--lines,out:laranja" data-solucao="head --lines=3 frutas.txt">
+<p class="try-task"><strong>Missão:</strong> mostre as 3 primeiras linhas de <code>frutas.txt</code> usando a forma <strong>longa</strong> da opção do <code>head</code>. Depois repita com a forma curta e compare.</p>
+</div>
+
+<hr>
+
+<h2>Espaços separam as palavras</h2>
+<p>Para o Bash, o espaço é o separador entre as partes do comando. Tanto faz um espaço ou vários, mas faz toda a diferença ter ou não ter espaço:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você digita</th><th>O Bash entende</th></tr>
+<tr><td><code>wc -l  frutas.txt</code></td><td>3 palavras: <code>wc</code>, <code>-l</code>, <code>frutas.txt</code> (os espaços extras não contam)</td></tr>
+<tr><td><code>wc-l frutas.txt</code></td><td>2 palavras: um comando chamado <code>wc-l</code>, que não existe</td></tr>
+<tr><td><code>ls Área de trabalho</code></td><td>4 palavras: <code>ls</code> e <strong>três</strong> argumentos</td></tr>
+<tr><td><code>ls "Área de trabalho"</code></td><td>2 palavras: <code>ls</code> e <strong>um</strong> argumento (as aspas juntam)</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ls Área de trabalho
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente
+$ ls "Área de trabalho"
+$ echo $?
+0                                  « funcionou: a pasta só está vazia</pre>
+
+<p>O <code>ls</code> recebeu três nomes e procurou cada um. Com aspas, recebeu um só, o nome certo. As aspas têm muito mais a ensinar: <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<hr>
+
+<h2>Maiúsculas importam</h2>
+<p>O Bash e quase todos os programas diferenciam maiúsculas de minúsculas, tanto no nome do comando quanto nas opções:</p>
+
+<pre class="term">$ WC -l frutas.txt
+bash: WC: comando não encontrado   « o comando é wc, em minúsculas
+$ wc -l frutas.txt
+7 frutas.txt                       « -l = número de linhas
+$ wc -L frutas.txt
+7 frutas.txt                       « -L = tamanho da linha mais longa ("laranja", 7 letras)</pre>
+
+<p>As duas últimas respostas são iguais por coincidência, mas as opções são diferentes: <code>-l</code> conta linhas, <code>-L</code> mede a linha mais comprida. Com <code>ls</code>, <code>-a</code> e <code>-A</code> também mostram coisas diferentes. Não troque uma pela outra.</p>
+
+<hr>
+
+<h2>O <code>--</code>: "acabaram as opções"</h2>
+<p>Como o programa sabe que <code>-l</code> é uma opção e <code>frutas.txt</code> é um argumento? Pelo hífen. Isso cria um problema com arquivos cujo nome <strong>começa com hífen</strong>. Veja o que acontece com um arquivo chamado <code>-teste</code>:</p>
+
+<pre class="term">$ touch -- -teste                  « cria o arquivo "-teste" (o -- já explicamos)
+$ ls -teste
+ls: opção inválida -- “e”
+Tente "ls --help" para mais informações.</pre>
+
+<p>O <code>ls</code> entendeu <code>-teste</code> como as opções <code>-t</code>, <code>-e</code>, <code>-s</code>… e reclamou do <code>e</code>, que não existe. A solução é o <code>--</code>: dois hífens <strong>sozinhos</strong> avisam "daqui em diante, nada é opção".</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O comando.</dd>
+  <dt>--</dt><dd>Fim das opções. Tudo depois disto é argumento, mesmo começando com hífen.</dd>
+  <dt>-teste</dt><dd>Agora é um nome de arquivo.</dd>
+</dl>
+
+<pre class="term">$ ls -- -teste
+-teste
+$ rm -teste
+rm: opção inválida -- “t”
+Tente "rm ./-teste" para remover o arquivo '-teste'.      « o próprio rm sugere outra saída
+Tente "rm --help" para mais informações.
+$ rm ./-teste                      « ./ = "nesta pasta": o nome não começa mais com hífen</pre>
+
+<p>Há duas soluções: <code>--</code> antes do nome, ou escrever o caminho com <code>./</code> na frente (<code>./-teste</code> é o mesmo arquivo, mas começa com ponto). Em scripts, use <code>--</code> sempre que o nome vier de uma variável: <code>rm -- "$arquivo"</code>.</p>
+
+<div class="try" data-setup="touch -- -teste" data-goal="absent:~/-teste" data-solucao="rm -- -teste">
+<p class="try-task"><strong>Missão:</strong> alguém criou na pasta da Ana um arquivo chamado <code>-teste</code>. Veja-o com <code>ls</code> e apague-o com o <code>rm</code>. Dica: <code>rm -teste</code> não funciona.</p>
+</div>
+
+<hr>
+
+<h2>Comando interno × programa</h2>
+<p>O nome do comando pode ser duas coisas bem diferentes:</p>
+<ul>
+  <li><strong>Comando interno</strong> (<em>builtin</em>): faz parte do próprio Bash, como <code>echo</code>, <code>cd</code> e <code>type</code>.</li>
+  <li><strong>Programa externo</strong>: um arquivo separado no disco, como <code>wc</code>, <code>ls</code> e <code>head</code>. O Bash procura esse arquivo numa lista de pastas e manda o sistema rodá-lo.</li>
+</ul>
+<p>O comando <code>type</code> ("tipo") diz o que é cada nome:</p>
+
+<pre class="term">$ type echo
+echo é um comando interno do shell
+$ type wc
+wc é /usr/bin/wc                   « um programa: o arquivo /usr/bin/wc
+$ type ls
+ls está apelidada para `ls --color=auto'   « um apelido (alias) definido no .bashrc da Ana</pre>
+
+<p>Por enquanto, guarde a ideia: os dois são usados do mesmo jeito, mas a ajuda de cada um fica num lugar diferente (<a href="ajuda.html">Obtendo Ajuda</a>), e a lista de pastas onde o Bash procura programas é o <code>PATH</code> (<a href="path.html">PATH</a>). Apelidos são o assunto de <a href="alias.html">alias</a>.</p>
+
+<hr>
+
+<h2>Um comando em várias linhas: <code>\</code></h2>
+<p>Comandos compridos ficam mais fáceis de ler quebrados em várias linhas. Uma <strong>barra invertida</strong> (<code>\</code>) como último caractere da linha diz ao Bash: "o comando continua na próxima linha". Ele mostra o prompt de continuação <code>&gt;</code> e espera o resto.</p>
+
+<pre class="term">$ wc -l \
+&gt;   frutas.txt \
+&gt;   Documentos/notas.txt
+  7 frutas.txt
+  4 Documentos/notas.txt
+ 11 total</pre>
+
+<p>O Bash junta tudo como se fosse uma linha só: <code>wc -l frutas.txt Documentos/notas.txt</code>. O <code>&gt;</code> não é digitado por você: é o Bash pedindo a continuação. Os espaços no começo das linhas são só para ficar bonito.</p>
+
+<div class="warning">
+<strong>Nada depois da barra</strong>
+<p>A <code>\</code> tem de ser o <strong>último</strong> caractere da linha. Um espaço depois dela estraga tudo: a barra passa a valer para o espaço, e o <kbd>Enter</kbd> termina o comando ali mesmo.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"opção inválida"</strong>
+<pre class="term">$ wc -x frutas.txt
+wc: opção inválida -- “x”
+Tente "wc --help" para mais informações.
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o <code>wc</code> não tem a opção <code>-x</code>. Cada programa tem as suas opções; uma letra que funciona num pode não existir em outro.</p>
+<p><strong>Como resolver:</strong> veja as opções com <code>wc --help</code>. Se o nome era um arquivo começando com hífen, use <code>--</code> ou <code>./</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"número inválido de linhas"</strong>
+<pre class="term">$ head -n frutas.txt
+head: número inválido de linhas: ‘frutas.txt’</pre>
+<p><strong>O que aconteceu:</strong> o <code>-n</code> pede um valor e pegou a próxima palavra, que era o nome do arquivo.</p>
+<p><strong>Como resolver:</strong> coloque o número logo depois da opção: <code>head -n 3 frutas.txt</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O nome com espaços virou vários argumentos</strong>
+<p><strong>O que aconteceu:</strong> veja a seção "Espaços separam as palavras": <code>ls Área de trabalho</code> procura três coisas.</p>
+<p><strong>Como resolver:</strong> aspas (<code>"Área de trabalho"</code>), ou barra invertida antes de cada espaço (<code>Área\ de\ trabalho</code>), ou <kbd>Tab</kbd>, que escreve o nome certo para você (<a href="completar.html">Completar com Tab</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"comando não encontrado" com um nome que existe</strong>
+<pre class="term">$ WC -l frutas.txt
+bash: WC: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> maiúscula no lugar de minúscula, ou falta de espaço entre o comando e a opção (<code>wc-l</code>).</p>
+<p><strong>Como resolver:</strong> digite em minúsculas e separe as partes com espaço.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>Forma</th><th>Exemplo</th></tr>
+<tr><td>Nome do comando</td><td>Primeira palavra</td><td><code>wc</code></td></tr>
+<tr><td>Opção curta</td><td><code>-letra</code></td><td><code>wc -l</code></td></tr>
+<tr><td>Opções curtas combinadas</td><td><code>-letras</code></td><td><code>wc -lw</code></td></tr>
+<tr><td>Opção longa</td><td><code>--palavra</code></td><td><code>wc --lines</code></td></tr>
+<tr><td>Opção com valor</td><td><code>-n 2</code>, <code>-n2</code>, <code>--lines=2</code></td><td><code>head -n 2 frutas.txt</code></td></tr>
+<tr><td>Argumento</td><td>O que sobra: arquivos, textos, pastas</td><td><code>frutas.txt</code></td></tr>
+<tr><td>Fim das opções</td><td><code>--</code></td><td><code>rm -- -teste</code></td></tr>
+<tr><td>Continuação de linha</td><td><code>\</code> no fim da linha</td><td><code>wc -l \</code></td></tr>
+<tr><td>O que é este nome?</td><td><code>type nome</code></td><td><code>type echo</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Forma longa</h3>
+<p>Complete com a forma longa de <code>wc -l</code>:</p>
+<div class="ex-code">wc <input data-answer="--lines" aria-label="opção"> frutas.txt</div>
+</div>
+
+<div class="exercise">
+<h3>2. Opções coladas</h3>
+<p>Complete para contar linhas e palavras com as duas letras coladas atrás de um hífen só:</p>
+<div class="ex-code">wc <input data-answer="-lw|-wl" aria-label="opções"> frutas.txt</div>
+</div>
+
+<div class="exercise">
+<h3>3. Arquivo com hífen</h3>
+<p>Complete para apagar o arquivo <code>-velho</code>:</p>
+<div class="ex-code">rm <input data-answer="--|-- -velho" aria-label="separador"> -velho</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Em <code>head -n 5 notas.txt</code>, o que é o <code>5</code>?</p>
+<label><input type="radio" name="q4"> O nome do comando.</label>
+<label><input type="radio" name="q4"> Um argumento: um arquivo chamado 5.</label>
+<label><input type="radio" name="q4"> O valor da opção <code>-n</code>.</label>
+<label><input type="radio" name="q4"> Uma opção curta.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Quantos argumentos o <code>ls</code> recebe em <code>ls -l Área de trabalho</code>?</p>
+<label><input type="radio" name="q5"> 1</label>
+<label><input type="radio" name="q5"> 3 (fora a opção <code>-l</code>)</label>
+<label><input type="radio" name="q5"> 4</label>
+<label><input type="radio" name="q5"> Nenhum</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Receita: <code>comando [opções] [argumentos]</code>, tudo separado por espaços.</li>
+  <li>Opção curta: <code>-l</code>; combinadas: <code>-lw</code>; longa: <code>--lines</code>; com valor: <code>-n 2</code> ou <code>--lines=2</code>.</li>
+  <li>Maiúsculas importam; aspas juntam palavras com espaço.</li>
+  <li><code>--</code> encerra as opções (útil com nomes que começam com hífen).</li>
+  <li><code>type</code> diz se o nome é comando interno, programa ou apelido; <code>\</code> no fim da linha continua o comando.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
