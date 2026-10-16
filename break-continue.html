@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash break e continue — sair do laço e pular uma volta | Guia Bash</title>
+<meta name="description" content="Aprenda break e continue no Bash: parar um laço quando achar o que procura, pular linhas vazias e comentários, break 2 e continue 2 em laços aninhados, e a diferença entre exit, break e return.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">break e continue</span></h1>
+
+<p class="intro">Um laço (<code>for</code>, <code>while</code>, <code>until</code>) repete tudo, do começo ao fim. Às vezes você quer <strong>parar antes</strong>, porque já achou o que procurava, ou <strong>pular só esta volta</strong>, porque a linha está vazia. Para isso existem dois comandos curtinhos: <code>break</code> e <code>continue</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como <code>break</code> encerra o laço na hora, e o que acontece depois dele.</li>
+  <li>Como <code>continue</code> pula para a próxima volta (linhas vazias, comentários, cabeçalho).</li>
+  <li>O que fazem <code>break 2</code> e <code>continue 2</code> quando há um laço dentro de outro.</li>
+  <li>A diferença entre <code>break</code>, <code>return</code> e <code>exit</code>.</li>
+  <li>As armadilhas: <code>continue</code> que trava o <code>while</code>, <code>break</code> dentro de <code>case</code> e dentro de função.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: o laço não sabe a hora de parar</h2>
+<p>Pense numa fila de alunos entrando na sala. Você procura a Carla. Quando ela chega, você não precisa continuar olhando o resto da fila: <strong>para</strong>. Já quando passa alguém de outra turma, você não para a fila inteira: só <strong>ignora essa pessoa</strong> e olha a próxima.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Em inglês</th><th>Na fila</th><th>No laço</th></tr>
+<tr><td><code>break</code></td><td>"quebrar", interromper</td><td>Achei a Carla, paro de olhar.</td><td>Sai do laço inteiro e segue para a linha depois do <code>done</code>.</td></tr>
+<tr><td><code>continue</code></td><td>"continuar" (com a próxima)</td><td>Esse não é da turma, próximo!</td><td>Abandona o resto <strong>desta</strong> volta e começa a próxima.</td></tr>
+</table>
+</div>
+
+<pre class="syntax">for x in a b c d; do          for x in a b c d; do
+  comandos                      comandos
+  break      ──┐                continue  ──┐   (volta para o topo,
+  …            │                …           │    com o próximo x)
+done           │              done  ◄───────┘
+próximo ◄──────┘  (sai do laço)</pre>
+
+<hr>
+
+<h2><code>break</code>: achou, para</h2>
+<p>O uso mais comum é <strong>procurar e parar</strong>. Este laço olha uma lista de números e para no primeiro maior que 10:</p>
+
+<pre class="term">$ for n in 4 8 15 16 23 42; do
+&gt;   if (( n &gt; 10 )); then
+&gt;     echo "achei: $n"
+&gt;     break
+&gt;   fi
+&gt;   echo "olhei $n"
+&gt; done
+olhei 4
+olhei 8
+achei: 15                 « no 15 o break encerrou o laço: 16, 23 e 42 nem foram olhados
+$ echo "código: $?"
+código: 0                 « o break em si não é erro: código 0</pre>
+
+<dl class="anatomy">
+  <dt>for n in 4 8 15 16 23 42</dt><dd>O laço vai dar uma volta para cada número (veja <a href="for.html">for</a>).</dd>
+  <dt>if (( n &gt; 10 ))</dt><dd>A condição de parada: "o número é maior que 10?" (veja <a href="aritmetica.html">contas com (( ))</a>).</dd>
+  <dt>echo "achei: $n"</dt><dd>Faz o que precisa <strong>antes</strong> de sair.</dd>
+  <dt>break</dt><dd>Encerra o laço agora. O Bash pula direto para o que vem depois do <code>done</code>.</dd>
+  <dt>echo "olhei $n"</dt><dd>Só roda nas voltas em que o <code>break</code> não aconteceu. Na volta do 15 ele foi pulado.</dd>
+</dl>
+
+<p>Repare na ordem da saída: "olhei 4", "olhei 8" e então "achei: 15". Na volta do 15, o <code>echo "olhei"</code> não apareceu, porque o <code>break</code> veio antes dele.</p>
+
+<h3>Um script de verdade: procurar um aluno pela cidade</h3>
+<p>Agora com o arquivo <code>Documentos/alunos.csv</code> da Ana. O script recebe uma cidade e mostra o primeiro aluno que mora nela. Ele lê o arquivo linha a linha com <code>while read</code> (a técnica é explicada em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>) e usa <strong>os dois</strong> comandos desta aula:</p>
+
+<pre class="file" data-file="procura.sh">#!/usr/bin/env bash
+cidade=$1
+achou=""
+while IFS=, read -r nome idade cidade_aluno nota; do
+  if [[ $nome == nome ]]; then
+    continue                     # pula o cabeçalho
+  fi
+  echo "conferi $nome"
+  if [[ $cidade_aluno == "$cidade" ]]; then
+    achou=$nome
+    break                        # achou: não precisa ler o resto
+  fi
+done &lt; Documentos/alunos.csv
+
+if [[ -n $achou ]]; then
+  echo "Mora em $cidade: $achou"
+else
+  echo "Ninguém mora em $cidade"
+fi
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>cidade=$1</code></td><td>Guarda a cidade que a pessoa passou como argumento (veja <a href="argumentos.html">argumentos</a>).</td></tr>
+<tr><td><code>achou=""</code></td><td>Começa vazia. Se continuar vazia no fim, ninguém foi encontrado.</td></tr>
+<tr><td><code>while IFS=, read -r nome idade cidade_aluno nota</code></td><td>Lê uma linha por volta e separa nas vírgulas, guardando cada coluna numa variável.</td></tr>
+<tr><td><code>if [[ $nome == nome ]]; then continue</code></td><td>A primeira linha é o cabeçalho (<code>nome,idade,cidade,nota</code>). O <code>continue</code> pula essa volta e vai para a próxima linha.</td></tr>
+<tr><td><code>echo "conferi $nome"</code></td><td>Mostra quem foi olhado (só para você ver o laço trabalhando).</td></tr>
+<tr><td><code>achou=$nome</code> + <code>break</code></td><td>Guarda o nome e sai do laço. As linhas seguintes do arquivo nem são lidas.</td></tr>
+<tr><td><code>if [[ -n $achou ]]</code></td><td>Depois do laço: "a variável <code>achou</code> tem algo?" (<code>-n</code> = <em>non-zero length</em>).</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash procura.sh Salvador
+conferi Ana
+conferi Bruno
+conferi Carla
+Mora em Salvador: Carla          « parou na Carla: Diego e Elisa não foram lidos
+$ bash procura.sh Natal
+conferi Ana
+conferi Bruno
+conferi Carla
+conferi Diego
+conferi Elisa
+Ninguém mora em Natal            « sem break: o laço foi até o fim do arquivo</pre>
+
+<p>Nas duas rodadas, "nome" (o cabeçalho) nunca aparece em "conferi": o <code>continue</code> fez o laço pular aquela linha. Com 5 alunos a economia do <code>break</code> é pequena; com um arquivo de 1 milhão de linhas, parar na terceira faz muita diferença.</p>
+
+<div class="tip">
+<strong>"Sentinela": a variável que conta o que aconteceu no laço</strong>
+<p>Depois de um <code>break</code>, o resto do script não sabe <em>por que</em> o laço acabou: foi porque achou, ou porque a lista terminou? Por isso guardamos o resultado numa variável (<code>achou</code>) antes do <code>break</code> e olhamos para ela depois do <code>done</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>continue</code>: pular só esta volta</h2>
+<p>O <code>continue</code> não encerra o laço. Ele diz: "o resto desta volta não interessa, vá para a próxima". Aqui, os números pares são pulados:</p>
+
+<pre class="term">$ for n in 1 2 3 4 5 6; do
+&gt;   if (( n % 2 == 0 )); then
+&gt;     continue
+&gt;   fi
+&gt;   echo "ímpar: $n"
+&gt; done
+ímpar: 1
+ímpar: 3
+ímpar: 5              « 2, 4 e 6 entraram no laço, mas o continue pulou o echo</pre>
+
+<dl class="anatomy">
+  <dt>(( n % 2 == 0 ))</dt><dd>"O resto da divisão por 2 é zero?", ou seja, "é par?".</dd>
+  <dt>continue</dt><dd>Larga esta volta. O Bash volta ao <code>for</code> e pega o próximo número.</dd>
+  <dt>echo "ímpar: $n"</dt><dd>Só chega aqui quem não foi pulado.</dd>
+</dl>
+
+<h3>Uso clássico: ignorar linhas vazias e comentários</h3>
+<p>Arquivos de configuração têm linhas em branco e comentários (começando com <code>#</code>). Um script que lê esse arquivo quer só as linhas úteis. Este é o <code>config.txt</code>:</p>
+
+<pre class="file" data-file="config.txt"># Configuração do site
+nome=loja
+
+# porta do servidor
+porta=8080
+   # comentário com espaços antes
+tema=escuro
+</pre>
+
+<pre class="file" data-file="le-config.sh">#!/usr/bin/env bash
+while IFS= read -r linha; do
+  if [[ -z $linha ]]; then
+    continue                 # linha vazia: pula
+  fi
+  if [[ $linha =~ ^[[:space:]]*# ]]; then
+    continue                 # comentário: pula
+  fi
+  echo "config: $linha"
+done &lt; config.txt
+</pre>
+
+<dl class="anatomy">
+  <dt>[[ -z $linha ]]</dt><dd>"A linha está vazia?" (<code>-z</code> = <em>zero length</em>).</dd>
+  <dt>[[ $linha =~ ^[[:space:]]*# ]]</dt><dd>"A linha começa com <code>#</code>, talvez depois de espaços?". O <code>=~</code> compara com uma expressão regular: <code>^</code> = começo da linha, <code>[[:space:]]*</code> = zero ou mais espaços, <code>#</code> = o caractere. Detalhes em <a href="regex.html">Regex com [[ =~ ]]</a>.</dd>
+  <dt>continue</dt><dd>Em cada caso, desiste desta linha e lê a próxima.</dd>
+</dl>
+
+<pre class="term">$ bash le-config.sh
+config: nome=loja
+config: porta=8080
+config: tema=escuro          « as 4 linhas de comentário e branco foram puladas</pre>
+
+<div class="tip">
+<strong>Por que usar <code>continue</code> em vez de um <code>if</code> grande?</strong>
+<p>Daria para escrever <code>if [[ -n $linha ]] &amp;&amp; ...; then</code> e colocar todo o trabalho dentro. Mas quando o trabalho tem 20 linhas, ficar tudo "dentro do if" empurra o código para a direita. Com <code>continue</code>, você descarta os casos ruins logo no começo (<em>guard clauses</em>, "cláusulas de guarda") e o resto do laço fica limpo.</p>
+</div>
+
+<div class="tryscript" data-file="compras.sh" data-goal="out:Total: 2,src:\bcontinue\b,src:\bbreak\b">
+<p class="try-task"><strong>Missão:</strong> a Ana vai à feira com a lista <code>frutas.txt</code> (banana, maçã, laranja, banana, uva, maçã, banana). Ela já tem bananas em casa, então quer <strong>pular</strong> toda banana com <code>continue</code>. E o dinheiro só dá até chegar na uva: quando aparecer <code>uva</code>, ela <strong>para</strong> com <code>break</code> (sem comprar a uva). Complete os dois <code>if</code> e rode. O resultado deve terminar com <code>Total: 2</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+total=0
+while IFS= read -r fruta; do
+  # 1) se for banana, pule para a próxima fruta
+
+  # 2) se for uva, pare o laço
+
+  echo "comprar: $fruta"
+  total=$((total + 1))
+done &lt; frutas.txt
+echo "Total: $total"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+total=0
+while IFS= read -r fruta; do
+  if [[ $fruta == banana ]]; then
+    continue
+  fi
+  if [[ $fruta == uva ]]; then
+    break
+  fi
+  echo "comprar: $fruta"
+  total=$((total + 1))
+done &lt; frutas.txt
+echo "Total: $total"
+</pre>
+</div>
+
+<p>Com a solução, a saída é esta (conferida no Bash real):</p>
+<pre class="term">$ bash compras.sh
+comprar: maçã
+comprar: laranja
+Total: 2                « banana pulada duas vezes, parou na uva; a segunda maçã nem foi lida</pre>
+
+<hr>
+
+<h2>Laço dentro de laço: <code>break 2</code> e <code>continue 2</code></h2>
+<p>Quando há um laço dentro de outro (laços <strong>aninhados</strong>), o <code>break</code> sozinho sai só do laço <strong>mais de dentro</strong>, aquele em que ele está. O de fora continua girando:</p>
+
+<pre class="term">$ for i in 1 2 3; do
+&gt;   for j in 1 2 3; do
+&gt;     if (( j == 2 )); then break; fi
+&gt;     echo "$i-$j"
+&gt;   done
+&gt; done
+1-1
+2-1
+3-1                « o break saiu só do laço do j; o laço do i deu as 3 voltas</pre>
+
+<p>Para sair dos <strong>dois</strong> de uma vez, diga quantos níveis: <code>break 2</code>.</p>
+
+<pre class="term">$ for i in 1 2 3; do
+&gt;   for j in 1 2 3; do
+&gt;     if (( i * j == 4 )); then break 2; fi
+&gt;     echo "$i-$j"
+&gt;   done
+&gt; done
+1-1
+1-2
+1-3
+2-1                « em i=2, j=2 (2×2 = 4) o break 2 encerrou os dois laços</pre>
+
+<dl class="anatomy">
+  <dt>break</dt><dd>O mesmo que <code>break 1</code>: sai de 1 laço, o mais interno.</dd>
+  <dt>break 2</dt><dd>Sai do laço atual <strong>e</strong> do que está em volta dele. O número conta "quantos <code>done</code> pular".</dd>
+  <dt>continue 2</dt><dd>Abandona o laço de dentro e começa a próxima volta do laço <strong>de fora</strong>.</dd>
+</dl>
+
+<p>Veja o <code>continue 2</code>: quando <code>j</code> chega a 2, larga o resto dos <code>j</code> e passa para o próximo <code>i</code>.</p>
+
+<pre class="term">$ for i in 1 2 3; do
+&gt;   for j in 1 2 3; do
+&gt;     if (( j == 2 )); then continue 2; fi
+&gt;     echo "$i-$j"
+&gt;   done
+&gt; done
+1-1
+2-1
+3-1</pre>
+
+<p>A saída é igual à do <code>break</code> simples do primeiro exemplo. Faz sentido: nos dois casos, o laço de dentro é abandonado e o de fora segue. A diferença aparece quando há código <strong>depois</strong> do <code>done</code> de dentro: com <code>break</code> ele roda, com <code>continue 2</code> ele é pulado.</p>
+
+<h3>Exemplo prático: a primeira foto em várias pastas</h3>
+
+<pre class="file" data-file="busca-foto.sh">#!/usr/bin/env bash
+for pasta in Downloads Imagens Documentos; do
+  echo "Procurando em $pasta..."
+  for arq in "$pasta"/*; do
+    if [[ $arq == *.jpg ]]; then
+      echo "Primeira foto: $arq"
+      break 2
+    fi
+  done
+done
+echo "Fim da busca"
+</pre>
+
+<pre class="term">$ bash busca-foto.sh
+Procurando em Downloads...
+Primeira foto: Downloads/foto.jpg
+Fim da busca              « nem chegou a "Procurando em Imagens"</pre>
+
+<p>Com <code>break</code> simples no lugar de <code>break 2</code>, o script sairia só do laço dos arquivos e continuaria com "Procurando em Imagens...", achando também <code>Imagens/ferias.jpg</code>.</p>
+
+<div class="try" data-goal="out:achei 7,ran:\bbreak\b" data-solucao="for n in {1..20}; do if (( n % 7 == 0 )); then echo &quot;achei $n&quot;; break; fi; done">
+<p class="try-task"><strong>Missão:</strong> no terminal, escreva um <code>for n in {1..20}</code> que procure o <strong>primeiro múltiplo de 7</strong>, mostre <code>achei 7</code> e pare com <code>break</code>. Dica: múltiplo de 7 é <code>(( n % 7 == 0 ))</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>break</code>, <code>return</code> ou <code>exit</code>?</h2>
+<p>Os três "param alguma coisa", mas o tamanho do que param é diferente:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Encerra…</th><th>E continua em…</th></tr>
+<tr><td><code>break</code></td><td>o <strong>laço</strong></td><td>a linha depois do <code>done</code>.</td></tr>
+<tr><td><code>return</code></td><td>a <strong>função</strong> (veja <a href="funcoes-retorno.html">local, return e saída</a>)</td><td>a linha depois de onde a função foi chamada.</td></tr>
+<tr><td><code>exit</code></td><td>o <strong>script inteiro</strong> (ou o terminal, se digitado nele!)</td><td>lugar nenhum: o script acabou.</td></tr>
+</table>
+</div>
+
+<p>Este script tem três funções iguais, mudando só o comando usado na volta 2:</p>
+
+<pre class="file" data-file="sair.sh">#!/usr/bin/env bash
+com_break() {
+  for i in 1 2 3; do
+    if (( i == 2 )); then break; fi
+    echo "  volta $i"
+  done
+  echo "  fim da função"
+}
+com_return() {
+  for i in 1 2 3; do
+    if (( i == 2 )); then return; fi
+    echo "  volta $i"
+  done
+  echo "  fim da função"
+}
+com_exit() {
+  for i in 1 2 3; do
+    if (( i == 2 )); then exit 3; fi
+    echo "  volta $i"
+  done
+  echo "  fim da função"
+}
+echo "break:";  com_break
+echo "return:"; com_return
+echo "exit:";   com_exit
+echo "fim do script"
+</pre>
+
+<pre class="term">$ bash sair.sh
+break:
+  volta 1
+  fim da função           « break: saiu do laço, mas a função continuou
+return:
+  volta 1                 « return: saiu da função inteira ("fim da função" não aparece)
+exit:
+  volta 1                 « exit: o script acabou; "fim do script" nunca aparece
+$ echo $?
+3                         « o número passado ao exit vira o código de saída do script</pre>
+
+<div class="warning">
+<strong>Não digite <code>exit</code> no terminal para "sair do laço"</strong>
+<p>No terminal, <code>exit</code> fecha o <strong>shell</strong>, e a janela do terminal some. Para interromper um laço que você digitou e que não para, use <kbd>Ctrl</kbd>+<kbd>C</kbd> (veja <a href="while.html">while e until</a>).</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de "parar de procurar"</h2>
+<p>Nem sempre você precisa de <code>break</code>. Compare:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td><code>break</code> no laço</td><td><code>if [[ … ]]; then achou=$x; break; fi</code></td><td>Você precisa fazer várias coisas com o que achou, ou a condição é complicada.</td></tr>
+<tr><td>Condição no próprio <code>while</code></td><td><code>while [[ -z $achou ]] &amp;&amp; read -r l; do …</code></td><td>A condição de parada é simples e faz parte do "enquanto".</td></tr>
+<tr><td><code>return</code> numa função</td><td><code>procura() { for …; do [[ … ]] &amp;&amp; { echo "$x"; return 0; }; done; return 1; }</code></td><td>A busca é reaproveitada em vários lugares. O código de saída diz se achou (veja <a href="funcoes-retorno.html">return</a>).</td></tr>
+<tr><td>Uma ferramenta pronta</td><td><code>grep -m 1 Salvador Documentos/alunos.csv</code></td><td>É só achar uma linha num arquivo: o <code>-m 1</code> do grep para no primeiro resultado (veja <a href="ferramentas-texto.html">grep, sed, awk</a>).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O script travou depois de um <code>continue</code></strong>
+<pre class="file" data-file="conta.sh">#!/usr/bin/env bash
+i=0
+while (( i &lt; 5 )); do
+  if (( i == 2 )); then
+    continue
+  fi
+  echo "i = $i"
+  i=$((i + 1))
+done
+</pre>
+<pre class="term">$ bash conta.sh
+i = 0
+i = 1
+^C                       « parado para sempre, até apertar Ctrl+C</pre>
+<p><strong>O que aconteceu:</strong> quando <code>i</code> vale 2, o <code>continue</code> pula o resto da volta, <strong>inclusive o <code>i=$((i + 1))</code></strong>. O <code>i</code> fica 2 para sempre, a condição <code>i &lt; 5</code> é sempre verdadeira e o laço gira sem fim (consumindo 100% de um processador).</p>
+<p><strong>Como confirmar:</strong> rode com <code>bash -x conta.sh</code> e veja as mesmas linhas se repetindo (veja <a href="depuracao.html">depurar</a>).</p>
+<p><strong>Como resolver:</strong> incremente <strong>antes</strong> do <code>continue</code> (<code>if (( i == 2 )); then i=$((i + 1)); continue; fi</code>) ou troque por um <code>for ((i=0; i&lt;5; i++))</code>, em que o <code>i++</code> roda mesmo depois de um <code>continue</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"significativo apenas em um loop de `for', `while' ou `until'"</strong>
+<pre class="term">$ break
+bash: break: significativo apenas em um loop de `for', `while' ou `until'
+$ echo $?
+0                       « repare: mesmo com a mensagem, o código é 0</pre>
+<p><strong>O que aconteceu:</strong> o <code>break</code> (ou <code>continue</code>) foi usado fora de qualquer laço. O Bash avisa e ignora o comando.</p>
+<p>O caso mais traiçoeiro é o <code>break</code> dentro de uma <strong>função</strong> chamada no laço. A função não "enxerga" o laço de quem a chamou:</p>
+<pre class="file" data-file="func-break.sh">#!/usr/bin/env bash
+verifica() {
+  if [[ $1 == uva ]]; then
+    break
+  fi
+}
+for fruta in banana uva maçã; do
+  verifica "$fruta"
+  echo "$fruta"
+done
+</pre>
+<pre class="term">$ bash func-break.sh
+banana
+func-break.sh: linha 4: break: significativo apenas em um loop de `for', `while' ou `until'
+uva
+maçã                    « o laço não parou</pre>
+<p><strong>Como resolver:</strong> faça a função <strong>responder</strong> com um código de saída e deixe o <code>break</code> no laço: <code>verifica() { [[ $1 == uva ]]; }</code> e, no laço, <code>if verifica "$fruta"; then break; fi</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Coloquei <code>break</code> no <code>case</code> e o laço inteiro acabou</strong>
+<pre class="term">$ for opcao in ver sair apagar; do
+&gt;   case $opcao in
+&gt;     sair) echo "saindo do case?"; break ;;
+&gt;     *) echo "opção: $opcao" ;;
+&gt;   esac
+&gt; done
+opção: ver
+saindo do case?          « "apagar" nunca foi processado</pre>
+<p><strong>O que aconteceu:</strong> quem vem de C, Java ou JavaScript usa <code>break</code> para sair do <code>switch</code>. No Bash, o <code>case</code> não precisa disso: quem termina cada caso é o <code>;;</code>. Um <code>break</code> lá dentro sai do <strong>laço</strong> em volta. Isso é ótimo num menu ("sair" encerra o laço), mas é um erro se você só queria encerrar o caso.</p>
+<p><strong>Como resolver:</strong> tire o <code>break</code>; o <code>;;</code> já basta (veja <a href="case.html">case</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"número de loops fora dos limites" / "requer argumento numérico"</strong>
+<pre class="term">$ for i in 1 2; do break 0; done
+bash: break: 0: número de loops fora dos limites
+$ echo $?
+1
+$ for i in 1 2; do break abc; done
+bash: break: abc: requer argumento numérico
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> o número depois de <code>break</code>/<code>continue</code> tem que ser 1 ou mais. Um número <strong>maior</strong> que a quantidade de laços não dá erro: <code>break 5</code> dentro de 2 laços simplesmente sai de todos.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>break</code> funcionou, mas a variável sumiu depois do laço</strong>
+<p>Se o laço está do lado direito de um pipe (<code>cat arq | while read …; do …; break; done</code>), ele roda num <a href="subshell.html">subshell</a>: o <code>break</code> funciona, mas as variáveis criadas lá dentro (como <code>achou</code>) desaparecem no <code>done</code>. Use <code>while …; done &lt; arquivo</code>, como no <code>procura.sh</code>. A explicação completa está em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Código de saída</th></tr>
+<tr><td><code>break</code></td><td>Sai do laço mais interno.</td><td>0</td></tr>
+<tr><td><code>break N</code></td><td>Sai de N laços aninhados (N ≥ 1; N maior que o total sai de todos).</td><td>0; 1 se N &lt; 1</td></tr>
+<tr><td><code>continue</code></td><td>Pula o resto desta volta; começa a próxima do laço mais interno.</td><td>0</td></tr>
+<tr><td><code>continue N</code></td><td>Começa a próxima volta do N-ésimo laço, contando de dentro para fora.</td><td>0; 1 se N &lt; 1</td></tr>
+<tr><td><code>return [N]</code></td><td>Sai da função (não do laço apenas).</td><td>N</td></tr>
+<tr><td><code>exit [N]</code></td><td>Sai do script inteiro.</td><td>N</td></tr>
+</table>
+</div>
+<p>Funcionam em <code>for</code>, <code>while</code>, <code>until</code> e <code>select</code>. Ajuda rápida no terminal: <code>help break</code> e <code>help continue</code>.</p>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Parar no primeiro</h3>
+<p>Complete para o laço parar assim que encontrar um arquivo <code>.pdf</code>:</p>
+<div class="ex-code">for f in Downloads/*; do [[ $f == *.pdf ]] &amp;&amp; { echo "$f"; <input data-answer="break" aria-label="comando">; }; done</div>
+</div>
+
+<div class="exercise">
+<h3>2. Pular comentários</h3>
+<p>Complete para ignorar as linhas que começam com <code>#</code>:</p>
+<div class="ex-code">while IFS= read -r l; do [[ $l == \#* ]] &amp;&amp; <input data-answer="continue" aria-label="comando">; echo "$l"; done &lt; config.txt</div>
+</div>
+
+<div class="exercise">
+<h3>3. Sair dos dois laços</h3>
+<p>Dentro de um laço que está dentro de outro, qual comando encerra <strong>os dois</strong> de uma vez?</p>
+<div class="ex-code"><input data-answer="break 2" aria-label="comando"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O que mostra <code>for n in 1 2 3 4; do (( n == 3 )) &amp;&amp; continue; echo $n; done</code>?</p>
+<label><input type="radio" name="q4"> 1 e 2</label>
+<label><input type="radio" name="q4"> 3</label>
+<label><input type="radio" name="q4"> 1, 2 e 4</label>
+<label><input type="radio" name="q4"> 1, 2, 3 e 4</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Um <code>break</code> foi escrito dentro de uma função, e a função é chamada dentro de um <code>for</code>. O que acontece?</p>
+<label><input type="radio" name="q5"> O <code>for</code> para normalmente.</label>
+<label><input type="radio" name="q5"> O Bash mostra "significativo apenas em um loop…" e o <code>for</code> continua.</label>
+<label><input type="radio" name="q5"> A função e o script terminam.</label>
+<label><input type="radio" name="q5"> O script nem começa: é erro de sintaxe.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Qual destes encerra o <strong>script inteiro</strong>, e não só o laço ou a função?</p>
+<label><input type="radio" name="q6"> <code>exit</code></label>
+<label><input type="radio" name="q6"> <code>return</code></label>
+<label><input type="radio" name="q6"> <code>break 2</code></label>
+<label><input type="radio" name="q6"> <code>continue</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>break</code> sai do laço; o script segue depois do <code>done</code>. Use para "procurar e parar".</li>
+  <li><code>continue</code> pula o resto desta volta e começa a próxima. Use para ignorar linhas vazias, comentários e cabeçalhos.</li>
+  <li><code>break 2</code> e <code>continue 2</code> agem sobre o laço de fora, em laços aninhados.</li>
+  <li><code>break</code> para o laço, <code>return</code> para a função, <code>exit</code> para o script.</li>
+  <li>Cuidado: <code>continue</code> antes do incremento trava o <code>while</code>; <code>break</code> no <code>case</code> sai do laço; <code>break</code> numa função não alcança o laço de quem chamou.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

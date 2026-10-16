@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Funções — criar, chamar e organizar scripts | Guia Bash</title>
+<meta name="description" content="Aprenda funções no Bash: as duas sintaxes, como chamar e passar argumentos ($1, $#, $@), definir antes de usar, funções no terminal e no .bashrc, type, declare -f, unset -f, main &quot;$@&quot; e bibliotecas com source.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Funções</span></h1>
+
+<p class="intro">Uma <strong>função</strong> é um pedaço de script com nome. Você escreve os comandos uma vez, dá um nome a eles e, daí em diante, usa esse nome como se fosse um comando novo. Funções evitam repetição, deixam o script legível e são a base de qualquer script com mais de uma página.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As duas formas de criar uma função e como chamá-la.</li>
+  <li>Como passar argumentos para a função (<code>$1</code>, <code>$#</code>, <code>$@</code>) e por que eles não são os do script.</li>
+  <li>Por que a função precisa ser definida antes de ser usada.</li>
+  <li>Como ver, listar e apagar funções (<code>type</code>, <code>declare -f</code>, <code>unset -f</code>) e guardar as suas no <code>.bashrc</code>.</li>
+  <li>Como organizar um script com <code>main "$@"</code> e reaproveitar funções com <code>source</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Por que funções?</h2>
+<p>Imagine uma receita de bolo que, em três lugares diferentes, diz "bata 3 ovos com 2 xícaras de açúcar por 5 minutos até ficar fofo". Seria mais fácil escrever uma vez, no topo, "<strong>massa básica</strong>: bata 3 ovos…", e depois só dizer "faça a massa básica". Se você mudar a quantidade de açúcar, muda num lugar só.</p>
+<p>Uma função é isso: um nome para um conjunto de passos. Ela traz três vantagens:</p>
+<ul>
+  <li><strong>Não repetir:</strong> o mesmo trecho usado 5 vezes vira 1 definição e 5 chamadas.</li>
+  <li><strong>Ler melhor:</strong> <code>faz_backup</code> diz mais do que 12 linhas de <code>cp</code> e <code>tar</code>.</li>
+  <li><strong>Consertar num lugar só:</strong> um erro corrigido na função vale para todas as chamadas.</li>
+</ul>
+
+<hr>
+
+<h2>Criar e chamar uma função</h2>
+<p>A forma mais comum (e a que funciona em qualquer shell POSIX) é o nome seguido de <code>()</code> e de um bloco entre chaves:</p>
+
+<pre class="syntax">nome() {
+  comandos
+}</pre>
+
+<dl class="anatomy">
+  <dt>ola</dt><dd>O nome da função. Use letras, números e <code>_</code>; não comece com número. Evite nomes de comandos que já existem (<code>ls</code>, <code>test</code>…).</dd>
+  <dt>()</dt><dd>Os parênteses dizem "isto é uma definição de função". Eles ficam <strong>sempre vazios</strong>: no Bash, os argumentos não são declarados aqui.</dd>
+  <dt>{</dt><dd>Abre o corpo. Precisa de um espaço (ou quebra de linha) depois dele.</dd>
+  <dt>echo "…"</dt><dd>Os comandos da função. Pode ser quantos você quiser.</dd>
+  <dt>}</dt><dd>Fecha o corpo. Precisa estar numa linha nova, ou depois de um <code>;</code>.</dd>
+</dl>
+
+<pre class="term">$ ola() {
+&gt;   echo "Olá! Hoje é dia de estudar Bash."
+&gt; }
+$ ola
+Olá! Hoje é dia de estudar Bash.
+$ ola
+Olá! Hoje é dia de estudar Bash.</pre>
+
+<p>O que aconteceu:</p>
+<ul>
+  <li>Ao <strong>definir</strong> a função (as três primeiras linhas), nada aparece. O Bash só guardou a receita na memória. Os <code>&gt;</code> são o prompt de continuação: o Bash espera o <code>}</code>.</li>
+  <li>Para <strong>chamar</strong>, digite só o nome, como qualquer comando. <strong>Sem parênteses.</strong></li>
+  <li>Cada chamada roda o corpo de novo.</li>
+</ul>
+
+<pre class="term">$ ola
+Olá! Hoje é dia de estudar Bash.
+$ echo $?
+0                « o código de saída da função é o do último comando dela (o echo deu certo)</pre>
+
+<h3>A outra forma: a palavra <code>function</code></h3>
+<p>O Bash também aceita a palavra-chave <code>function</code> antes do nome. Aí os parênteses são opcionais:</p>
+
+<pre class="term">$ function tchau {
+&gt;   echo "Até mais!"
+&gt; }
+$ tchau
+Até mais!
+$ function oi() { echo "oi, $1"; }
+$ oi Ana
+oi, Ana                « a mistura function + () também funciona</pre>
+
+<p>Repare na última definição, numa linha só: <code>{ echo "oi, $1"; }</code>. O <code>;</code> antes do <code>}</code> é obrigatório quando tudo fica na mesma linha.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Funciona em</th><th>Qual usar?</th></tr>
+<tr><td><code>nome() { … }</code></td><td>Bash, zsh, dash, <code>sh</code> do macOS, qualquer shell POSIX</td><td><strong>Prefira esta.</strong> É a mais comum e a mais portável.</td></tr>
+<tr><td><code>function nome { … }</code></td><td>Bash, zsh, ksh (não no <code>sh</code>/dash)</td><td>Válida, aparece em muitos scripts. Não traz vantagem no Bash.</td></tr>
+<tr><td><code>function nome() { … }</code></td><td>Bash e zsh</td><td>Mistura das duas; evite (não é POSIX nem ksh).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passar argumentos para a função</h2>
+<p>Você passa argumentos para uma função do mesmo jeito que para um comando: separados por espaço, depois do nome. Lá dentro, eles chegam como <code>$1</code>, <code>$2</code>…, exatamente como os <a href="argumentos.html">argumentos de um script</a>.</p>
+
+<pre class="term">$ saudacao() {
+&gt;   echo "Olá, $1! Você passou $# argumento(s)."
+&gt; }
+$ saudacao Ana
+Olá, Ana! Você passou 1 argumento(s).
+$ saudacao "Ana Maria" Bruno
+Olá, Ana Maria! Você passou 2 argumento(s).     « as aspas fizeram "Ana Maria" ser um só
+$ saudacao
+Olá, ! Você passou 0 argumento(s).              « sem argumento, $1 fica vazio (não é erro)</pre>
+
+<dl class="anatomy">
+  <dt>$1, $2, …</dt><dd>O primeiro, o segundo… argumento <strong>desta chamada</strong>.</dd>
+  <dt>$#</dt><dd>Quantos argumentos a função recebeu (<code>#</code> lembra "número").</dd>
+  <dt>$@</dt><dd>Todos os argumentos. Use sempre <code>"$@"</code>, com aspas, para repassá-los sem quebrar os que têm espaço.</dd>
+  <dt>$0</dt><dd>Não muda: continua sendo o nome do script (ou <code>bash</code>, no terminal). O nome da função fica em <code>FUNCNAME</code> (veja <a href="funcoes-retorno.html">local, return e saída</a>).</dd>
+</dl>
+
+<h3>O <code>$1</code> da função não é o <code>$1</code> do script</h3>
+<p>Esta é a confusão mais comum. Quando a função é chamada, o Bash <strong>troca temporariamente</strong> os parâmetros posicionais pelos argumentos da chamada. Quando ela termina, os do script voltam.</p>
+
+<pre class="file" data-file="args.sh">#!/usr/bin/env bash
+mostra() {
+  echo "  dentro: \$1=$1  \$#=$#  \$@=$@"
+}
+echo "fora:   \$1=$1  \$#=$#  \$@=$@"
+mostra laranja
+mostra "$@"
+echo "fora de novo: \$1=$1"
+</pre>
+
+<p>O <code>\$</code> (com barra) imprime o cifrão literalmente, para servir de rótulo; o <code>$1</code> sem barra mostra o valor.</p>
+
+<pre class="term">$ bash args.sh banana uva
+fora:   $1=banana  $#=2  $@=banana uva
+  dentro: $1=laranja  $#=1  $@=laranja         « a função só vê o que recebeu na chamada
+  dentro: $1=banana  $#=2  $@=banana uva       « mostra "$@" repassou os argumentos do script
+fora de novo: $1=banana                        « os do script voltaram</pre>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Se a função precisa de um argumento do script, <strong>passe-o</strong> na chamada (<code>mostra "$1"</code>, ou todos com <code>mostra "$@"</code>). Funções que recebem tudo por argumento são mais fáceis de testar e reaproveitar.</p>
+</div>
+
+<div class="tryscript" data-file="alunos.sh" data-goal="out:Ana tem 29 anos,out:Bruno tem 34 anos,src:mostra_aluno\s*\(\)|function\s+mostra_aluno">
+<p class="try-task"><strong>Missão:</strong> o script já chama <code>mostra_aluno</code> duas vezes, mas a função ainda não existe (rode e veja o erro "comando não encontrado"). Crie a função <strong>acima das chamadas</strong> para que ela mostre <code>Ana tem 29 anos</code> e <code>Bruno tem 34 anos</code>, usando <code>$1</code> e <code>$2</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+# Crie aqui a função mostra_aluno
+
+
+mostra_aluno Ana 29
+mostra_aluno Bruno 34
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+mostra_aluno() {
+  echo "$1 tem $2 anos"
+}
+
+mostra_aluno Ana 29
+mostra_aluno Bruno 34
+</pre>
+</div>
+
+<hr>
+
+<h2>Definir antes de usar</h2>
+<p>O Bash lê e executa o script <strong>de cima para baixo</strong>, linha por linha. A definição de uma função é um comando como outro qualquer: só depois que ela é executada a função passa a existir. Chamar antes dá erro:</p>
+
+<pre class="file" data-file="antes.sh">#!/usr/bin/env bash
+saudacao Ana
+
+saudacao() {
+  echo "Olá, $1!"
+}
+
+saudacao Bruno
+</pre>
+
+<pre class="term">$ bash antes.sh
+antes.sh: linha 2: saudacao: comando não encontrado    « na linha 2 a função ainda não existia
+Olá, Bruno!                                           « na linha 8, já existia
+$ echo $?
+0</pre>
+
+<p>Repare que o script <strong>não parou</strong> no erro: o Bash avisou e seguiu para a próxima linha. E o código de saída final é 0, porque o último comando deu certo. Para scripts que devem parar no primeiro erro, veja <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+
+<p>Dentro de uma função, porém, você pode chamar outra que está definida <strong>mais abaixo</strong> no arquivo, desde que a chamada só <em>aconteça</em> depois que as duas foram definidas. É isso que o padrão <code>main</code> (mais abaixo) aproveita.</p>
+
+<hr>
+
+<h2>Funções no terminal e no <code>.bashrc</code></h2>
+<p>Funções não são só para scripts. As que você define no terminal ficam valendo até fechar a janela. Um exemplo útil: criar uma pasta e já entrar nela.</p>
+
+<pre class="term">$ mkcd() { mkdir -p "$1" &amp;&amp; cd "$1"; }
+$ mkcd projetos/novo
+$ pwd
+/home/ana/projetos/novo         « a função mudou a pasta do seu terminal</pre>
+
+<dl class="anatomy">
+  <dt>mkdir -p "$1"</dt><dd>Cria a pasta (e as pastas do caminho, se faltarem).</dd>
+  <dt>&amp;&amp;</dt><dd>Só continua se o <code>mkdir</code> deu certo (veja <a href="operadores.html">; &amp;&amp; ||</a>).</dd>
+  <dt>cd "$1"</dt><dd>Entra na pasta. Como a função roda <strong>no seu shell</strong>, o <code>cd</code> vale para o terminal.</dd>
+</dl>
+
+<p>Isso <strong>não</strong> funciona como script, e o motivo é importante: um script roda num <strong>processo filho</strong>, que tem a própria pasta atual. O <code>cd</code> muda a pasta do filho, que termina logo em seguida:</p>
+
+<pre class="file" data-file="mkcd.sh">#!/usr/bin/env bash
+mkdir -p "$1" &amp;&amp; cd "$1"
+pwd
+</pre>
+<pre class="term">$ bash mkcd.sh projetos/teste
+/home/ana/projetos/teste        « dentro do script, mudou…
+$ pwd
+/home/ana                       « …mas o seu terminal continua onde estava</pre>
+
+<p>Para não perder a função ao fechar o terminal, coloque-a no fim do <code>~/.bashrc</code> (o arquivo que o Bash lê ao abrir cada terminal; veja <a href="inicializacao.html">arquivos de inicialização</a>):</p>
+
+<pre class="file" data-file="~/.bashrc (no final)">
+# cria uma pasta e entra nela
+mkcd() {
+  mkdir -p "$1" &amp;&amp; cd "$1"
+}
+</pre>
+
+<p>Os terminais novos já vão ter a função. No terminal que está aberto, recarregue o arquivo com <code>source</code>:</p>
+
+<pre class="term">$ source ~/.bashrc
+$ mkcd projetos/blog</pre>
+<pre class="term" data-cwd="~/projetos/blog">$ pwd
+/home/ana/projetos/blog</pre>
+
+<div class="tip">
+<strong>Função ou alias?</strong>
+<p>Um <a href="alias.html">alias</a> só troca uma palavra por outra (<code>alias ll='ls -l'</code>). Ele não sabe usar argumentos no meio, nem ter <code>if</code>. Assim que você precisar de <code>$1</code> ou de mais de um comando, use uma função.</p>
+</div>
+
+<div class="try" data-setup="unset -f mkcd" data-goal="func:mkcd,cwd:~/projetos/blog" data-solucao="mkcd() { mkdir -p &quot;$1&quot; &amp;&amp; cd &quot;$1&quot;; };;mkcd projetos/blog">
+<p class="try-task"><strong>Missão:</strong> crie no terminal a função <code>mkcd</code>, que cria uma pasta e entra nela, e use-a para criar e entrar em <code>projetos/blog</code>. Confira com <code>pwd</code>.</p>
+</div>
+
+<hr>
+
+<h2>Ver, listar e apagar funções</h2>
+
+<pre class="term">$ type saudacao
+saudacao é uma função
+saudacao ()
+{
+    echo "Olá, $1! Você passou $# argumento(s)."
+}
+$ declare -f tchau
+tchau ()
+{
+    echo "Até mais!"
+}
+$ declare -F
+declare -f ola
+declare -f saudacao
+declare -f tchau                « só os nomes de todas as funções definidas
+$ unset -f tchau
+$ tchau
+bash: tchau: comando não encontrado
+$ type -t ola ls cd
+function
+alias
+builtin                         « -t: só o tipo de cada nome</pre>
+
+<dl class="anatomy">
+  <dt>type nome</dt><dd>Diz o que é o nome (função, alias, comando interno, programa) e, se for função, mostra o código. Veja <a href="ajuda.html">Obtendo ajuda</a>.</dd>
+  <dt>declare -f nome</dt><dd>Mostra o código da função (<code>-f</code> = <em>function</em>). Sem nome, mostra o de todas.</dd>
+  <dt>declare -F</dt><dd>Lista só os <strong>nomes</strong> das funções.</dd>
+  <dt>unset -f nome</dt><dd>Apaga a função da memória do shell.</dd>
+</dl>
+
+<p>Repare que o Bash <strong>reformata</strong> o código ao mostrar: coloca um espaço entre o nome e os <code>()</code>, a chave numa linha própria e 4 espaços de recuo. Não é o texto que você digitou, mas é equivalente.</p>
+
+<hr>
+
+<h2>Organizar um script com <code>main "$@"</code></h2>
+<p>Quando o script cresce, uma organização muito usada é: <strong>todas as funções em cima</strong>, uma função <code>main</code> com o "roteiro" do script, e <strong>uma única linha solta no fim</strong> que chama <code>main</code>. O script abaixo resume o arquivo de alunos da Ana:</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+# relatorio.sh — resumo de um arquivo CSV de alunos
+
+cabecalho() {
+  echo "=== Relatório de $1 ==="
+}
+
+conta_alunos() {
+  local total
+  total=$(wc -l &lt; "$1")
+  echo "Alunos: $(( total - 1 ))"
+}
+
+mostra_cidades() {
+  echo "Cidades:"
+  cut -d, -f3 "$1" | tail -n +2 | sort | sed "s/^/  - /"
+}
+
+main() {
+  local arquivo=${1:-Documentos/alunos.csv}
+  if [[ ! -f $arquivo ]]; then
+    echo "Arquivo não encontrado: $arquivo" &gt;&amp;2
+    exit 1
+  fi
+  cabecalho "$arquivo"
+  conta_alunos "$arquivo"
+  mostra_cidades "$arquivo"
+}
+
+main "$@"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>O que faz</th></tr>
+<tr><td><code>cabecalho</code></td><td>Mostra o título com o nome do arquivo recebido em <code>$1</code>.</td></tr>
+<tr><td><code>conta_alunos</code></td><td>Conta as linhas com <code>wc -l</code> e desconta 1 (o cabeçalho). <code>local</code> faz a variável <code>total</code> existir só dentro da função (explicado em <a href="funcoes-retorno.html">local, return e saída</a>).</td></tr>
+<tr><td><code>mostra_cidades</code></td><td>Pega a 3ª coluna (<code>cut</code>), tira o cabeçalho (<code>tail -n +2</code>), ordena e põe "  - " no começo de cada linha (<code>sed</code>). Ferramentas de <a href="ferramentas-texto.html">grep, sed, awk e cia.</a></td></tr>
+<tr><td><code>main</code></td><td>O roteiro: escolhe o arquivo (o 1º argumento ou, se não houver, o padrão — veja <a href="expansao-parametros.html">${1:-padrão}</a>), confere se existe e chama as outras funções na ordem.</td></tr>
+<tr><td><code>main "$@"</code></td><td>A única linha "solta". Entrega a <code>main</code> <strong>todos</strong> os argumentos do script.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash relatorio.sh
+=== Relatório de Documentos/alunos.csv ===
+Alunos: 5
+Cidades:
+  - Curitiba
+  - Manaus
+  - Porto Alegre
+  - Recife
+  - Salvador
+$ bash relatorio.sh turma2.csv
+Arquivo não encontrado: turma2.csv
+$ echo $?
+1                         « o exit 1 da main virou o código de saída do script</pre>
+
+<p>Vantagens deste formato:</p>
+<ul>
+  <li>Quem abre o arquivo lê <code>main</code> e entende o script inteiro em 5 linhas.</li>
+  <li>A ordem das funções deixa de importar: quando <code>main "$@"</code> roda, na última linha, <strong>todas</strong> já foram definidas.</li>
+  <li>Se o arquivo for cortado no meio de um download, o Bash não roda metade do script: sem a última linha, nada acontece.</li>
+</ul>
+
+<hr>
+
+<h2>Uma biblioteca de funções com <code>source</code></h2>
+<p>Quando várias scripts usam as mesmas funções (mostrar mensagens, pedir confirmação), guarde-as num arquivo separado e carregue-o com <code>source</code> (ou o atalho <code>.</code>). O <code>source</code> executa o arquivo <strong>no shell atual</strong>, então as funções definidas lá passam a existir no script.</p>
+
+<pre class="file" data-file="lib/util.sh"># lib/util.sh — funções reaproveitáveis (não é para rodar sozinho)
+
+msg() {
+  echo "[$(date +%H:%M)] $*"
+}
+
+erro() {
+  echo "ERRO: $*" &gt;&amp;2
+}
+
+confirma() {
+  local resposta
+  read -r -p "$1 [s/N] " resposta
+  [[ $resposta == [sS] ]]
+}
+</pre>
+
+<pre class="file" data-file="backup-notas.sh">#!/usr/bin/env bash
+source "$(dirname "$0")/lib/util.sh"
+
+msg "Iniciando backup"
+if cp Documentos/notas.txt Documentos/notas.bak; then
+  msg "Cópia feita: Documentos/notas.bak"
+else
+  erro "não consegui copiar"
+fi
+</pre>
+
+<dl class="anatomy">
+  <dt>source</dt><dd>"Leia e execute este arquivo aqui mesmo". Não cria processo filho; tudo o que o arquivo define fica no script.</dd>
+  <dt>"$(dirname "$0")"</dt><dd>A pasta onde o script está (<code>$0</code> é o caminho do script; <code>dirname</code> tira o nome do arquivo). Assim a biblioteca é achada mesmo que o script seja rodado de outra pasta.</dd>
+  <dt>/lib/util.sh</dt><dd>O caminho da biblioteca, relativo à pasta do script.</dd>
+  <dt>msg, erro</dt><dd>Usadas como se fossem comandos, porque o <code>source</code> já as definiu. O <code>$*</code> junta todos os argumentos num texto só.</dd>
+</dl>
+
+<pre class="term">$ bash backup-notas.sh
+[10:30] Iniciando backup
+[10:30] Cópia feita: Documentos/notas.bak</pre>
+
+<p>A biblioteca não tem <code>#!</code> nem permissão de execução: ela não é para ser rodada, só carregada. A função <code>confirma</code> não foi usada neste script, mas está lá para os próximos. Repare também que ela devolve "sim/não" pelo <strong>código de saída</strong> do <code>[[ ]]</code>, e por isso pode ir direto num <code>if confirma "Apagar?"; then</code>; o assunto da próxima aula, <a href="funcoes-retorno.html">local, return e saída</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"comando não encontrado" com uma função que existe</strong>
+<pre class="term">$ bash antes.sh
+antes.sh: linha 2: saudacao: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> a função foi chamada antes da linha que a define. Ou, se ela fica num arquivo separado, o <code>source</code> falhou. Ou você está num terminal novo, e a função tinha sido definida só no anterior.</p>
+<p><strong>Como confirmar:</strong> <code>type saudacao</code> ou <code>declare -F</code> mostram se ela existe agora.</p>
+<p><strong>Como resolver:</strong> mova as definições para o topo (ou use o padrão <code>main "$@"</code>). No terminal, coloque a função no <code>~/.bashrc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado" ao chamar</strong>
+<pre class="term">$ saudacao("Ana")
+bash: erro de sintaxe próximo ao token inesperado `"Ana"'</pre>
+<p><strong>O que aconteceu:</strong> o hábito de outras linguagens. No Bash, função se chama como comando: <strong>sem parênteses e sem vírgulas</strong>. <code>nome(</code> só aparece na definição.</p>
+<p><strong>Como resolver:</strong> <code>saudacao "Ana"</code>. Para dois argumentos: <code>saudacao "Ana" 29</code>, e não <code>saudacao("Ana", 29)</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Erro de sintaxe na definição: o espaço depois do <code>{</code></strong>
+<pre class="term">$ ola(){echo oi;}
+bash: erro de sintaxe próximo ao token inesperado `{echo'</pre>
+<p><strong>O que aconteceu:</strong> o <code>{</code> é uma palavra reservada e precisa estar separado. Colado em <code>echo</code>, o Bash leu a palavra <code>{echo</code>.</p>
+<p><strong>Como resolver:</strong> <code>ola() { echo oi; }</code>, com espaço depois do <code>{</code> e <code>;</code> antes do <code>}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"fim inesperado do arquivo": faltou o <code>;</code> antes do <code>}</code></strong>
+<pre class="file" data-file="semponto.sh">#!/usr/bin/env bash
+ola() { echo "oi" }
+ola
+</pre>
+<pre class="term">$ bash semponto.sh
+semponto.sh: linha 4: erro de sintaxe: fim inesperado do arquivo do comando `{' na linha 2
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> sem <code>;</code>, o <code>}</code> virou só mais um argumento do <code>echo</code>. O Bash continuou procurando o <code>}</code> de verdade até o fim do arquivo. Repare que o erro aponta a linha 4 (o fim), mas diz onde o bloco abriu: "na linha 2". No terminal, o sintoma é o prompt <code>&gt;</code> esperando mais texto; aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+<p><strong>Como resolver:</strong> <code>ola() { echo "oi"; }</code>, ou feche a chave numa linha própria.</p>
+</div>
+
+<div class="cenario">
+<strong>"Falha de segmentação": a função chama a si mesma sem querer</strong>
+<pre class="file" data-file="rec.sh">#!/usr/bin/env bash
+ls() {
+  echo "Listando $1:"
+  ls "$1"
+}
+ls Imagens
+</pre>
+<pre class="term">$ bash rec.sh
+Listando Imagens:
+Listando Imagens:
+Listando Imagens:
+…                                « milhares de linhas iguais (encurtado)
+Falha de segmentação     (imagem do núcleo gravada) bash rec.sh
+$ echo $?
+139</pre>
+<p><strong>O que aconteceu:</strong> a função se chama <code>ls</code>. Lá dentro, <code>ls "$1"</code> não chama o programa <code>ls</code>: chama <strong>a própria função</strong>, que chama de novo, sem fim, até a memória do Bash estourar. O código 139 é 128 + 11 (o sinal SIGSEGV).</p>
+<p><strong>Como resolver:</strong> dentro da função, use <code>command ls "$1"</code>: o <code>command</code> pula funções e aliases e chama o comando de verdade. Melhor ainda: dê um nome que não seja de comando (<code>lista</code>). Para se proteger, <code>FUNCNEST=100</code> limita o aninhamento e troca o travamento pela mensagem <code>ls: excedido o nível máximo de aninhamento de avaliação (100)</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A biblioteca não é achada quando rodo de outra pasta</strong>
+<pre class="term" data-cwd="~/Documentos">$ bash ../quebrado.sh
+../quebrado.sh: linha 2: lib/util.sh: Arquivo ou diretório inexistente
+../quebrado.sh: linha 3: msg: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o script usou <code>source lib/util.sh</code>. Um caminho relativo é procurado a partir da pasta <strong>atual</strong> (<code>~/Documentos</code>), e não da pasta do script.</p>
+<p><strong>Como resolver:</strong> monte o caminho a partir do script: <code>source "$(dirname "$0")/lib/util.sh"</code>, como no <code>backup-notas.sh</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>nome() { cmds; }</code></td><td>Define uma função (forma POSIX, recomendada).</td></tr>
+<tr><td><code>function nome { cmds; }</code></td><td>Define uma função (forma do Bash/ksh).</td></tr>
+<tr><td><code>nome arg1 arg2</code></td><td>Chama a função com dois argumentos.</td></tr>
+<tr><td><code>$1 $2 … $# $@ $*</code></td><td>Argumentos <strong>desta chamada</strong>, dentro da função.</td></tr>
+<tr><td><code>"$@"</code></td><td>Repassa todos os argumentos, cada um inteiro (ex.: <code>main "$@"</code>).</td></tr>
+<tr><td><code>type nome</code> · <code>type -t nome</code></td><td>Mostra o que é o nome (e o código, se for função) · só o tipo.</td></tr>
+<tr><td><code>declare -f [nome]</code></td><td>Mostra o código de uma função (ou de todas).</td></tr>
+<tr><td><code>declare -F</code></td><td>Lista os nomes das funções.</td></tr>
+<tr><td><code>unset -f nome</code></td><td>Apaga a função.</td></tr>
+<tr><td><code>command nome</code></td><td>Chama o comando de verdade, ignorando uma função de mesmo nome.</td></tr>
+<tr><td><code>source arq</code> · <code>. arq</code></td><td>Executa o arquivo no shell atual (carrega as funções dele).</td></tr>
+<tr><td><code>FUNCNEST=N</code></td><td>Limita quantas funções podem estar rodando uma dentro da outra.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Complete a definição</h3>
+<p>Complete para criar a função <code>data_hoje</code>, que mostra a data com <code>date +%d/%m/%Y</code>:</p>
+<div class="ex-code">data_hoje<input data-answer="()" aria-label="parênteses" size="3"> { date +%d/%m/%Y; }</div>
+</div>
+
+<div class="exercise">
+<h3>2. Quantos argumentos?</h3>
+<p>Qual variável, dentro da função, diz quantos argumentos ela recebeu?</p>
+<div class="ex-code"><input data-answer="$#" aria-label="variável" size="4"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Apagar uma função</h3>
+<p>Complete para apagar a função <code>mkcd</code> do shell atual:</p>
+<div class="ex-code">unset <input data-answer="-f" aria-label="opção" size="3"> mkcd</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O script <code>teste.sh</code> é rodado com <code>bash teste.sh Ana</code>. Dentro dele há <code>f() { echo "[$1]"; }</code> e a chamada <code>f</code>, sem argumentos. O que aparece?</p>
+<label><input type="radio" name="q4"> <code>[Ana]</code></label>
+<label><input type="radio" name="q4"> <code>[]</code></label>
+<label><input type="radio" name="q4"> <code>[f]</code></label>
+<label><input type="radio" name="q4"> Um erro: falta argumento.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Por que <code>mkcd</code> precisa ser uma função (no <code>.bashrc</code>) e não um script?</p>
+<label><input type="radio" name="q5"> Porque scripts não podem usar <code>mkdir -p</code>.</label>
+<label><input type="radio" name="q5"> Porque funções são mais rápidas.</label>
+<label><input type="radio" name="q5"> Porque o script roda num processo filho, e o <code>cd</code> dele não muda a pasta do seu terminal.</label>
+<label><input type="radio" name="q5"> Porque scripts não recebem argumentos.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Qual é a forma certa de chamar a função <code>soma</code> com os números 2 e 3?</p>
+<label><input type="radio" name="q6"> <code>soma 2 3</code></label>
+<label><input type="radio" name="q6"> <code>soma(2, 3)</code></label>
+<label><input type="radio" name="q6"> <code>soma(2 3)</code></label>
+<label><input type="radio" name="q6"> <code>$soma 2 3</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Defina com <code>nome() { …; }</code> (ou <code>function nome { …; }</code>) e chame com <code>nome arg1 arg2</code>, sem parênteses.</li>
+  <li>Dentro da função, <code>$1</code>, <code>$#</code> e <code>$@</code> são os argumentos <strong>da chamada</strong>, não os do script. Repasse com <code>"$@"</code>.</li>
+  <li>O Bash lê de cima para baixo: defina antes de chamar, ou use <code>main "$@"</code> na última linha.</li>
+  <li>Funções do terminal somem ao fechar; guarde-as no <code>~/.bashrc</code>. Funções podem mudar a pasta e as variáveis do seu shell; scripts não.</li>
+  <li><code>type</code>, <code>declare -f</code>/<code>-F</code> e <code>unset -f</code> mostram, listam e apagam funções. <code>source</code> carrega uma biblioteca.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash local, return e saída — como uma função devolve resultados | Guia Bash</title>
+<meta name="description" content="Variáveis locais e o escopo dinâmico do Bash, return (só 0 a 255, um código de saída), devolver valores com echo e $( ), variável global, printf -v e nameref, a pegadinha do local var=$(cmd), recursão e FUNCNAME.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">local, return e Saída</span></h1>
+
+<p class="intro">Em outras linguagens, uma função "devolve um valor" com <code>return</code>. No Bash não é bem assim: o <code>return</code> devolve só um <strong>código de saída</strong>, de 0 a 255. Para devolver um texto ou um número de verdade, a função <strong>escreve na saída</strong> e quem chamou captura. Nesta aula você vai entender essas duas "saídas" e como proteger as variáveis da função com <code>local</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Por que toda variável de função é global, a menos que você use <code>local</code> (e o "escopo dinâmico" do Bash).</li>
+  <li>O que o <code>return N</code> realmente devolve e por que só vai de 0 a 255.</li>
+  <li>As formas de devolver um valor: <code>echo</code> + <code>$( )</code>, variável global, <code>printf -v</code> e <code>declare -n</code>.</li>
+  <li>A pegadinha do <code>local var=$(comando)</code>, que esconde erros.</li>
+  <li>Recursão (uma função que chama a si mesma) e a variável <code>FUNCNAME</code>.</li>
+</ul>
+</div>
+
+<p>Esta aula continua <a href="funcoes.html">Funções</a>. Se você ainda não sabe criar e chamar uma função, comece por lá.</p>
+
+<hr>
+
+<h2>O problema: a função mexeu na minha variável</h2>
+<p>No Bash, uma variável criada dentro de uma função é, por padrão, <strong>global</strong>: vale para o script inteiro. Isso surpreende quem vem de outras linguagens.</p>
+
+<pre class="term">$ nome=Ana
+$ troca() {
+&gt;   nome=Bruno
+&gt;   cidade=Recife
+&gt; }
+$ troca
+$ echo "$nome mora em $cidade"
+Bruno mora em Recife          « a função trocou "nome" e criou "cidade" do lado de fora</pre>
+
+<p>Num script pequeno, isso parece prático. Num script grande, é uma armadilha: uma função auxiliar que usa uma variável <code>i</code> ou <code>total</code> estraga o <code>i</code> ou o <code>total</code> de quem a chamou.</p>
+
+<h2><code>local</code>: variáveis que só existem na função</h2>
+
+<pre class="term">$ nome=Ana
+$ troca_local() {
+&gt;   local nome=Carla
+&gt;   echo "dentro: $nome"
+&gt; }
+$ troca_local
+dentro: Carla
+$ echo "fora: $nome"
+fora: Ana                     « o "nome" de fora ficou intacto</pre>
+
+<dl class="anatomy">
+  <dt>local</dt><dd>"Esta variável pertence a esta função." Ela nasce quando a função começa e some quando ela termina.</dd>
+  <dt>nome</dt><dd>Pode ter o mesmo nome de uma variável de fora: a local "esconde" a de fora enquanto a função roda.</dd>
+  <dt>=Carla</dt><dd>O valor inicial (opcional: <code>local nome</code> cria a variável vazia).</dd>
+</dl>
+
+<p>Você pode declarar várias de uma vez: <code>local soma=0 n i</code>. E o <code>local</code> só funciona dentro de funções:</p>
+
+<pre class="term">$ local x=1
+bash: local: somente pode ser usado em uma função</pre>
+
+<div class="tip">
+<strong>Regra de ouro</strong>
+<p>Toda variável que só a função usa deve ser <code>local</code>, inclusive o contador de um <code>for</code> (<code>local i</code>). Só deixe global o que a função <strong>quer</strong> mudar de propósito.</p>
+</div>
+
+<h3>Escopo dinâmico: a função chamada enxerga o <code>local</code> de quem chamou</h3>
+<p>Aqui o Bash é diferente de Python, JavaScript ou C. Uma variável <code>local</code> não é visível só "no texto" da função: ela é visível <strong>em todas as funções que forem chamadas a partir dela</strong>, enquanto ela estiver rodando. Isso se chama <strong>escopo dinâmico</strong>.</p>
+
+<pre class="file" data-file="escopo.sh">#!/usr/bin/env bash
+cor=azul                 # global
+
+mostra_cor() {
+  echo "  mostra_cor vê: $cor"
+}
+
+pinta() {
+  local cor=vermelho     # local de pinta
+  mostra_cor             # quem será que mostra_cor vê?
+}
+
+echo "chamando mostra_cor direto:"
+mostra_cor
+echo "chamando pinta:"
+pinta
+echo "depois: $cor"
+</pre>
+
+<pre class="term">$ bash escopo.sh
+chamando mostra_cor direto:
+  mostra_cor vê: azul
+chamando pinta:
+  mostra_cor vê: vermelho      « mostra_cor enxergou o local de pinta!
+depois: azul                   « fora de tudo, a global continua azul</pre>
+
+<p>A mesma <code>mostra_cor</code>, sem mudar uma letra, mostrou valores diferentes. O que decide não é <em>onde ela foi escrita</em>, e sim <em>quem a chamou</em>: o Bash procura a variável na função atual, depois em quem a chamou, depois em quem chamou essa… e por último nas globais.</p>
+
+<p>Na prática: uma função pode até <strong>alterar</strong> o <code>local</code> de quem a chamou. Por isso, mesmo dentro de funções auxiliares, declare as suas variáveis com <code>local</code>.</p>
+
+<hr>
+
+<h2><code>return</code>: um código de saída, não um valor</h2>
+<p>Todo comando termina com um <a href="codigo-saida.html">código de saída</a>: 0 = deu certo, outro número = algo falhou. Uma função é um comando, e o <code>return</code> diz qual código ela devolve.</p>
+
+<pre class="term">$ tem_arquivo() {
+&gt;   [[ -f $1 ]]
+&gt; }
+$ tem_arquivo frutas.txt; echo $?
+0                              « existe: "verdadeiro"
+$ tem_arquivo nada.txt; echo $?
+1                              « não existe: "falso"
+$ if tem_arquivo frutas.txt; then echo "existe"; fi
+existe</pre>
+
+<p>Esta função nem tem <code>return</code>: sem ele, a função devolve o código do <strong>último comando</strong> que rodou (aqui, o <code>[[ ]]</code>). Isso a torna perfeita para usar direto num <code>if</code>, como os testes do Bash.</p>
+
+<dl class="anatomy">
+  <dt>return</dt><dd>Sai da função na hora. Sem número, devolve o código do último comando executado.</dd>
+  <dt>return 0</dt><dd>"Sucesso", "sim", "verdadeiro".</dd>
+  <dt>return 1</dt><dd>"Falha", "não", "falso". Outros números (2, 3…) podem indicar tipos diferentes de falha.</dd>
+</dl>
+
+<h3>Por que só 0–255?</h3>
+<p>O código de saída é guardado pelo sistema em <strong>1 byte</strong> (8 bits), e um byte vai de 0 a 255. Números fora disso "dão a volta":</p>
+
+<pre class="file" data-file="soma.sh">#!/usr/bin/env bash
+soma() {
+  return $(( $1 + $2 ))
+}
+soma 2 3;     echo "2 + 3 = $?"
+soma 200 100; echo "200 + 100 = $?"
+</pre>
+<pre class="term">$ bash soma.sh
+2 + 3 = 5
+200 + 100 = 44                 « 300 não cabe em 1 byte: 300 - 256 = 44</pre>
+
+<pre class="term">$ f() { return 300; }
+$ f; echo $?
+44
+$ f() { return -1; }
+$ f; echo $?
+255                            « -1 também dá a volta
+$ f() { return abc; }
+$ f; echo $?
+bash: return: abc: requer argumento numérico
+2</pre>
+
+<div class="warning">
+<strong>Nunca use <code>return</code> para devolver um resultado</strong>
+<p>Ele parece funcionar com números pequenos e quebra sem aviso com números grandes, negativos, com vírgula ou com texto. Use <code>return</code> só para dizer <strong>se deu certo</strong>. Para devolver o resultado, veja a próxima seção.</p>
+</div>
+
+<div class="tryscript" data-file="votar.sh" data-goal="out:15 anos: não pode,out:16 anos: pode votar,out:40 anos: pode votar">
+<p class="try-task"><strong>Missão:</strong> a função <code>pode_votar</code> deve devolver o código <strong>0</strong> (sim) quando a idade em <code>$1</code> for 16 ou mais, e <strong>1</strong> (não) caso contrário. Hoje ela sempre devolve 1. Corrija e rode: 16 e 40 devem poder votar.</p>
+<pre class="script">#!/usr/bin/env bash
+pode_votar() {
+  return 1     # troque esta linha
+}
+for idade in 15 16 40; do
+  if pode_votar "$idade"; then
+    echo "$idade anos: pode votar"
+  else
+    echo "$idade anos: não pode"
+  fi
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+pode_votar() {
+  if (( $1 &gt;= 16 )); then
+    return 0
+  fi
+  return 1
+}
+for idade in 15 16 40; do
+  if pode_votar "$idade"; then
+    echo "$idade anos: pode votar"
+  else
+    echo "$idade anos: não pode"
+  fi
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Devolver um valor: <code>echo</code> + <code>$( )</code></h2>
+<p>A forma mais comum: a função <strong>escreve</strong> o resultado na saída, e quem chama <strong>captura</strong> essa saída com a <a href="substituicao-comando.html">substituição de comando</a> <code>$( )</code>.</p>
+
+<pre class="term">$ dobro() {
+&gt;   echo $(( $1 * 2 ))
+&gt; }
+$ resultado=$(dobro 21)
+$ echo "O dobro é $resultado"
+O dobro é 42</pre>
+
+<dl class="anatomy">
+  <dt>echo $(( $1 * 2 ))</dt><dd>A função "devolve" escrevendo o resultado na saída padrão.</dd>
+  <dt>$(dobro 21)</dt><dd>Roda a função e é trocado por tudo o que ela escreveu (sem a quebra de linha final).</dd>
+  <dt>resultado=</dt><dd>Guarda o texto capturado numa variável.</dd>
+</dl>
+
+<p>Funciona com qualquer coisa: números grandes, negativos, texto, várias linhas. É a forma "natural" do shell, a mesma usada com comandos (<code>hoje=$(date +%F)</code>).</p>
+
+<h3>Cuidado: <strong>tudo</strong> o que a função escreve é capturado</h3>
+<pre class="file" data-file="media.sh">#!/usr/bin/env bash
+media() {
+  echo "Calculando..."
+  echo $(( ($1 + $2) / 2 ))
+}
+m=$(media 8 6)
+echo "Média: $m"
+</pre>
+<pre class="term">$ bash media.sh
+Média: Calculando...
+7                              « a mensagem entrou junto no resultado</pre>
+
+<p>A mensagem "Calculando..." era para a pessoa, não para a variável. Mande mensagens para a <strong>saída de erro</strong> com <code>&gt;&amp;2</code>: o <code>$( )</code> só captura a saída padrão (veja <a href="redirecionamento.html">redirecionamento</a>).</p>
+
+<pre class="file" data-file="media2.sh">#!/usr/bin/env bash
+media() {
+  echo "Calculando..." &gt;&amp;2
+  echo $(( ($1 + $2) / 2 ))
+}
+m=$(media 8 6)
+echo "Média: $m"
+</pre>
+<pre class="term">$ bash media2.sh
+Calculando...                  « foi para a tela pelo canal 2
+Média: 7                       « só o número ficou na variável</pre>
+
+<div class="tryscript" data-file="media.sh" data-goal="out:Média: 8,src:\blocal\b">
+<p class="try-task"><strong>Missão:</strong> complete a função <code>media</code> para que ela some <strong>todos</strong> os argumentos (use <code>for n in "$@"</code>) e mostre com <code>echo</code> a média inteira (soma dividida por <code>$#</code>). Use <code>local</code> para as variáveis da função. Com <code>8 6 10</code>, o resultado deve ser <code>Média: 8</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+media() {
+  echo 0     # troque por: some os argumentos e mostre a média
+}
+m=$(media 8 6 10)
+echo "Média: $m"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+media() {
+  local soma=0 n
+  for n in "$@"; do
+    soma=$(( soma + n ))
+  done
+  echo $(( soma / $# ))
+}
+m=$(media 8 6 10)
+echo "Média: $m"
+</pre>
+</div>
+
+<hr>
+
+<h2>Outras formas de devolver um valor</h2>
+
+<h3>1. Uma variável global</h3>
+<p>A função grava o resultado numa variável combinada (por convenção, em MAIÚSCULAS para chamar atenção), e quem chamou lê depois:</p>
+
+<pre class="file" data-file="global.sh">#!/usr/bin/env bash
+conta_linhas() {
+  TOTAL=$(wc -l &lt; "$1")
+}
+conta_linhas frutas.txt
+echo "frutas.txt tem $TOTAL linhas"
+</pre>
+<pre class="term">$ bash global.sh
+frutas.txt tem 7 linhas</pre>
+
+<p>É mais rápido que <code>$( )</code> (não cria um processo extra) e permite devolver várias coisas de uma vez. A desvantagem: quem lê a chamada <code>conta_linhas frutas.txt</code> não vê que ela cria <code>TOTAL</code>.</p>
+
+<p>E atenção: <strong>dentro de <code>$( )</code>, a função não consegue mudar variáveis globais</strong>. O <code>$( )</code> roda num <a href="subshell.html">subshell</a>, uma cópia do shell que é jogada fora no fim:</p>
+
+<pre class="file" data-file="contador.sh">#!/usr/bin/env bash
+chamadas=0
+proximo() {
+  chamadas=$(( chamadas + 1 ))
+  echo "$chamadas"
+}
+n=$(proximo)
+n=$(proximo)
+echo "n=$n, chamadas=$chamadas"
+proximo &gt; /dev/null
+proximo &gt; /dev/null
+echo "chamadas=$chamadas"
+</pre>
+<pre class="term">$ bash contador.sh
+n=1, chamadas=0               « as duas chamadas com $( ) mudaram só a cópia
+chamadas=2                    « chamadas diretas mudam a variável de verdade</pre>
+
+<h3>2. <code>printf -v</code>: gravar na variável que quem chamou escolheu</h3>
+<p>Quem chama passa o <strong>nome</strong> da variável; a função grava nela com <code>printf -v</code> (o <code>-v</code> manda o resultado para a variável em vez da tela; veja <a href="printf.html">printf</a>).</p>
+
+<pre class="file" data-file="maiusc.sh">#!/usr/bin/env bash
+maiusculas() {
+  printf -v "$1" "%s" "${2^^}"
+}
+maiusculas nome "ana maria"
+echo "$nome"
+</pre>
+<pre class="term">$ bash maiusc.sh
+ANA MARIA</pre>
+
+<dl class="anatomy">
+  <dt>maiusculas nome "ana maria"</dt><dd>1º argumento: o <strong>nome</strong> da variável que vai receber o resultado (sem <code>$</code>). 2º: o texto.</dd>
+  <dt>printf -v "$1"</dt><dd>"Grave na variável cujo nome está em <code>$1</code>" (aqui, <code>nome</code>).</dd>
+  <dt>"%s" "${2^^}"</dt><dd>O formato e o valor: o 2º argumento em maiúsculas (<code>^^</code>, veja <a href="expansao-parametros.html">expansão de parâmetros</a>).</dd>
+</dl>
+
+<h3>3. <code>declare -n</code> (nameref): um apelido para a variável de quem chamou <span class="versao">bash 4.3+</span></h3>
+<p>Com <code>local -n</code> (ou <code>declare -n</code>), uma variável da função vira um <strong>apelido</strong> de outra. Tudo o que você faz com o apelido acontece na original. É a forma de uma função receber e alterar um <a href="arrays.html">array</a>:</p>
+
+<pre class="file" data-file="nameref.sh">#!/usr/bin/env bash
+dobra_lista() {
+  local -n lista=$1      # lista vira um "apelido" da variável cujo nome veio em $1
+  local i
+  for i in "${!lista[@]}"; do
+    lista[i]=$(( lista[i] * 2 ))
+  done
+}
+numeros=(1 5 10)
+dobra_lista numeros
+echo "${numeros[@]}"
+</pre>
+<pre class="term">$ bash nameref.sh
+2 10 20                        « o array "numeros" de fora foi alterado</pre>
+
+<p>O nameref tem suas pegadinhas (por exemplo, se quem chama usar uma variável com o mesmo nome do apelido, o Bash avisa <code>referência circular de nome</code>). O assunto é aprofundado em <a href="eval-indirecao.html">eval, indireção e nameref</a>. O macOS, com Bash 3.2, não tem nameref; lá use <code>printf -v</code>.</p>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td><code>return N</code></td><td><code>if tem_arquivo x; then</code></td><td>A resposta é sim/não, sucesso/falha. <strong>Nunca</strong> para números ou textos.</td></tr>
+<tr><td><code>echo</code> + <code>$( )</code></td><td><code>r=$(dobro 21)</code></td><td><strong>Padrão.</strong> Um valor (texto, número, várias linhas). Fácil de ler e testar no terminal.</td></tr>
+<tr><td>Variável global</td><td><code>conta_linhas f; echo $TOTAL</code></td><td>Vários resultados de uma vez, ou a função é chamada milhares de vezes num laço (sem custo de subshell).</td></tr>
+<tr><td><code>printf -v</code></td><td><code>maiusculas nome "ana"</code></td><td>Quem chama escolhe o nome da variável; rápido; funciona até no Bash 3.2.</td></tr>
+<tr><td><code>local -n</code></td><td><code>dobra_lista numeros</code></td><td>A função precisa ler ou alterar um array de quem chamou (Bash 4.3+).</td></tr>
+</table>
+</div>
+
+<p>Uma função pode usar duas formas ao mesmo tempo: escrever o resultado com <code>echo</code> <strong>e</strong> devolver um código com <code>return</code>. Por exemplo, <code>if linha=$(busca Ana); then …</code> testa o código e guarda o texto.</p>
+
+<hr>
+
+<h2 id="pegadinha">A pegadinha: <code>local var=$(comando)</code> esconde o erro</h2>
+<p>Juntar o <code>local</code> e a atribuição numa linha só parece inofensivo. Mas o código de saída que sobra é o do <code>local</code> (que sempre dá certo), não o do comando:</p>
+
+<pre class="file" data-file="pegadinha.sh">#!/usr/bin/env bash
+pega() {
+  local linha=$(grep Natal Documentos/alunos.csv)
+  echo "código do grep: $?"
+}
+pega_certo() {
+  local linha
+  linha=$(grep Natal Documentos/alunos.csv)
+  echo "código do grep: $?"
+}
+pega
+pega_certo
+</pre>
+<pre class="term">$ bash pegadinha.sh
+código do grep: 0              « mentira! o grep não achou "Natal"; esse 0 é do local
+código do grep: 1              « separado: agora o $? é mesmo do grep</pre>
+
+<dl class="anatomy">
+  <dt>local linha=$(grep …)</dt><dd>Uma linha só: o <code>$?</code> é o do comando <code>local</code>, que conseguiu criar a variável. O erro do <code>grep</code> se perde.</dd>
+  <dt>local linha</dt><dd>Primeiro declara a variável (vazia)…</dd>
+  <dt>linha=$(grep …)</dt><dd>…depois atribui. Uma atribuição simples devolve o código do <code>$( )</code>.</dd>
+</dl>
+
+<p>O mesmo vale para <code>export var=$(…)</code>, <code>declare var=$(…)</code> e <code>readonly var=$(…)</code>. Isso importa ainda mais com <a href="modo-estrito.html">set -e</a>, que não percebe o erro escondido. O <a href="shellcheck.html">ShellCheck</a> avisa (é o alerta SC2155).</p>
+
+<hr>
+
+<h2>Recursão: a função que chama a si mesma</h2>
+<p>Uma função pode chamar a si mesma, desde que haja um <strong>caso de parada</strong>. O exemplo clássico é o fatorial: 5! = 5 × 4 × 3 × 2 × 1, ou seja, 5! = 5 × 4!.</p>
+
+<pre class="file" data-file="fatorial.sh">#!/usr/bin/env bash
+fatorial() {
+  local n=$1
+  if (( n &lt;= 1 )); then
+    echo 1
+    return
+  fi
+  local anterior
+  anterior=$(fatorial $(( n - 1 )))
+  echo $(( n * anterior ))
+}
+for n in 0 1 5 10 20; do
+  echo "$n! = $(fatorial $n)"
+done
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>local n=$1</code></td><td>Cada chamada tem o <strong>seu</strong> <code>n</code>. Sem <code>local</code>, as chamadas de dentro estragariam o <code>n</code> das de fora.</td></tr>
+<tr><td><code>if (( n &lt;= 1 )); then echo 1; return; fi</code></td><td>O caso de parada: 0! e 1! valem 1. Sem ele, a função se chamaria para sempre.</td></tr>
+<tr><td><code>anterior=$(fatorial $(( n - 1 )))</code></td><td>A chamada a si mesma, com um número menor. Cada chamada espera a de baixo responder.</td></tr>
+<tr><td><code>echo $(( n * anterior ))</code></td><td>Devolve n × (n−1)!.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash fatorial.sh
+0! = 1
+1! = 1
+5! = 120
+10! = 3628800
+20! = 2432902008176640000      « o maior que cabe nos inteiros de 64 bits do Bash</pre>
+
+<p>Recursão em Bash é boa para aprender e para percorrer pastas, mas é lenta (cada <code>$( )</code> cria um processo). Para contas, um <a href="for.html">laço</a> resolve melhor. E sem caso de parada, ela termina em "Falha de segmentação", como no <a href="funcoes.html">exemplo do <code>ls</code> recursivo</a>.</p>
+
+<hr>
+
+<h2><code>FUNCNAME</code>: quem sou eu e quem me chamou</h2>
+<p>O Bash mantém um array chamado <code>FUNCNAME</code> com a "pilha" de funções em execução: <code>${FUNCNAME[0]}</code> é a função atual, <code>${FUNCNAME[1]}</code> é quem a chamou, e assim por diante. Muito útil em mensagens de log e de erro:</p>
+
+<pre class="file" data-file="nomes.sh">#!/usr/bin/env bash
+log() {
+  echo "[${FUNCNAME[1]}] $*"
+}
+erro() {
+  echo "ERRO em ${FUNCNAME[1]} (chamada por ${FUNCNAME[2]}): $*" &gt;&amp;2
+}
+instala() {
+  log "começando"
+  erro "pacote não encontrado"
+  echo "  pilha completa: ${FUNCNAME[*]}"
+}
+main() {
+  log "início"
+  instala
+}
+main "$@"
+</pre>
+<pre class="term">$ bash nomes.sh
+[main] início
+[instala] começando
+ERRO em instala (chamada por main): pacote não encontrado
+  pilha completa: instala main main</pre>
+
+<dl class="anatomy">
+  <dt>${FUNCNAME[0]}</dt><dd>A própria função (dentro de <code>log</code>, seria "log").</dd>
+  <dt>${FUNCNAME[1]}</dt><dd>Quem chamou a função atual. Por isso <code>log</code> mostra o nome de quem pediu o log.</dd>
+  <dt>${FUNCNAME[*]}</dt><dd>A pilha inteira, da atual até o começo.</dd>
+</dl>
+
+<p>Por que "main" aparece duas vezes na pilha? O primeiro é a nossa função <code>main</code>. O último é o nome que o Bash dá ao <strong>corpo do script</strong>, fora de qualquer função; ele sempre aparece no fim da pilha quando o código vem de um script. No terminal, fora de função, <code>FUNCNAME</code> fica vazio.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O resultado veio errado: 44 em vez de 300</strong>
+<pre class="term">$ bash soma.sh
+2 + 3 = 5
+200 + 100 = 44</pre>
+<p><strong>O que aconteceu:</strong> a função "devolveu" o valor com <code>return</code>, que só guarda de 0 a 255.</p>
+<p><strong>Como resolver:</strong> troque <code>return $(( … ))</code> por <code>echo $(( … ))</code> e chame com <code>r=$(soma 200 100)</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"requer argumento numérico"</strong>
+<pre class="term">$ f() { return abc; }
+$ f; echo $?
+bash: return: abc: requer argumento numérico
+2</pre>
+<p><strong>O que aconteceu:</strong> tentou devolver um texto com <code>return</code>. Também acontece com <code>return $resultado</code> quando <code>resultado</code> tem vírgula ou texto.</p>
+<p><strong>Como resolver:</strong> <code>echo "$resultado"</code> + <code>$( )</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A variável capturada tem lixo (mensagens) junto</strong>
+<pre class="term">$ bash media.sh
+Média: Calculando...
+7</pre>
+<p><strong>O que aconteceu:</strong> o <code>$( )</code> captura <strong>toda</strong> a saída padrão da função, inclusive mensagens e a saída dos comandos que ela roda (um <code>cp -v</code>, um <code>grep</code> sem <code>-q</code>…).</p>
+<p><strong>Como resolver:</strong> mensagens com <code>&gt;&amp;2</code>; comandos cuja saída não interessa com <code>&gt;/dev/null</code>; deixe na saída padrão só o resultado.</p>
+</div>
+
+<div class="cenario">
+<strong>A variável global não mudou</strong>
+<pre class="term">$ bash contador.sh
+n=1, chamadas=0</pre>
+<p><strong>O que aconteceu:</strong> a função foi chamada dentro de <code>$( )</code> (ou num pipe, <code>f | outro</code>), que roda num subshell. As mudanças ficam na cópia.</p>
+<p><strong>Como resolver:</strong> escolha uma forma: ou a função devolve por <code>echo</code> (e você usa <code>$( )</code>), ou devolve por variável (e você a chama direto, sem <code>$( )</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>"local: somente pode ser usado em uma função"</strong>
+<pre class="term">$ local x=1
+bash: local: somente pode ser usado em uma função</pre>
+<p><strong>O que aconteceu:</strong> o <code>local</code> foi usado fora de uma função (no terminal ou no corpo principal do script). Lá ele não faz sentido: tudo já é global.</p>
+<p><strong>Como resolver:</strong> tire o <code>local</code> (uma atribuição simples basta) ou mova o código para dentro de uma função (como a <code>main</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>O erro do comando sumiu (<code>$?</code> sempre 0)</strong>
+<p>Você escreveu <code>local x=$(comando)</code> e testou <code>$?</code>. Veja <a href="#pegadinha">a pegadinha</a> acima: declare em uma linha e atribua em outra.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>local var</code> · <code>local var=valor</code></td><td>Cria uma variável que só existe nesta função (e nas que ela chamar).</td></tr>
+<tr><td><code>local -n ref=nome</code></td><td>Nameref: <code>ref</code> vira um apelido da variável <code>nome</code> (Bash 4.3+).</td></tr>
+<tr><td><code>return</code></td><td>Sai da função com o código do último comando.</td></tr>
+<tr><td><code>return N</code></td><td>Sai da função com o código N (0–255; outros valores dão a volta: 300 → 44).</td></tr>
+<tr><td><code>echo "$valor"</code> + <code>v=$(f)</code></td><td>Devolve um valor pela saída padrão.</td></tr>
+<tr><td><code>echo "msg" &gt;&amp;2</code></td><td>Mensagem para a pessoa, que não entra no <code>$( )</code>.</td></tr>
+<tr><td><code>printf -v "$1" '%s' "$valor"</code></td><td>Grava o valor na variável cujo nome veio em <code>$1</code>.</td></tr>
+<tr><td><code>${FUNCNAME[0]}</code> · <code>${FUNCNAME[1]}</code></td><td>Nome da função atual · de quem a chamou.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Proteger a variável</h3>
+<p>Complete para que a variável <code>i</code> da função não estrague um <code>i</code> de fora:</p>
+<div class="ex-code">conta() { <input data-answer="local" aria-label="palavra" size="6"> i; for i in 1 2 3; do echo $i; done; }</div>
+</div>
+
+<div class="exercise">
+<h3>2. Capturar o resultado</h3>
+<p>A função <code>dobro</code> mostra o resultado com <code>echo</code>. Complete para guardar o dobro de 21 em <code>r</code>:</p>
+<div class="ex-code">r=<input data-answer="$(dobro 21)|`dobro 21`" aria-label="captura" size="14"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Quanto dá?</h3>
+<p>Qual número <code>echo $?</code> mostra depois de <code>f() { return 260; }; f</code>?</p>
+<div class="ex-code"><input data-answer="4" aria-label="número" size="4"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Para que serve o <code>return</code> de uma função Bash?</p>
+<label><input type="radio" name="q4"> Para devolver qualquer valor, como em Python.</label>
+<label><input type="radio" name="q4"> Para mostrar o resultado na tela.</label>
+<label><input type="radio" name="q4"> Para sair da função com um código de saída de 0 a 255 (sucesso ou falha).</label>
+<label><input type="radio" name="q4"> Para encerrar o script.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Dentro de uma função, <code>local linha=$(grep Natal alunos.csv); echo $?</code> mostra 0 mesmo sem achar "Natal". Por quê?</p>
+<label><input type="radio" name="q5"> Porque o grep sempre devolve 0.</label>
+<label><input type="radio" name="q5"> Porque o <code>$?</code> é o do comando <code>local</code>, que deu certo.</label>
+<label><input type="radio" name="q5"> Porque <code>$( )</code> apaga os erros.</label>
+<label><input type="radio" name="q5"> Porque variáveis locais não guardam códigos de saída.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. <code>a()</code> faz <code>local x=5</code> e depois chama <code>b()</code>, que faz <code>echo $x</code>. Não existe <code>x</code> global. O que aparece?</p>
+<label><input type="radio" name="q6"> 5, porque o Bash tem escopo dinâmico: <code>b</code> enxerga o local de quem a chamou.</label>
+<label><input type="radio" name="q6"> Nada: <code>x</code> é local de <code>a</code>.</label>
+<label><input type="radio" name="q6"> Um erro: variável não definida.</label>
+<label><input type="radio" name="q6"> <code>$x</code>, literalmente.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Sem <code>local</code>, toda variável de função é global. Com <code>local</code>, ela vale na função e nas que ela chamar (escopo dinâmico).</li>
+  <li><code>return N</code> devolve um <strong>código de saída</strong> (0–255), ótimo para <code>if</code>. Sem número, vale o código do último comando.</li>
+  <li>Para devolver um valor: <code>echo</code> + <code>v=$(f)</code> (padrão); mensagens vão para <code>&gt;&amp;2</code>.</li>
+  <li>Alternativas: variável global, <code>printf -v "$1"</code> e <code>local -n</code>. Funções dentro de <code>$( )</code> não mudam variáveis de fora.</li>
+  <li>Escreva <code>local x</code> e <code>x=$(cmd)</code> em linhas separadas. Recursão precisa de caso de parada; <code>FUNCNAME</code> diz quem chamou quem.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
