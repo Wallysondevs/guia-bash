@@ -461,6 +461,10 @@
     catch (e) {
       this.cur = null;
       if (e instanceof AbortSig) { this.finalizar(p, 130); this.abortarFg(p, e.msg); return; }
+      if (e instanceof RangeError) {
+        this.saida("err", "(simulador) execução interrompida: aninhamento profundo demais (recursão ou substituições demais umas dentro das outras).\n");
+        this.finalizar(p, 1); this.abortarFg(p, "recursao"); return;
+      }
       if (isSig(e)) { this.finalizar(p, e instanceof KillSig ? 128 + e.sig : 1); return; }
       this.finalizar(p, 1);
       this.saida("err", "(simulador) erro interno: " + (e && e.message || e) + "\n");
@@ -659,7 +663,7 @@
   PP.eofEm = function () {
     if (this.inter) throw new Incomplete("eof");
     var topo = this.pilha.length ? this.pilha[this.pilha.length - 1] : null;
-    if (topo && topo.subst && !this.dash) throw new SyntaxErr("encontrado EOF inesperado enquanto procurava por `)' correspondente", null, topo.ln, true);
+    if (topo && topo.subst && !this.dash) throw new SyntaxErr("encontrado EOF inesperado enquanto procurava por `)' correspondente", null, this.ln, true);
     if (this.dash) { var esp = topo ? ({ "if": "fi", "while": "done", "until": "done", "for": "done", "case": "esac", "{": "}", "(": ")", "function": "}" })[topo.kw] : null; var ed = new SyntaxErr("Syntax error: end of file unexpected" + (esp ? " (expecting \"" + esp + "\")" : ""), null, this.ln, true); ed.dash = true; throw ed; }
     if (topo) throw new SyntaxErr("erro de sintaxe: fim inesperado do arquivo do comando `" + topo.kw + "' na linha " + topo.ln, null, this.ln, true);
     throw new SyntaxErr("erro de sintaxe: fim prematuro do arquivo", null, this.ln, true);
@@ -965,6 +969,15 @@
       return { t: "C", ast: ast, raw: s.slice(ini + 2, this.i - 1) };
     }
     if (n === "{") return this.lerChaves(emDQ);
+    if (n === "[" && !this.dash) {
+      var d = 0, j = i + 1;
+      for (; j < s.length; j++) { if (s[j] === "[") d++; else if (s[j] === "]") { d--; if (d === 0) break; } }
+      if (j < s.length) {
+        var exprB = s.slice(i + 2, j), lnB = this.ln;
+        this.i = j + 1;
+        return { t: "A", w: new Parser(exprB, { linha: lnB }).lerAte(null, "arith"), raw: exprB };
+      }
+    }
     if (n === "'" && !emDQ && !this.dash) {
       this.i++;
       var j = this.i + 1, txt = "";
@@ -1405,7 +1418,7 @@
     var nt = this.tok({});
     if (nt.t !== "W") { if (nt.t === "EOF") this.eofEm(); throw this.erroTok(nt); }
     var nome = nt.w.raw;
-    if (!nomeValido(nome)) throw new SyntaxErr("`" + nome + "': não é um identificador válido", null, nt.ln, false, true);
+    if (!nomeValido(nome) && select) throw new SyntaxErr("`" + nome + "': não é um identificador válido", null, nt.ln, false, true);
     var res = { k: select ? "select" : "for", name: nome, words: null, ln: ln };
     var t2 = this.peek(CMD);
     if (t2.t === "O" && t2.v === ";") { this.tok(); t2 = this.pularNL(); }
@@ -1648,7 +1661,12 @@
     this.e = expr; this.ctx = ctx; this.p = 0; this.lasttp = 0; this.tok = null; this.tv = null; this.nivel = nivel || 0;
   }
   var AP = Arith.prototype;
-  AP.erro = function (msg, tok) { var e = new ArithErr(msg, tok !== undefined ? tok : this.e.slice(this.lasttp)); if (tok !== undefined) e.num = true; throw e; };
+  AP.erro = function (msg, tok) {
+    var e = new ArithErr(msg, tok !== undefined ? tok : this.e.slice(this.lasttp));
+    // a expressão mostrada: sem os brancos do começo (e também do fim, nos erros de número)
+    e.expr = tok !== undefined ? this.e.replace(/^[ \t\n]+|[ \t\n]+$/g, "") : this.e.replace(/^[ \t\n]+/, "");
+    throw e;
+  };
   AP.ler = function () {
     var e = this.e, p = this.p;
     while (p < e.length && /[ \t\n]/.test(e[p])) p++;
@@ -2428,7 +2446,7 @@
   };
   SP.erroArit = function (expr, e, rot) {
     if (e.tok === null) { this.erro(e.msg); return; }
-    this.erro((rot ? rot + ": " : "") + (e.expr !== undefined ? e.expr : e.num ? e.tok : expr.replace(/^[ \t\n]+/, "")) + ": " + e.msg + " (token de erro é \"" + e.tok + "\")");
+    this.erro((rot ? rot + ": " : "") + (e.expr !== undefined ? e.expr : expr.replace(/^[ \t\n]+/, "")) + ": " + e.msg + " (token de erro é \"" + e.tok + "\")");
   };
 
   /* ---------- caminhos e arquivos ---------- */
@@ -2850,7 +2868,7 @@
     }
     if (op[0] === "/") {
       var pat2 = yield* this.padraoDe(v.arg);
-      var repSegs = v.rep ? yield* this.expPartes(v.rep.p, { dq: false }) : [];
+      var repSegs = v.rep ? yield* this.expPartes(dq ? v.rep.p : this.aplicarTil(v.rep.p, false), { dq: false }) : [];
       var usaAmp = this.shopt.patsub_replacement;
       itens = itens.map(function (s) { return substituirPadrao(s, pat2, op, repSegs, usaAmp, ext); });
       return lista ? this.segsLista(itens, estrela, dq) : this.segsVal(itens[0], dq);
@@ -3630,6 +3648,7 @@
           itens = yield* this.expandirArgs(c.words);
         } else itens = this.pos.slice();
         if (c.k === "select") return yield* this.rodarSelect(c, itens);
+        if (!nomeValido(c.name)) { this.erro("`" + c.name + "': não é um identificador válido"); return 1; }
         this.loopNivel++;
         try {
           for (var k = 0; k < itens.length; k++) {
@@ -4197,7 +4216,9 @@
 
   /* ---------- funções ---------- */
   SP.chamarFuncao = function* (nome, fn, args) {
-    if (this.funcStack.length > 1000) { this.erro(nome + ": nível máximo de aninhamento de funções excedido (1000)"); throw new FatalSig(1); }
+    var fn_ = parseInt(this.valor("FUNCNEST") || "0", 10);
+    if (fn_ > 0 && this.funcStack.length >= fn_) { this.erro(nome + ": excedido o nível máximo de aninhamento de avaliação (" + fn_ + ")"); throw new CmdErr(1); }
+    if (this.funcStack.length >= 150) { this.escrever(2, "(simulador) recursão profunda demais (mais de 150 chamadas de função aninhadas). No Bash real, isso pode estourar a memória; confira a condição de parada.\n"); throw new AbortSig("recursao"); }
     var escopo = Object.create(null);
     this.pilhaLocal.push(escopo);
     var posVelho = this.pos, loopVelho = this.loopNivel;
@@ -6043,6 +6064,7 @@
     } catch (e3) {
       if (e3 instanceof AbortSig) {
         if (e3.msg === "int") { this.status = 130; return 130; }
+        if (e3.msg === "recursao") { this.status = 1; return 1; }
         var msg = e3.msg === "saida" ? "(simulador) execução interrompida: saída grande demais." : e3.msg === "impasse" ? "(simulador) execução interrompida." : "(simulador) execução interrompida: passou de " + this.k.limit + " passos (laço infinito?). No terminal de verdade, use Ctrl+C para parar.";
         this.k.bytesSaida = 0;
         this.escrever(2, msg + "\n");
@@ -10684,6 +10706,7 @@
       catch (e) {
         if (e instanceof AbortSig) {
           if (e.msg === "int") { k.saida("err", "^C\n"); return 130; }
+          if (e.msg === "recursao") return 1;
           k.saida("err", e.msg === "saida" ? "(simulador) execução interrompida: saída grande demais.\n" : "(simulador) execução interrompida: passou de " + k.limit + " passos (laço infinito?). No terminal de verdade, use Ctrl+C para parar.\n");
           return 130;
         }
