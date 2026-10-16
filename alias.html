@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash alias — atalhos para comandos, unalias e quando usar função | Guia Bash</title>
+<meta name="description" content="Crie, liste e remova aliases no Bash, entenda as aspas, por que o alias não aceita argumento no meio, por que não funciona em script, como pular um alias (\comando, command) e onde guardá-los.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">alias</span></h1>
+
+<p class="intro">Um <strong>alias</strong> (em inglês, "apelido") é um nome curto que o Bash troca por um comando mais comprido antes de executar. Com ele, <code>ll</code> vira <code>ls -alF</code> e <code>docs</code> vira <code>cd ~/Documentos</code>. É a forma mais simples de deixar o terminal com a sua cara, e também a mais limitada: nesta aula você vê o que ele faz bem e quando trocar por uma função.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Criar, listar e remover aliases (<code>alias</code>, <code>unalias</code>), com as aspas certas.</li>
+  <li>Por que um alias não aceita argumento "no meio" e como uma função resolve.</li>
+  <li>Por que aliases não funcionam em scripts (e o <code>expand_aliases</code>).</li>
+  <li>Como pular um alias: <code>\comando</code>, <code>command</code> e o caminho completo.</li>
+  <li>Onde guardar seus aliases para sempre (<code>~/.bashrc</code>, <code>~/.bash_aliases</code>).</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Você já usa aliases</h2>
+<p>A Ana nunca criou um alias, mas o <code>.bashrc</code> dela já trouxe cinco (veja <a href="inicializacao.html">arquivos de inicialização</a>). O comando <code>alias</code> sozinho lista todos:</p>
+
+<pre class="term">$ alias
+alias grep='grep --color=auto'
+alias l='ls -CF'
+alias la='ls -A'
+alias ll='ls -alF'
+alias ls='ls --color=auto'</pre>
+
+<p>Cada linha está no formato em que o alias foi criado: <code>alias nome='comando'</code>, em ordem alfabética. Repare em <code>alias ls='ls --color=auto'</code>: quando a Ana digita <code>ls</code>, o Bash troca por <code>ls --color=auto</code>, e é por isso que as pastas aparecem coloridas. O alias tem o mesmo nome do comando, e o Bash não entra em loop: ele não troca de novo uma palavra que acabou de vir do mesmo alias.</p>
+
+<p>Para ver um alias só, passe o nome; para saber o que um nome é, use <code>type</code>:</p>
+
+<pre class="term">$ alias ll
+alias ll='ls -alF'
+$ type ll
+ll está apelidada para `ls -alF'       « "apelidada" = é um alias</pre>
+
+<hr>
+
+<h2>Criar um alias</h2>
+<p>A Ana vive entrando na pasta <code>Documentos</code>. Ela cria um atalho:</p>
+
+<dl class="anatomy">
+  <dt>alias</dt><dd>O comando interno que cria (ou mostra) apelidos.</dd>
+  <dt>docs</dt><dd>O nome novo. Letras, números, <code>_</code>, <code>-</code> e até <code>.</code> valem; espaços e <code>/</code> não.</dd>
+  <dt>=</dt><dd>Grudado nos dois lados, sem espaço, como numa <a href="variaveis-intro.html">variável</a>.</dd>
+  <dt>'cd ~/Documentos'</dt><dd>O texto que vai entrar no lugar de <code>docs</code>. Entre aspas, porque tem espaço.</dd>
+</dl>
+
+<pre class="term">$ alias docs='cd ~/Documentos'
+$ docs</pre>
+
+<p>Nada apareceu, e está certo: o <code>cd</code> não escreve nada quando dá certo. O prompt, porém, mudou de pasta:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ pwd
+/home/ana/Documentos</pre>
+
+<p>O <code>alias</code> também não responde nada ao criar. O código de saída é <code>0</code> quando deu certo e <code>1</code> quando você pede um alias que não existe:</p>
+
+<pre class="term">$ alias xyz
+bash: alias: xyz: não encontrado
+$ echo $?
+1</pre>
+
+<h3>O que acontece por baixo</h3>
+<p>Quando você aperta <kbd>Enter</kbd>, o Bash olha a <strong>primeira palavra</strong> de cada comando. Se ela é o nome de um alias, ele troca a palavra pelo texto do alias e só então continua lendo a linha. O resto do que você digitou fica onde estava, <strong>depois</strong> do texto do alias:</p>
+
+<pre class="term">$ alias diga='echo Olá'
+$ diga Ana e Bruno
+Olá Ana e Bruno                « virou: echo Olá Ana e Bruno</pre>
+
+<p>Três consequências dessa regra:</p>
+<ul>
+  <li>Só a <strong>primeira palavra</strong> do comando é trocada. Em <code>echo ll</code>, o <code>ll</code> é só um texto.</li>
+  <li>Os argumentos <strong>sempre vão para o fim</strong>. Isso é ótimo para <code>ll Documentos</code>, e é exatamente o limite do alias (veja "Alias × função").</li>
+  <li>A troca acontece quando a linha é <strong>lida</strong>. Um alias criado numa linha só vale a partir da linha seguinte (veja "Quando não funciona").</li>
+</ul>
+
+<div class="try" data-goal="alias:docs,cwd:~/Documentos" data-solucao="alias docs='cd ~/Documentos';;docs">
+<p class="try-task"><strong>Missão:</strong> crie o alias <code>docs</code> que entra na pasta <code>~/Documentos</code> e use-o. Confira com <code>pwd</code> e com <code>type docs</code>.</p>
+</div>
+
+<hr>
+
+<h2>As aspas no alias</h2>
+<h3>Sem aspas, o alias para no primeiro espaço</h3>
+
+<pre class="term">$ alias hoje=date +%F
+bash: alias: +%F: não encontrado
+$ alias hoje
+alias hoje='date'                « só o "date" entrou</pre>
+
+<p>Sem aspas, o Bash separou em duas palavras: <code>hoje=date</code> (criou o alias <code>hoje</code> = <code>date</code>) e <code>+%F</code> (tentou <strong>mostrar</strong> um alias chamado <code>+%F</code>, que não existe). Com aspas, o texto inteiro vira uma palavra só:</p>
+
+<pre class="term">$ alias hoje='date +%F'
+$ hoje
+2026-10-15</pre>
+
+<h3>Aspas simples × duplas</h3>
+<p>Aqui está uma armadilha. A Ana quer um alias que diga em que pasta ela está. Primeiro, com aspas <strong>duplas</strong>:</p>
+
+<pre class="term">$ alias onde="echo Você está em $PWD"
+$ alias onde
+alias onde='echo Você está em /home/ana'     « o $PWD já foi trocado!
+$ cd Documentos
+$ onde
+Você está em /home/ana                       « errado: estamos em Documentos</pre>
+
+<p>Aspas duplas deixam a variável ser trocada pelo valor (veja <a href="aspas.html">aspas</a>). O <code>$PWD</code> foi trocado <strong>na hora de criar</strong> o alias, quando a Ana estava em <code>/home/ana</code>, e esse texto fixo ficou guardado. Com aspas <strong>simples</strong>, o <code>$PWD</code> é guardado como está e só é trocado quando o alias é usado:</p>
+
+<pre class="term">$ alias onde='echo Você está em $PWD'
+$ alias onde
+alias onde='echo Você está em $PWD'          « guardou o $PWD, não o valor
+$ cd Documentos
+$ onde
+Você está em /home/ana/Documentos</pre>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Use sempre aspas simples no alias. Se o comando tiver uma aspa simples dentro, troque por uma função, que é mais fácil de escrever do que escapar aspas.</p>
+</div>
+
+<hr>
+
+<h2>Remover: <code>unalias</code></h2>
+
+<dl class="anatomy">
+  <dt>unalias</dt><dd>Apaga um alias do shell atual (<em>un</em> = desfazer).</dd>
+  <dt>docs</dt><dd>O nome do alias, sem <code>=</code>.</dd>
+</dl>
+
+<pre class="term">$ unalias docs
+$ docs
+bash: docs: comando não encontrado
+$ unalias docs
+bash: unalias: docs: não encontrado       « já não existia</pre>
+
+<p><code>unalias -a</code> apaga <strong>todos</strong> os aliases do shell atual. Nada disso mexe no <code>.bashrc</code>: ao abrir um terminal novo, os aliases do arquivo voltam. Para remover um alias "para sempre", apague a linha dele do arquivo.</p>
+
+<p>Para <strong>mudar</strong> um alias, basta criá-lo de novo com o mesmo nome: o novo substitui o antigo, sem aviso.</p>
+
+<pre class="term">$ alias ll='ls -lh'
+$ alias ll
+alias ll='ls -lh'</pre>
+
+<hr>
+
+<h2>Pular um alias</h2>
+<p>Um alias com o mesmo nome de um comando "esconde" o comando original. Às vezes você quer o original. Exemplo clássico: muita gente cria <code>alias rm='rm -i'</code>, para o <code>rm</code> pedir confirmação:</p>
+
+<pre class="term">$ alias rm='rm -i'
+$ touch teste.txt
+$ rm teste.txt
+rm: remover regular empty file 'teste.txt'? n      « a Ana respondeu n (não)
+$ ls teste.txt
+teste.txt</pre>
+
+<p>A pergunta (que saiu meio em inglês, por causa da tradução incompleta do <code>rm</code>) evitou a remoção. Mas, num momento em que ela tem certeza, a confirmação atrapalha. Uma barra invertida antes do nome desliga o alias só naquela vez:</p>
+
+<pre class="term">$ \rm teste.txt
+$ ls teste.txt
+ls: não foi possível acessar 'teste.txt': Arquivo ou diretório inexistente</pre>
+
+<p>O <code>type -a</code> mostra tudo o que existe com um nome, na ordem em que o Bash procura. O primeiro da lista é o que roda:</p>
+
+<pre class="term">$ type -a rm
+rm está apelidada para `rm -i'     « 1º: o alias
+rm é /usr/bin/rm                   « 2º: o programa
+rm é /bin/rm                       « o mesmo programa, por outro caminho</pre>
+
+<h3>Formas de pular o alias</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>O que pula</th><th>Qual usar?</th></tr>
+<tr><td>Barra invertida</td><td><code>\rm arq</code></td><td>Só o alias.</td><td>No terminal, o mais rápido de digitar.</td></tr>
+<tr><td>Aspas no nome</td><td><code>'rm' arq</code></td><td>Só o alias (igual ao <code>\</code>).</td><td>Funciona, mas é menos conhecido.</td></tr>
+<tr><td><code>command</code></td><td><code>command rm arq</code></td><td>Alias <strong>e</strong> função com esse nome.</td><td>Em scripts e funções: deixa claro que você quer o programa (ou o comando interno).</td></tr>
+<tr><td>Caminho completo</td><td><code>/usr/bin/rm arq</code></td><td>Tudo: alias, função e comandos internos.</td><td>Quando precisa daquele arquivo exato.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ \ls -d Doc*
+Documentos
+$ command ls -d Doc*
+Documentos
+$ /usr/bin/ls -d Doc*
+Documentos</pre>
+
+<p>As três deram o mesmo resultado, só que sem o <code>--color=auto</code> do alias. A ordem completa em que o Bash procura um nome (alias, palavra-chave, função, comando interno, <code>PATH</code>) é o assunto de <a href="path.html">PATH e onde os comandos moram</a>.</p>
+
+<div class="warning">
+<strong>Não confie no <code>rm -i</code></strong>
+<p>Quem se acostuma com o <code>alias rm='rm -i'</code> passa a digitar <code>rm</code> sem cuidado. Num servidor, no root ou num script, o alias não existe e o arquivo vai embora sem pergunta. A segurança está em conferir antes (veja <a href="remover.html">apagar com segurança</a>).</p>
+</div>
+
+<hr>
+
+<h2>Alias × função: o argumento no meio</h2>
+<p>A Ana quer um atalho <code>busca PALAVRA</code> que procure a palavra, ignorando maiúsculas, no arquivo de frutas. Ela tenta com <code>$1</code>, como num script:</p>
+
+<pre class="term">$ alias busca='grep -i "$1" frutas.txt'
+$ busca BANANA
+frutas.txt:banana
+frutas.txt:maçã
+frutas.txt:laranja
+frutas.txt:banana
+frutas.txt:uva
+frutas.txt:maçã
+frutas.txt:banana
+grep: BANANA: Arquivo ou diretório inexistente</pre>
+
+<p>Deu tudo errado, e dá para entender lendo como o Bash montou o comando: o alias não tem <code>$1</code> (o <code>$1</code> do terminal está vazio) e o argumento foi para o <strong>fim</strong>. O comando que rodou foi <code>grep -i "" frutas.txt BANANA</code>: procurar "nada" (que casa com todas as linhas) em dois arquivos, <code>frutas.txt</code> e <code>BANANA</code>. Por isso cada linha veio com o nome do arquivo na frente, e o <code>grep</code> reclamou que o arquivo <code>BANANA</code> não existe.</p>
+
+<p>Outro exemplo do mesmo problema, mais curto:</p>
+
+<pre class="term">$ alias saud='echo "Olá, $1. Tudo bem?"'
+$ saud Ana
+Olá, . Tudo bem? Ana            « o Ana foi parar no fim</pre>
+
+<p>Quando o argumento precisa ir no meio, use uma <a href="funcoes.html">função</a>. Numa função, <code>$1</code> é mesmo o primeiro argumento:</p>
+
+<dl class="anatomy">
+  <dt>busca()</dt><dd>Define uma função chamada <code>busca</code>.</dd>
+  <dt>{ grep -i "$1" ~/frutas.txt; }</dt><dd>O corpo: o <code>$1</code> é trocado pelo primeiro argumento. Repare no espaço depois de <code>{</code> e no <code>;</code> antes de <code>}</code>.</dd>
+</dl>
+
+<pre class="term">$ unalias busca                « primeiro, apague o alias de mesmo nome
+$ busca() { grep -i "$1" ~/frutas.txt; }
+$ busca BANANA
+banana
+banana
+banana</pre>
+
+<p>Por que apagar o alias antes? Porque, na linha de definição, a primeira palavra <code>busca</code> ainda era um alias e foi trocada. Sem o <code>unalias</code>, o Bash recusa com um erro de sintaxe (está em "Quando não funciona").</p>
+
+<p>Um detalhe curioso: veja o corpo da função guardado pelo Bash.</p>
+
+<pre class="term">$ type busca
+busca é uma função
+busca ()
+{
+    grep --color=auto -i "$1" ~/frutas.txt
+}</pre>
+
+<p>O <code>grep</code> virou <code>grep --color=auto</code>: o alias do <code>grep</code> foi aplicado <strong>quando a função foi definida</strong>, não quando ela roda.</p>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Alias</th><th>Função</th></tr>
+<tr><td>Argumentos</td><td>Só no fim, do jeito que vieram</td><td>Em qualquer lugar: <code>$1</code>, <code>$2</code>, <code>"$@"</code></td></tr>
+<tr><td>Várias linhas, <code>if</code>, laços</td><td>Não (tudo numa linha, difícil de ler)</td><td>Sim</td></tr>
+<tr><td>Variáveis próprias</td><td>Não</td><td>Sim, com <code>local</code></td></tr>
+<tr><td>Em scripts</td><td>Desligado por padrão</td><td>Funciona sempre</td></tr>
+<tr><td>Ideal para</td><td>Trocar um nome por um comando com opções fixas: <code>ll</code>, <code>la</code>, <code>..</code></td><td>Todo o resto</td></tr>
+</table>
+</div>
+
+<p>O próprio manual do Bash diz: "para quase todos os fins, aliases foram superados por funções". Use alias para o simples; ao primeiro <code>$1</code>, mude para função.</p>
+
+<div class="try" data-goal="func:mkcd,dir:~/Documentos/fotos,cwd:~/Documentos/fotos" data-solucao="mkcd() { mkdir -p &quot;$1&quot; &amp;&amp; cd &quot;$1&quot;; };;cd Documentos;;mkcd fotos">
+<p class="try-task"><strong>Missão:</strong> um atalho que cria uma pasta e já entra nela precisa do nome duas vezes, então não dá para fazer com alias. Crie a <strong>função</strong> <code>mkcd</code> que rode <code>mkdir -p "$1" &amp;&amp; cd "$1"</code>. Depois entre em <code>Documentos</code> e use <code>mkcd fotos</code>.</p>
+</div>
+
+<hr>
+
+<h2>Aliases não funcionam em scripts</h2>
+<p>A Ana escreve um script que cria e usa um alias:</p>
+
+<pre class="file" data-file="atalhos.sh">#!/usr/bin/env bash
+alias contar="wc -l"
+contar frutas.txt
+</pre>
+
+<pre class="term">$ bash atalhos.sh
+atalhos.sh: linha 3: contar: comando não encontrado
+$ echo $?
+127</pre>
+
+<p>O alias foi criado sem erro na linha 2, mas a linha 3 não o usou. O motivo é uma opção chamada <code>expand_aliases</code> ("expandir aliases"), que vem <strong>ligada</strong> no shell interativo e <strong>desligada</strong> nos scripts:</p>
+
+<pre class="term">$ shopt expand_aliases
+expand_aliases      	on
+$ bash -c "shopt expand_aliases"
+expand_aliases      	off</pre>
+
+<p>Dá para ligar no script com <code>shopt -s expand_aliases</code> (o <code>-s</code> é de <em>set</em>, ligar), antes de criar o alias:</p>
+
+<pre class="file" data-file="atalhos2.sh">#!/usr/bin/env bash
+shopt -s expand_aliases
+alias contar="wc -l"
+contar frutas.txt
+</pre>
+
+<pre class="term">$ bash atalhos2.sh
+7 frutas.txt</pre>
+
+<p>Funciona, mas quase nunca é a melhor escolha: em script, uma função ou o comando completo deixa o código mais claro. E lembre: mesmo com <code>expand_aliases</code>, o script <strong>não lê o seu <code>.bashrc</code></strong>, então os aliases de lá (<code>ll</code>, <code>la</code>…) não existem nele:</p>
+
+<pre class="term">$ cat usa-ll.sh
+#!/usr/bin/env bash
+ll Documentos
+$ bash usa-ll.sh
+usa-ll.sh: linha 2: ll: comando não encontrado</pre>
+
+<div class="tryscript" data-file="contar.sh" data-goal="out:7 frutas.txt,src:expand_aliases|contar\(\)">
+<p class="try-task"><strong>Missão:</strong> este script falha com "contar: comando não encontrado". Conserte de um dos dois jeitos: ligando a opção que permite aliases em script, ou trocando o alias por uma função <code>contar()</code>. Rode até aparecer <code>7 frutas.txt</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+cd ~
+alias contar="wc -l"
+contar frutas.txt
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+cd ~
+contar() { wc -l "$@"; }
+contar frutas.txt
+</pre>
+</div>
+
+<hr>
+
+<h2>Guardar para sempre</h2>
+<p>Um alias criado no terminal some quando o terminal fecha. Para valer sempre, escreva a linha <code>alias …</code> num arquivo que o Bash lê ao abrir. Há dois lugares comuns:</p>
+
+<h3>1. No próprio <code>~/.bashrc</code></h3>
+<p>É onde estão os aliases que a Ana já tem. Acrescente no fim do arquivo (com um editor ou com <code>&gt;&gt;</code>, nunca com um <code>&gt;</code> só, que apagaria o arquivo) e aplique com <code>source ~/.bashrc</code>. O passo a passo, e o que fazer se o arquivo quebrar, estão em <a href="inicializacao.html">arquivos de inicialização</a>.</p>
+
+<h3>2. Num arquivo separado: <code>~/.bash_aliases</code></h3>
+<p>Quando a lista cresce, fica mais organizado guardar os aliases num arquivo só para eles. O <code>.bashrc</code> do Debian e do Ubuntu já vem com o trecho que carrega esse arquivo; o da Ana é uma versão curta e não tem, então ela acrescenta:</p>
+
+<pre class="term">$ cat &gt;&gt; ~/.bashrc &lt;&lt;'FIM'
+&gt;
+&gt; # aliases pessoais ficam num arquivo separado
+&gt; if [ -f ~/.bash_aliases ]; then
+&gt;     . ~/.bash_aliases
+&gt; fi
+&gt; FIM</pre>
+
+<dl class="anatomy">
+  <dt>if [ -f ~/.bash_aliases ]</dt><dd>"Se o arquivo existir…" (<code>-f</code> = é um arquivo). Sem o teste, o <code>.bashrc</code> daria erro enquanto o arquivo não existisse.</dd>
+  <dt>. ~/.bash_aliases</dt><dd>…leia o arquivo aqui mesmo (o ponto é o <code>source</code>).</dd>
+</dl>
+
+<p>Agora cada alias novo vai para o arquivo próprio:</p>
+
+<pre class="term">$ echo "alias ..='cd ..'" &gt;&gt; ~/.bash_aliases
+$ echo "alias contar='wc -l'" &gt;&gt; ~/.bash_aliases
+$ cat ~/.bash_aliases
+alias ..='cd ..'
+alias contar='wc -l'
+$ source ~/.bashrc
+$ alias
+alias ..='cd ..'                  « os dois novos
+alias contar='wc -l'
+alias grep='grep --color=auto'
+alias l='ls -CF'
+alias la='ls -A'
+alias ll='ls -alF'
+alias ls='ls --color=auto'
+$ contar frutas.txt
+7 frutas.txt</pre>
+
+<div class="tip">
+<strong>Um alias que faz backup de si mesmo</strong>
+<p>Ao copiar seus aliases para outra máquina, leve o <code>~/.bash_aliases</code> (e o trecho do <code>.bashrc</code> que o carrega). O projeto <a href="projeto-dotfiles.html">Seus Dotfiles</a> mostra como manter esses arquivos versionados.</p>
+</div>
+
+<hr>
+
+<h2>Aliases úteis</h2>
+<p>Algumas ideias para o seu <code>~/.bash_aliases</code>. Escolha só os que você vai usar de verdade: alias demais é difícil de lembrar.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Alias</th><th>O que faz</th><th>Observação</th></tr>
+<tr><td><code>alias ll='ls -alF'</code></td><td>Lista detalhada, com ocultos e <code>/</code> nas pastas</td><td>Já vem no Debian/Ubuntu</td></tr>
+<tr><td><code>alias la='ls -A'</code></td><td>Lista com ocultos, sem <code>.</code> e <code>..</code></td><td>Já vem no Debian/Ubuntu</td></tr>
+<tr><td><code>alias ..='cd ..'</code></td><td>Sobe uma pasta</td><td>Também <code>alias ...='cd ../..'</code></td></tr>
+<tr><td><code>alias grep='grep --color=auto'</code></td><td>Destaca o trecho encontrado</td><td>Só colore quando a saída é a tela</td></tr>
+<tr><td><code>alias df='df -h'</code></td><td>Espaço em disco em K, M, G</td><td><code>-h</code> = <em>human-readable</em></td></tr>
+<tr><td><code>alias du1='du -h -d 1'</code></td><td>Tamanho de cada pasta, um nível</td><td>Útil para achar o que ocupa espaço</td></tr>
+<tr><td><code>alias hist='history | grep'</code></td><td><code>hist ssh</code> procura "ssh" no histórico</td><td>Funciona porque o argumento vai no fim</td></tr>
+<tr><td><code>alias cp='cp -i'</code>, <code>alias mv='mv -i'</code></td><td>Pedem confirmação antes de sobrescrever</td><td>Rede de proteção, não substitui atenção</td></tr>
+<tr><td><code>alias c='clear'</code></td><td>Limpa a tela</td><td><kbd>Ctrl</kbd>+<kbd>L</kbd> faz o mesmo</td></tr>
+<tr><td><code>alias recarregar='source ~/.bashrc'</code></td><td>Aplica mudanças do <code>.bashrc</code></td><td>Veja <a href="inicializacao.html">inicialização</a></td></tr>
+<tr><td><code>alias atualizar='sudo apt update &amp;&amp; sudo apt upgrade'</code></td><td>Atualiza o sistema</td><td>Debian/Ubuntu. Fedora: <code>sudo dnf upgrade</code>; Arch: <code>sudo pacman -Syu</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"alias: =: não encontrado"</strong>
+<pre class="term">$ alias ll = 'ls -l'
+alias ll='ls -alF'
+bash: alias: =: não encontrado
+bash: alias: ls -l: não encontrado</pre>
+<p><strong>O que aconteceu:</strong> com espaços em volta do <code>=</code>, o Bash recebeu três palavras: <code>ll</code>, <code>=</code> e <code>ls -l</code>. Para cada uma ele tentou <strong>mostrar</strong> o alias com aquele nome: o <code>ll</code> existia (primeira linha), os outros não.</p>
+<p><strong>Como resolver:</strong> <code>alias ll='ls -l'</code>, sem espaços em volta do <code>=</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Criei o alias e usei na mesma linha: "comando não encontrado"</strong>
+<pre class="term">$ alias oi='echo oi'; oi
+bash: oi: comando não encontrado
+$ oi
+oi</pre>
+<p><strong>O que aconteceu:</strong> o Bash troca os aliases quando <strong>lê</strong> a linha, antes de executar qualquer parte dela. Quando ele leu o <code>oi</code> do fim, o <code>alias</code> ainda não tinha rodado. Na linha seguinte, o alias já existia.</p>
+<p><strong>Como resolver:</strong> crie o alias numa linha e use nas próximas. O mesmo vale dentro de uma função ou de um bloco <code>if</code>: o alias criado lá dentro só vale para as linhas lidas depois do bloco inteiro.</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado `('" ao criar uma função</strong>
+<pre class="term">$ alias mkcd='mkdir -p "$1" &amp;&amp; cd "$1"'
+$ mkcd() { mkdir -p "$1" &amp;&amp; cd "$1"; }
+bash: erro de sintaxe próximo ao token inesperado `('</pre>
+<p><strong>O que aconteceu:</strong> já existia um alias com o nome da função. Na linha de definição, <code>mkcd</code> foi trocado pelo texto do alias, e o Bash leu <code>mkdir -p "$1" &amp;&amp; cd "$1"() {…</code>, que não faz sentido.</p>
+<p><strong>Como confirmar:</strong> <code>type mkcd</code> diz "está apelidada para…".</p>
+<p><strong>Como resolver:</strong> <code>unalias mkcd</code> e defina a função de novo. Se o alias vem do <code>.bashrc</code>, apague a linha lá também, senão o problema volta no próximo terminal. Outra saída é definir com a palavra <code>function</code>: <code>function mkcd { …; }</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O alias funciona no terminal, mas não no script (ou no <code>sudo</code>)</strong>
+<pre class="term">$ bash usa-ll.sh
+usa-ll.sh: linha 2: ll: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> scripts não leem o <code>.bashrc</code> e têm <code>expand_aliases</code> desligado. Com <code>sudo ll</code> acontece algo parecido: o alias só é trocado na primeira palavra, que ali é o <code>sudo</code>, e o root não conhece o <code>ll</code>.</p>
+<p><strong>Como resolver:</strong> no script, escreva o comando completo (<code>ls -alF</code>) ou use uma função. Para o <code>sudo</code>, existe um truque: um alias que <strong>termina com espaço</strong> faz o Bash verificar também a palavra seguinte. Com <code>alias sudo='sudo '</code> no <code>.bashrc</code>, <code>sudo ll</code> vira <code>sudo ls -alF</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Apaguei o alias do <code>.bashrc</code>, mas ele continua</strong>
+<p><strong>O que aconteceu:</strong> o shell aberto ainda tem o alias na memória. O <code>source ~/.bashrc</code> não apaga nada: ele só executa o que está no arquivo.</p>
+<p><strong>Como resolver:</strong> <code>unalias nome</code> no terminal aberto, ou abra um terminal novo (ou <code>exec bash</code>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>alias</code> (ou <code>alias -p</code>)</td><td>Lista todos os aliases</td></tr>
+<tr><td><code>alias nome</code></td><td>Mostra um alias (código 1 se não existir)</td></tr>
+<tr><td><code>alias nome='comando'</code></td><td>Cria ou substitui um alias</td></tr>
+<tr><td><code>unalias nome</code></td><td>Remove um alias do shell atual</td></tr>
+<tr><td><code>unalias -a</code></td><td>Remove todos os aliases do shell atual</td></tr>
+<tr><td><code>type nome</code> / <code>type -a nome</code></td><td>Diz se o nome é alias, função, comando interno ou programa / mostra todos</td></tr>
+<tr><td><code>\nome</code></td><td>Roda sem o alias</td></tr>
+<tr><td><code>command nome</code></td><td>Roda sem alias e sem função</td></tr>
+<tr><td><code>shopt -s expand_aliases</code></td><td>Liga aliases num script</td></tr>
+<tr><td><code>alias x='cmd '</code> (espaço no fim)</td><td>A palavra seguinte também pode ser um alias</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Criar</h3>
+<p>Complete para criar o alias <code>docs</code> que entra em <code>~/Documentos</code>:</p>
+<div class="ex-code">alias docs=<input data-answer="'cd ~/Documentos'|&quot;cd ~/Documentos&quot;" aria-label="valor do alias"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Sem o alias, só desta vez</h3>
+<p>Existe <code>alias rm='rm -i'</code>. Complete para apagar <code>velho.txt</code> sem a pergunta, usando o jeito mais curto:</p>
+<div class="ex-code"><input data-answer="\rm|command rm" aria-label="comando"> velho.txt</div>
+</div>
+
+<div class="exercise">
+<h3>3. Alias em script</h3>
+<p>Complete a linha que liga os aliases dentro de um script:</p>
+<div class="ex-code">shopt <input data-answer="-s" aria-label="opção"> expand_aliases</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Com <code>alias ola='echo "Oi, $1!"'</code>, o que <code>ola Ana</code> mostra?</p>
+<label><input type="radio" name="q4"> <code>Oi, Ana!</code></label>
+<label><input type="radio" name="q4"> <code>Oi, $1! Ana</code></label>
+<label><input type="radio" name="q4"> <code>Oi, ! Ana</code></label>
+<label><input type="radio" name="q4"> Um erro de sintaxe.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Por que <code>alias onde="echo $PWD"</code> mostra sempre a mesma pasta?</p>
+<label><input type="radio" name="q5"> Porque aliases não podem ter variáveis.</label>
+<label><input type="radio" name="q5"> Porque as aspas duplas trocaram o <code>$PWD</code> pelo valor na hora de criar o alias.</label>
+<label><input type="radio" name="q5"> Porque o <code>$PWD</code> só muda em shells de login.</label>
+<label><input type="radio" name="q5"> Porque o <code>echo</code> ignora variáveis.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Qual destes atalhos <strong>precisa</strong> ser uma função?</p>
+<label><input type="radio" name="q6"> <code>ll</code> → <code>ls -alF</code></label>
+<label><input type="radio" name="q6"> <code>..</code> → <code>cd ..</code></label>
+<label><input type="radio" name="q6"> <code>hist</code> → <code>history | grep</code> (a palavra vai no fim)</label>
+<label><input type="radio" name="q6"> <code>backup ARQ</code> → <code>cp ARQ ARQ.bak</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>alias nome='comando'</code> cria (sem espaço no <code>=</code>, com aspas simples); <code>alias</code> lista; <code>unalias</code> remove.</li>
+  <li>O Bash troca só a primeira palavra, quando lê a linha, e os argumentos vão sempre para o fim.</li>
+  <li>Argumento no meio, várias linhas ou uso em script: escreva uma função.</li>
+  <li>Scripts não leem o <code>.bashrc</code> e têm <code>expand_aliases</code> desligado.</li>
+  <li><code>\comando</code> pula o alias; <code>command comando</code> pula alias e função.</li>
+  <li>Para valer sempre: <code>~/.bashrc</code> ou <code>~/.bash_aliases</code>, e depois <code>source ~/.bashrc</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
