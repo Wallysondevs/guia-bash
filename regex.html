@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Regex com [[ =~ ]] — validar e extrair com BASH_REMATCH | Guia Bash</title>
+<meta name="description" content="Aprenda expressões regulares no Bash com [[ texto =~ regex ]]: âncoras, classes, quantificadores, grupos, BASH_REMATCH, por que não usar aspas, validar CEP, data, e-mail e IP, e extrair dados de um log.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Regex com [[ =~ ]]</span></h1>
+
+<p class="intro">Uma <strong>expressão regular</strong> (<em>regular expression</em>, ou <strong>regex</strong>) é um padrão que descreve o <strong>formato</strong> de um texto: "cinco dígitos, um hífen e mais três dígitos" é um CEP. Com o operador <code>=~</code> dentro de <code>[[ ]]</code>, o Bash testa se uma variável tem esse formato e ainda separa os pedaços que interessam, sem chamar nenhum programa externo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Testar um texto com <code>[[ $texto =~ regex ]]</code> e ler o código de saída (0, 1 ou 2).</li>
+  <li>As peças de uma regex: âncoras, classes, quantificadores e grupos.</li>
+  <li>Pegar os pedaços capturados no array <code>BASH_REMATCH</code>.</li>
+  <li>A regra de ouro: <strong>sem aspas</strong> na regex, e o truque de guardá-la numa variável.</li>
+  <li>Validar CEP, data, e-mail e IP, extrair dados do <code>acesso.log</code>, e quando trocar tudo isso por <code>grep -E</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Por que regex, se já existem curingas?</h2>
+<p>Você já viu em <a href="strings.html">Manipular Strings</a> que <code>[[ $s == *final* ]]</code> testa se o texto contém "final". Os curingas (<code>*</code>, <code>?</code>, <code>[ ]</code>) são ótimos para "começa com", "termina com" e "contém". Mas não conseguem dizer "<strong>exatamente cinco</strong> dígitos" nem "<strong>um ou mais</strong> números". E não conseguem <strong>separar</strong> o dia, o mês e o ano de uma data.</p>
+
+<p>A regex resolve as duas coisas. Ela é uma minilinguagem, a mesma (com pequenas variações) do <code>grep -E</code>, do <code>sed -E</code>, do <code>awk</code> e de quase toda linguagem de programação. O Bash usa a variante <strong>ERE</strong> (<em>Extended Regular Expressions</em>, expressões regulares estendidas).</p>
+
+<hr>
+
+<h2>A forma mais simples</h2>
+
+<dl class="anatomy">
+  <dt>[[</dt><dd>Abre o teste. O <code>=~</code> só funciona dentro de <code>[[ ]]</code>, nunca em <code>[ ]</code>.</dd>
+  <dt>$cep</dt><dd>O texto a examinar.</dd>
+  <dt>=~</dt><dd>"Casa com a expressão regular…". O til lembra "aproximadamente": o texto tem a <strong>forma</strong> da regex.</dd>
+  <dt>^[0-9]{5}-[0-9]{3}$</dt><dd>A regex: começo, 5 dígitos, hífen, 3 dígitos, fim. Peça por peça logo abaixo.</dd>
+  <dt>]]</dt><dd>Fecha o teste.</dd>
+</dl>
+
+<pre class="term">$ cep="50030-230"
+$ [[ $cep =~ ^[0-9]{5}-[0-9]{3}$ ]] &amp;&amp; echo "CEP válido"
+CEP válido
+$ echo $?
+0
+$ cep="5003-230"
+$ [[ $cep =~ ^[0-9]{5}-[0-9]{3}$ ]]; echo $?
+1                        « só 4 dígitos antes do hífen: não casa</pre>
+
+<p>Como todo teste, o <code>=~</code> não mostra nada: ele só devolve um <strong>código de saída</strong>. Existem três:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Significado</th></tr>
+<tr><td><code>0</code></td><td>Casou: o texto tem o formato.</td></tr>
+<tr><td><code>1</code></td><td>Não casou.</td></tr>
+<tr><td><code>2</code></td><td>A regex está escrita errado (veja "Quando não funciona").</td></tr>
+</table>
+</div>
+
+<h3>Lendo a regex do CEP peça por peça</h3>
+<dl class="anatomy">
+  <dt>^</dt><dd>Âncora de <strong>começo</strong>: o casamento tem de começar no primeiro caractere.</dd>
+  <dt>[0-9]</dt><dd>Uma <strong>classe</strong>: um caractere qualquer entre 0 e 9.</dd>
+  <dt>{5}</dt><dd>Quantificador: a peça anterior, <strong>exatamente 5 vezes</strong>.</dd>
+  <dt>-</dt><dd>Um hífen, literalmente.</dd>
+  <dt>[0-9]{3}</dt><dd>Três dígitos.</dd>
+  <dt>$</dt><dd>Âncora de <strong>fim</strong>: depois disso, não pode haver mais nada.</dd>
+</dl>
+
+<h3>Sem âncoras, a regex procura em qualquer lugar</h3>
+<p>Isto é diferente do <code>==</code> com curingas, que precisa casar o texto <strong>inteiro</strong>. A regex sem <code>^</code> e <code>$</code> quer dizer "contém":</p>
+
+<pre class="term">$ [[ "abc123" =~ [0-9]+ ]] &amp;&amp; echo "tem número"
+tem número               « achou "123" no meio do texto
+$ [[ "abc123" =~ ^[0-9]+$ ]] || echo "não é só número"
+não é só número          « com âncoras: do começo ao fim, só dígitos</pre>
+
+<p>Para <strong>validar</strong> (o texto inteiro tem de ter o formato), use sempre <code>^</code> e <code>$</code>. Esquecer as âncoras é o erro número um: <code>[[ "abc50030-230xyz" =~ [0-9]{5}-[0-9]{3} ]]</code> também dá 0.</p>
+
+<div class="try" data-setup="cep=&quot;50030-230&quot;" data-goal="ran:=~,out:CEP ok" data-solucao="[[ $cep =~ ^[0-9]{5}-[0-9]{3}$ ]] &amp;&amp; echo &quot;CEP ok&quot;">
+<p class="try-task"><strong>Missão:</strong> a variável <code>cep</code> já existe. Usando <code>=~</code>, teste se ela tem o formato "5 dígitos, hífen, 3 dígitos" (do começo ao fim) e, se tiver, mostre <code>CEP ok</code>. Depois experimente mudar o <code>cep</code> para algo errado e repetir o teste.</p>
+</div>
+
+<hr>
+
+<h2>As peças de uma regex (ERE)</h2>
+
+<h3>Caracteres e classes: "qual caractere?"</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Peça</th><th>Casa com</th><th>Exemplo</th></tr>
+<tr><td><code>a</code></td><td>A letra "a", literalmente</td><td><code>bash</code> casa com "bash"</td></tr>
+<tr><td><code>.</code></td><td>Qualquer caractere (um só)</td><td><code>a.b</code> casa com "axb", "a.b", "a b"</td></tr>
+<tr><td><code>\.</code></td><td>Um ponto de verdade</td><td><code>\.jpg$</code> = termina com ".jpg"</td></tr>
+<tr><td><code>[abc]</code></td><td>Um entre a, b, c</td><td><code>[aeiou]</code> = uma vogal</td></tr>
+<tr><td><code>[a-z]</code> <code>[0-9]</code></td><td>Um caractere no intervalo</td><td><code>[A-Z][a-z]+</code> = palavra com inicial maiúscula</td></tr>
+<tr><td><code>[^abc]</code></td><td>Um caractere que <strong>não</strong> é a, b nem c</td><td><code>[^ ]+</code> = um "pedaço sem espaços"</td></tr>
+<tr><td><code>[[:digit:]]</code></td><td>Um dígito (igual a <code>[0-9]</code>)</td><td><code>[[:digit:]]{3}</code></td></tr>
+<tr><td><code>[[:alpha:]]</code></td><td>Uma letra, <strong>inclusive acentuadas</strong></td><td><code>^[[:alpha:]]+$</code> casa com "São"</td></tr>
+<tr><td><code>[[:alnum:]]</code></td><td>Letra ou dígito</td><td></td></tr>
+<tr><td><code>[[:space:]]</code></td><td>Espaço, tab, quebra de linha</td><td></td></tr>
+<tr><td><code>[[:upper:]]</code> <code>[[:lower:]]</code></td><td>Maiúscula / minúscula</td><td></td></tr>
+</table>
+</div>
+
+<pre class="term">$ [[ "axb" =~ a.b ]] &amp;&amp; echo "ponto casa qualquer"
+ponto casa qualquer
+$ [[ "axb" =~ a\.b ]]; echo $?
+1                        « \. só casa com um ponto de verdade
+$ [[ "a.b" =~ a\.b ]] &amp;&amp; echo ponto
+ponto</pre>
+
+<h3>Quantificadores: "quantas vezes?"</h3>
+<p>Um quantificador vale para a peça <strong>imediatamente antes</strong> dele.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quantificador</th><th>Quantas vezes</th><th>Exemplo</th></tr>
+<tr><td><code>?</code></td><td>0 ou 1 (opcional)</td><td><code>colou?r</code> casa com "color" e "colour"</td></tr>
+<tr><td><code>*</code></td><td>0 ou mais</td><td><code>a*</code> casa até com "" (nada)</td></tr>
+<tr><td><code>+</code></td><td>1 ou mais</td><td><code>[0-9]+</code> = um número de qualquer tamanho</td></tr>
+<tr><td><code>{n}</code></td><td>Exatamente n</td><td><code>[0-9]{4}</code> = um ano</td></tr>
+<tr><td><code>{n,}</code></td><td>n ou mais</td><td><code>[a-z]{2,}</code></td></tr>
+<tr><td><code>{n,m}</code></td><td>De n a m</td><td><code>[0-9]{1,3}</code> = de 1 a 3 dígitos</td></tr>
+</table>
+</div>
+
+<pre class="term">$ [[ "color" =~ ^colou?r$ ]]; echo $?
+0
+$ [[ "colour" =~ ^colou?r$ ]]; echo $?
+0
+$ [[ "cor" =~ ^colou?r$ ]]; echo $?
+1
+$ [[ "aaa" =~ ^a{2,3}$ ]]; echo $?
+0</pre>
+
+<div class="warning">
+<strong>O <code>*</code> da regex não é o <code>*</code> do curinga</strong>
+<p>No curinga, <code>*</code> sozinho é "qualquer coisa". Na regex, <code>*</code> é "a peça anterior, 0 ou mais vezes". O "qualquer coisa" da regex é <code>.*</code> (qualquer caractere, quantas vezes for). Por isso <code>*.jpg</code> é um curinga válido e uma regex <strong>inválida</strong> (não há nada antes do <code>*</code>).</p>
+</div>
+
+<h3>Grupos e alternativas</h3>
+<p>Parênteses <code>( )</code> juntam peças num <strong>grupo</strong>. Dentro dele, a barra <code>|</code> quer dizer "ou":</p>
+
+<pre class="term">$ [[ "Recife" =~ ^(Recife|Salvador|Manaus)$ ]] &amp;&amp; echo "capital do NE ou N"
+capital do NE ou N</pre>
+
+<p>Um grupo também pode receber um quantificador: <code>(ab)+</code> casa com "ab", "abab"… E todo grupo <strong>captura</strong> o pedaço do texto que casou com ele, que é o assunto da próxima seção.</p>
+
+<hr>
+
+<h2>Pegar os pedaços: <code>BASH_REMATCH</code></h2>
+<p>Quando o <code>=~</code> casa, o Bash preenche um array especial, <code>BASH_REMATCH</code> (<em>Bash regex match</em>, "o que casou"):</p>
+<ul>
+  <li><code>${BASH_REMATCH[0]}</code>: o trecho inteiro que casou com a regex.</li>
+  <li><code>${BASH_REMATCH[1]}</code>: o que casou com o 1º grupo <code>( )</code>, contando os parênteses de abertura da esquerda para a direita.</li>
+  <li><code>${BASH_REMATCH[2]}</code>: o 2º grupo, e assim por diante.</li>
+</ul>
+
+<pre class="term">$ data="2026-10-15"
+$ [[ $data =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})$ ]]
+$ declare -p BASH_REMATCH
+declare -a BASH_REMATCH=([0]="2026-10-15" [1]="2026" [2]="10" [3]="15")
+$ echo "dia ${BASH_REMATCH[3]}, mês ${BASH_REMATCH[2]}, ano ${BASH_REMATCH[1]}"
+dia 15, mês 10, ano 2026</pre>
+
+<p>Os três pares de parênteses viraram os elementos 1, 2 e 3. Repare que os grupos <strong>não mudam</strong> o que casa: <code>^([0-9]{4})-…</code> aceita os mesmos textos que <code>^[0-9]{4}-…</code>. Eles só marcam o que você quer guardar.</p>
+
+<p>Sem âncoras, o <code>[0]</code> mostra <strong>onde</strong> a regex achou o padrão:</p>
+
+<pre class="term">$ [[ "Bash 5.3" =~ ([0-9]+)\.([0-9]+) ]]; echo "${BASH_REMATCH[0]} ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+5.3 5 3</pre>
+
+<div class="warning">
+<strong>Copie logo, porque o próximo <code>=~</code> apaga</strong>
+<p>Cada <code>=~</code> reescreve o <code>BASH_REMATCH</code>. Se não casar, ele fica vazio:</p>
+<pre class="term">$ [[ "abc" =~ x ]]; declare -p BASH_REMATCH
+declare -a BASH_REMATCH=()</pre>
+<p>Por isso, guarde os pedaços em variáveis com nome logo depois do teste: <code>ano=${BASH_REMATCH[1]}</code>.</p>
+</div>
+
+<p>Um grupo opcional que não participou do casamento fica com texto vazio, mas o lugar dele no array continua existindo:</p>
+
+<pre class="term">$ [[ "ac" =~ (a)(x)?c ]]; declare -p BASH_REMATCH
+declare -a BASH_REMATCH=([0]="ac" [1]="a" [2]="")</pre>
+
+<div class="try" data-setup="hoje=&quot;15/10/2026&quot;" data-goal="ran:BASH_REMATCH,var:ano=2026" data-solucao="[[ $hoje =~ ([0-9]{4})$ ]];;ano=${BASH_REMATCH[1]}">
+<p class="try-task"><strong>Missão:</strong> a variável <code>hoje</code> vale <code>15/10/2026</code>. Com um <code>=~</code> e um grupo, capture os 4 dígitos do fim e guarde-os na variável <code>ano</code>, usando <code>BASH_REMATCH</code>. Confira com <code>echo "$ano"</code>.</p>
+</div>
+
+<hr>
+
+<h2>A regra de ouro: sem aspas na regex</h2>
+<p>Em quase todo o Bash, colocar aspas é o hábito seguro. No lado direito do <code>=~</code> é o contrário: <strong>tudo o que estiver entre aspas é procurado literalmente</strong>, sem nenhum poder especial.</p>
+
+<pre class="term">$ data="2026-10-15"
+$ [[ $data =~ "^[0-9]{4}" ]]; echo $?
+1                        « procurou o texto "^[0-9]{4}", com circunflexo e chaves
+$ [[ 'x^[0-9]{4}y' =~ "^[0-9]{4}" ]]; echo $?
+0                        « prova: casa com um texto que contém esses símbolos</pre>
+
+<p>Isso foi feito de propósito: permite misturar partes literais com partes de regex, por exemplo <code>[[ $s =~ ^"$prefixo"[0-9]+$ ]]</code>, em que o conteúdo de <code>$prefixo</code> é procurado como texto puro, mesmo que tenha pontos.</p>
+
+<h3>O problema dos espaços (e o truque da variável)</h3>
+<p>Sem aspas, porém, um espaço na regex separa palavras, e o <code>[[ ]]</code> se confunde:</p>
+
+<pre class="term">$ s="Estudar Bash"
+$ [[ $s =~ ^Estudar Bash$ ]]
+bash: erro de sintaxe na expressão condicional: token inesperado `Bash$'
+bash: erro de sintaxe próximo a `Bash$'</pre>
+
+<p>Você poderia escapar cada espaço com <code>\ </code>, mas regexes longas ficam ilegíveis. A solução recomendada pelo próprio manual do Bash: <strong>guarde a regex numa variável</strong>, com aspas simples na atribuição, e use a variável <strong>sem aspas</strong> no teste:</p>
+
+<dl class="anatomy">
+  <dt>re='^Estudar Bash$'</dt><dd>A regex guardada como texto. As aspas simples protegem tudo: espaços, <code>$</code>, <code>\</code>, <code>[ ]</code>.</dd>
+  <dt>[[ $s =~</dt><dd>O teste de sempre.</dd>
+  <dt>$re</dt><dd><strong>Sem aspas</strong>: o conteúdo da variável é tratado como regex.</dd>
+  <dt>]]</dt><dd>Fecha.</dd>
+</dl>
+
+<pre class="term">$ re='^Estudar Bash$'
+$ [[ $s =~ $re ]] &amp;&amp; echo casou
+casou
+$ re='^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+$ [[ $data =~ $re ]] &amp;&amp; echo "data no formato certo"
+data no formato certo
+$ [[ $data =~ "$re" ]]; echo $?
+1                        « com aspas na variável, volta a ser texto literal</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Funciona?</th><th>Quando usar</th></tr>
+<tr><td><code>[[ $s =~ ^[0-9]+$ ]]</code></td><td>Sim</td><td>Regex curta, sem espaços.</td></tr>
+<tr><td><code>[[ $s =~ ^Estudar\ Bash$ ]]</code></td><td>Sim</td><td>Um ou dois espaços.</td></tr>
+<tr><td><code>re='…'; [[ $s =~ $re ]]</code></td><td>Sim</td><td><strong>A recomendada</strong>: regex com espaços, aspas, <code>[ ]</code>, ou usada várias vezes.</td></tr>
+<tr><td><code>[[ $s =~ "^[0-9]+$" ]]</code></td><td>Não (vira literal)</td><td>Nunca, a não ser para procurar o texto exato.</td></tr>
+<tr><td><code>[[ $s =~ "$re" ]]</code></td><td>Não (vira literal)</td><td>Nunca.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Receitas de validação</h2>
+
+<h3>Data AAAA-MM-DD (com mês de 01 a 12)</h3>
+<pre class="term">$ re_data='^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'
+$ for d in 2026-10-15 2026-13-01 2026-02-31 15/10/2026; do [[ $d =~ $re_data ]] &amp;&amp; echo "$d: ok" || echo "$d: inválida"; done
+2026-10-15: ok
+2026-13-01: inválida     « não existe mês 13
+2026-02-31: ok           « !! a regex não sabe quantos dias tem fevereiro
+15/10/2026: inválida     « formato diferente</pre>
+
+<dl class="anatomy">
+  <dt>(0[1-9]|1[0-2])</dt><dd>O mês: "0 seguido de 1 a 9" <strong>ou</strong> "1 seguido de 0 a 2".</dd>
+  <dt>(0[1-9]|[12][0-9]|3[01])</dt><dd>O dia: 01–09, 10–29 ou 30–31.</dd>
+</dl>
+
+<p>A regex confere o <strong>formato</strong>, não o calendário: 31 de fevereiro passa. Para conferir de verdade, use o <code>date</code>: <code>date -d 2026-02-31</code> dá erro (veja <a href="substituicao-comando.html">Substituição de Comando</a>).</p>
+
+<h3>E-mail (formato básico)</h3>
+<pre class="term">$ email="ana@exemplo.com.br"
+$ re='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+$ [[ $email =~ $re ]] &amp;&amp; echo "e-mail ok"
+e-mail ok
+$ [[ "ana@exemplo" =~ $re ]]; echo $?
+1                        « falta o .com
+$ [[ "ana exemplo.com" =~ $re ]]; echo $?
+1                        « falta o @ (e tem espaço)</pre>
+
+<dl class="anatomy">
+  <dt>^[A-Za-z0-9._%+-]+</dt><dd>O usuário: letras, dígitos e <code>. _ % + -</code>, um ou mais. O <code>-</code> no fim da classe é literal.</dd>
+  <dt>@</dt><dd>Uma arroba.</dd>
+  <dt>[A-Za-z0-9.-]+</dt><dd>O domínio: letras, dígitos, ponto e hífen.</dd>
+  <dt>\.[A-Za-z]{2,}$</dt><dd>Termina com um ponto e pelo menos 2 letras (<code>.br</code>, <code>.com</code>).</dd>
+</dl>
+
+<p>Nenhuma regex valida e-mails perfeitamente; esta pega os erros de digitação comuns, que é o que um script precisa.</p>
+
+<h3>Endereço IP</h3>
+<p>Só a regex não basta: <code>[0-9]{1,3}</code> aceita 999, e um IP vai até 255. A receita combina regex (para o formato e para separar os 4 números) com uma conta:</p>
+
+<pre class="file" data-file="trecho de script">ip_valido() {
+  local re='^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$' n
+  [[ $1 =~ $re ]] || return 1
+  for n in "${BASH_REMATCH[@]:1}"; do
+    (( 10#$n &lt;= 255 )) || return 1
+  done
+}</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>local re=… n</code></td><td>A regex: 4 grupos de 1 a 3 dígitos, separados por pontos literais (<code>\.</code>). <code>n</code> é a variável do laço.</td></tr>
+<tr><td><code>[[ $1 =~ $re ]] || return 1</code></td><td>Formato errado? A função devolve 1 (falso) e acaba.</td></tr>
+<tr><td><code>"${BASH_REMATCH[@]:1}"</code></td><td>Os elementos a partir do 1: os quatro números (o <code>[0]</code> é o IP inteiro).</td></tr>
+<tr><td><code>(( 10#$n &lt;= 255 ))</code></td><td>Cada número até 255. O <code>10#</code> evita que "010" seja lido como octal.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ for ip in 192.168.0.57 999.1.1.1 10.0.0 abc; do ip_valido "$ip" &amp;&amp; echo "$ip: válido" || echo "$ip: inválido"; done
+192.168.0.57: válido
+999.1.1.1: inválido      « o formato passou, a conta barrou
+10.0.0: inválido         « só 3 números
+abc: inválido</pre>
+
+<p>(A sessão acima foi feita depois de definir a função <code>ip_valido</code> no mesmo terminal.)</p>
+
+<hr>
+
+<h2>Extrair dados de uma linha de log</h2>
+<p>Cada linha do <code>Documentos/acesso.log</code> da Ana tem este formato:</p>
+<pre class="syntax">192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403
+└─── IP ───┘      └──── data/hora ───┘  └┬┘ └─┬──┘           └┬┘
+                                      método página        código</pre>
+
+<p>Uma regex com um grupo para cada parte que interessa:</p>
+
+<pre class="term">$ linha='192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403'
+$ re='^([0-9.]+) .*\[([^]]+)\] "([A-Z]+) ([^ ]+) [^"]*" ([0-9]{3})$'
+$ [[ $linha =~ $re ]]
+$ declare -p BASH_REMATCH
+declare -a BASH_REMATCH=([0]="192.168.0.10 - - [15/Oct/2026:09:02:03] \"GET /admin HTTP/1.1\" 403" [1]="192.168.0.10" [2]="15/Oct/2026:09:02:03" [3]="GET" [4]="/admin" [5]="403")
+$ echo "IP=${BASH_REMATCH[1]} página=${BASH_REMATCH[4]} código=${BASH_REMATCH[5]}"
+IP=192.168.0.10 página=/admin código=403</pre>
+
+<dl class="anatomy">
+  <dt>^([0-9.]+)</dt><dd>Grupo 1, o IP: dígitos e pontos, desde o começo. Dentro de <code>[ ]</code>, o ponto é literal.</dd>
+  <dt>.*</dt><dd>Pula o que vier ("<code> - - </code>").</dd>
+  <dt>\[([^]]+)\]</dt><dd>Grupo 2, a data: entre colchetes literais (<code>\[</code> <code>\]</code>), "um ou mais caracteres que não são <code>]</code>".</dd>
+  <dt>"([A-Z]+)</dt><dd>Grupo 3, o método (GET, POST), logo depois da aspa.</dd>
+  <dt>([^ ]+)</dt><dd>Grupo 4, a página: tudo até o próximo espaço.</dd>
+  <dt>[^"]*"</dt><dd>Pula "HTTP/1.1" até a aspa que fecha.</dd>
+  <dt>([0-9]{3})$</dt><dd>Grupo 5, o código: 3 dígitos no fim da linha.</dd>
+</dl>
+
+<p>Num laço que lê o arquivo (veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>), a mesma regex vira um relatório de erros. O <code>(( BASH_REMATCH[5] &gt;= 400 ))</code> compara o código como número:</p>
+
+<pre class="term">$ while IFS= read -r linha; do
+&gt;   if [[ $linha =~ $re ]] &amp;&amp; (( BASH_REMATCH[5] &gt;= 400 )); then
+&gt;     echo "${BASH_REMATCH[1]} pediu ${BASH_REMATCH[4]} e recebeu ${BASH_REMATCH[5]}"
+&gt;   fi
+&gt; done &lt; Documentos/acesso.log
+192.168.0.10 pediu /admin e recebeu 403
+192.168.0.57 pediu /fotos e recebeu 404</pre>
+
+<div class="tryscript" data-file="erros.sh" data-goal="out:/fotos (404),src:\(\[0-9\]\{3\}\)">
+<p class="try-task"><strong>Missão:</strong> o script deveria listar as páginas que deram erro (código 400 ou mais), mas não mostra nada. O motivo: o código no fim da linha não está dentro de um grupo, então <code>BASH_REMATCH[4]</code> fica vazio. Coloque o <code>[0-9]{3}</code> da regex entre parênteses e clique em Rodar.</p>
+<pre class="script">#!/usr/bin/env bash
+re='^([0-9.]+) .* "([A-Z]+) ([^ ]+) [^"]*" [0-9]{3}$'
+while IFS= read -r linha; do
+  if [[ $linha =~ $re ]]; then
+    ip=${BASH_REMATCH[1]}
+    pagina=${BASH_REMATCH[3]}
+    codigo=${BASH_REMATCH[4]}
+    if (( codigo &gt;= 400 )); then
+      echo "$ip -&gt; $pagina ($codigo)"
+    fi
+  fi
+done &lt; Documentos/acesso.log
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+re='^([0-9.]+) .* "([A-Z]+) ([^ ]+) [^"]*" ([0-9]{3})$'
+while IFS= read -r linha; do
+  if [[ $linha =~ $re ]]; then
+    ip=${BASH_REMATCH[1]}
+    pagina=${BASH_REMATCH[3]}
+    codigo=${BASH_REMATCH[4]}
+    if (( codigo &gt;= 400 )); then
+      echo "$ip -&gt; $pagina ($codigo)"
+    fi
+  fi
+done &lt; Documentos/acesso.log
+</pre>
+</div>
+
+<p>Com a correção, a saída é:</p>
+<pre class="term">$ bash erros.sh
+192.168.0.10 -&gt; /admin (403)
+192.168.0.57 -&gt; /fotos (404)</pre>
+
+<h3>Todas as ocorrências, não só a primeira</h3>
+<p>O <code>=~</code> para no <strong>primeiro</strong> casamento. Para achar todos, repita o teste no "resto" do texto, cortando o que já foi achado:</p>
+
+<pre class="term">$ texto="ligue 3333-4444 ou 9999-8888"
+$ [[ $texto =~ [0-9]{4}-[0-9]{4} ]] &amp;&amp; echo "${BASH_REMATCH[0]}"
+3333-4444                « só o primeiro
+$ resto=$texto
+$ while [[ $resto =~ [0-9]{4}-[0-9]{4} ]]; do echo "achei ${BASH_REMATCH[0]}"; resto=${resto#*"${BASH_REMATCH[0]}"}; done
+achei 3333-4444
+achei 9999-8888</pre>
+
+<p>O <code>${resto#*"…"}</code> apaga tudo até o fim do trecho encontrado. Funciona, mas o <code>grep -o</code> faz o mesmo em uma linha, como mostra a próxima seção.</p>
+
+<hr>
+
+<h2>Regex × curinga: qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Curinga: <code>[[ $s == padrão ]]</code></th><th>Regex: <code>[[ $s =~ regex ]]</code></th></tr>
+<tr><td>Casa com</td><td>O texto <strong>inteiro</strong></td><td>Qualquer trecho (use <code>^ $</code> para o inteiro)</td></tr>
+<tr><td>"Qualquer coisa"</td><td><code>*</code></td><td><code>.*</code></td></tr>
+<tr><td>"Um caractere"</td><td><code>?</code></td><td><code>.</code></td></tr>
+<tr><td>Classe</td><td><code>[0-9]</code>, <code>[!0-9]</code></td><td><code>[0-9]</code>, <code>[^0-9]</code></td></tr>
+<tr><td>Repetição ("5 dígitos", "1 ou mais")</td><td>Não tem (só com <code>extglob</code>, limitado)</td><td><code>{5}</code>, <code>+</code>, <code>*</code>, <code>?</code></td></tr>
+<tr><td>Alternativas</td><td>Só com <code>extglob</code>: <code>@(a|b)</code></td><td><code>(a|b)</code></td></tr>
+<tr><td>Separar pedaços</td><td>Não</td><td>Sim, <code>BASH_REMATCH</code></td></tr>
+<tr><td>Exemplo "termina com .jpg"</td><td><code>[[ $f == *.jpg ]]</code></td><td><code>[[ $f =~ \.jpg$ ]]</code></td></tr>
+<tr><td>Melhor para</td><td>Começa/termina/contém, nomes de arquivo</td><td>Formatos (CEP, data, IP) e extrair partes</td></tr>
+</table>
+</div>
+
+<pre class="term">$ arquivo="foto.jpg"
+$ [[ $arquivo == *.jpg ]] &amp;&amp; echo curinga
+curinga
+$ [[ $arquivo =~ \.jpg$ ]] &amp;&amp; echo regex
+regex</pre>
+
+<p>Se dá para resolver com curinga, use o curinga: é mais fácil de ler. Passe para a regex quando precisar contar repetições ou separar pedaços.</p>
+
+<h2>E quando usar <code>grep -E</code>?</h2>
+<p>O <code>=~</code> testa <strong>uma string</strong> que já está numa variável. Quando o texto está num <strong>arquivo</strong>, o <a href="ferramentas-texto.html"><code>grep -E</code></a> usa a mesma linguagem ERE e é muito mais rápido do que um laço em Bash:</p>
+
+<pre class="term">$ grep -E ' 40[0-9]$' Documentos/acesso.log
+192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+$ grep -cE ' (403|404)$' Documentos/acesso.log
+2                        « -c conta as linhas
+$ grep -oE '[0-9]{4}-[0-9]{4}' &lt;&lt;&lt; "$texto"
+3333-4444
+9999-8888                « -o mostra todas as ocorrências</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th></tr>
+<tr><td>Validar uma variável (argumento, resposta do <code>read</code>)</td><td><code>[[ $v =~ regex ]]</code></td></tr>
+<tr><td>Separar partes de uma variável</td><td><code>[[ =~ ]]</code> + <code>BASH_REMATCH</code></td></tr>
+<tr><td>Filtrar ou contar linhas de um arquivo</td><td><code>grep -E</code> (<code>-c</code>, <code>-v</code>, <code>-i</code>)</td></tr>
+<tr><td>Todas as ocorrências de um padrão</td><td><code>grep -oE</code></td></tr>
+<tr><td>Trocar texto que casa com uma regex</td><td><code>sed -E 's/regex/novo/'</code> (o <code>=~</code> não troca nada)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>A regex "certa" nunca casa</strong>
+<pre class="term">$ [[ $data =~ "^[0-9]{4}" ]]; echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> as aspas transformaram a regex em texto literal.</p>
+<p><strong>Como resolver:</strong> tire as aspas, ou guarde a regex numa variável (<code>re='^[0-9]{4}'</code>) e use <code>$re</code> sem aspas.</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe na expressão condicional"</strong>
+<pre class="term">$ [[ $s =~ ^Estudar Bash$ ]]
+bash: erro de sintaxe na expressão condicional: token inesperado `Bash$'
+bash: erro de sintaxe próximo a `Bash$'</pre>
+<p><strong>O que aconteceu:</strong> um espaço sem proteção na regex. O mesmo erro aparece com classes que têm espaço, como <code>^[[:alpha:] ]+$</code>.</p>
+<p><strong>Como resolver:</strong> <code>re='^Estudar Bash$'; [[ $s =~ $re ]]</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"expressão regular inválida" e código 2</strong>
+<pre class="term">$ [[ $arquivo =~ *.jpg ]]; echo $?
+bash: [[: expressão regular inválida `*.jpg': Expressão regular precedente inválida
+2
+$ re='(['
+$ [[ abc =~ $re ]]; echo $?
+bash: [[: expressão regular inválida `([': Expressão regular inválida
+2</pre>
+<p><strong>O que aconteceu:</strong> a regex está malformada: um <code>*</code> sem nada antes (confusão com curinga) ou parênteses e colchetes que não fecham.</p>
+<p><strong>Como resolver:</strong> para "termina com .jpg", <code>\.jpg$</code>. Confira se cada <code>(</code> e <code>[</code> tem par. Num <code>if</code>, lembre que o código 2 também é "falso": teste a regex antes, sozinha, olhando o <code>$?</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não casa, sem erro nenhum: <code>\d</code></strong>
+<pre class="term">$ [[ 123 =~ \d+ ]]; echo $?
+1
+$ [[ 123 =~ [[:digit:]]+ ]]; echo $?
+0</pre>
+<p><strong>O que aconteceu:</strong> <code>\d</code> (dígito) é da sintaxe do Perl, Python e JavaScript, não do ERE. Também não existem <code>.*?</code> (não guloso) nem <code>(?i)</code>.</p>
+<p><strong>Como resolver:</strong> use <code>[0-9]</code> ou <code>[[:digit:]]</code>. Para ignorar maiúsculas, <code>shopt -s nocasematch</code> (vale também para o <code>=~</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>Validou o que não devia</strong>
+<p><strong>O que aconteceu:</strong> faltaram as âncoras. <code>[[ $cep =~ [0-9]{5}-[0-9]{3} ]]</code> aceita "abc50030-230xyz", porque procura o padrão em qualquer lugar.</p>
+<p><strong>Como resolver:</strong> para validar, sempre <code>^…$</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Maiúsculas e minúsculas</strong>
+<pre class="term">$ [[ "ABC" =~ ^[a-z]+$ ]]; echo $?
+1
+$ shopt -s nocasematch
+$ [[ "ABC" =~ ^[a-z]+$ ]]; echo $?
+0
+$ shopt -u nocasematch</pre>
+<p>Ou inclua os dois casos na classe: <code>^[A-Za-z]+$</code>, ou <code>^[[:alpha:]]+$</code> para aceitar acentos.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Peça</th><th>Significado</th></tr>
+<tr><td><code>[[ $s =~ re ]]</code></td><td>0 casou, 1 não casou, 2 regex inválida</td></tr>
+<tr><td><code>^</code> <code>$</code></td><td>Começo e fim do texto</td></tr>
+<tr><td><code>.</code></td><td>Qualquer caractere</td></tr>
+<tr><td><code>[abc]</code> <code>[^abc]</code> <code>[a-z]</code></td><td>Um caractere da lista / fora da lista / do intervalo</td></tr>
+<tr><td><code>[[:digit:]]</code> <code>[[:alpha:]]</code> <code>[[:alnum:]]</code> <code>[[:space:]]</code> <code>[[:upper:]]</code> <code>[[:lower:]]</code></td><td>Classes por nome (usadas dentro de <code>[ ]</code>)</td></tr>
+<tr><td><code>?</code> <code>*</code> <code>+</code></td><td>0 ou 1 / 0 ou mais / 1 ou mais</td></tr>
+<tr><td><code>{n}</code> <code>{n,}</code> <code>{n,m}</code></td><td>Exatamente n / n ou mais / de n a m</td></tr>
+<tr><td><code>( )</code></td><td>Grupo (captura para o <code>BASH_REMATCH</code>)</td></tr>
+<tr><td><code>a|b</code></td><td>a ou b</td></tr>
+<tr><td><code>\.</code> <code>\[</code> <code>\(</code> <code>\$</code></td><td>O caractere especial, literalmente</td></tr>
+<tr><td><code>${BASH_REMATCH[0]}</code></td><td>O trecho inteiro que casou</td></tr>
+<tr><td><code>${BASH_REMATCH[n]}</code></td><td>O que casou com o grupo n</td></tr>
+<tr><td><code>re='…'; [[ $s =~ $re ]]</code></td><td>Regex numa variável (sem aspas no uso)</td></tr>
+<tr><td><code>shopt -s nocasematch</code></td><td>Ignora maiúsculas/minúsculas</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só dígitos</h3>
+<p>Complete a regex para aceitar <strong>apenas</strong> textos formados por um ou mais dígitos, do começo ao fim:</p>
+<div class="ex-code">[[ $n =~ <input data-answer="^[0-9]+$|^[[:digit:]]+$" aria-label="regex"> ]] &amp;&amp; echo "é número"</div>
+</div>
+
+<div class="exercise">
+<h3>2. O grupo capturado</h3>
+<p>Depois de <code>[[ "v5.3" =~ v([0-9]+)\.([0-9]+) ]]</code>, qual elemento do array contém <code>3</code>?</p>
+<div class="ex-code">echo "${BASH_REMATCH[<input data-answer="2" aria-label="índice">]}"</div>
+</div>
+
+<div class="exercise">
+<h3>3. Regex com espaço</h3>
+<p>Complete o teste que usa a regex guardada em <code>re</code>:</p>
+<div class="ex-code">re='^Bom dia, [A-Z][a-z]+$'
+[[ $saudacao =~ <input data-answer="$re|${re}" aria-label="regex"> ]]</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Por que <code>[[ "2026" =~ "^[0-9]{4}$" ]]</code> devolve 1?</p>
+<label><input type="radio" name="q4"> Porque <code>{4}</code> não existe no Bash.</label>
+<label><input type="radio" name="q4"> Porque o <code>=~</code> precisa de <code>[ ]</code> simples.</label>
+<label><input type="radio" name="q4"> Porque as aspas fazem a regex ser procurada como texto literal.</label>
+<label><input type="radio" name="q4"> Porque "2026" tem 5 caracteres.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Você quer contar quantas linhas de um log de 100 mil linhas terminam com 404. O que usar?</p>
+<label><input type="radio" name="q5"> <code>grep -cE ' 404$' arquivo.log</code></label>
+<label><input type="radio" name="q5"> Um laço <code>while read</code> com <code>[[ $linha =~ ' 404$' ]]</code> e um contador.</label>
+<label><input type="radio" name="q5"> <code>[[ $(cat arquivo.log) =~ 404 ]]</code></label>
+<label><input type="radio" name="q5"> <code>[[ arquivo.log == *404 ]]</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>[[ $texto =~ regex ]]</code> testa o formato: 0 casou, 1 não, 2 regex inválida.</li>
+  <li>Peças: <code>^ $</code> (âncoras), <code>. [ ]</code> (classes), <code>? * + {n,m}</code> (quantas vezes), <code>( ) |</code> (grupos e "ou").</li>
+  <li>Os grupos ficam em <code>BASH_REMATCH[1]</code>, <code>[2]</code>…; o <code>[0]</code> é o trecho inteiro. Copie logo, o próximo <code>=~</code> apaga.</li>
+  <li><strong>Sem aspas</strong> na regex. Com espaços ou símbolos, guarde em <code>re='…'</code> e use <code>$re</code>.</li>
+  <li>Para validar, sempre <code>^…$</code>. Para arquivos inteiros, <code>grep -E</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
