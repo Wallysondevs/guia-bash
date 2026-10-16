@@ -70,7 +70,7 @@ function rodarSessao(linhas, opt) {
     if (s.encerrado) break;
   }
   // como no "lab -i": no fim da entrada o Bash mostra o prompt e "exit" (o "$ exit" é apagado)
-  if (!s.encerrado && pr1() !== "$ ") texto += pr1() + "exit\n";
+  if (!s.encerrado && (pr1() !== "$ " || (texto !== "" && texto[texto.length - 1] !== "\n"))) texto += pr1() + "exit\n";
   return { texto: texto, sessao: s };
 }
 function rodarSetup(s, setup) {
