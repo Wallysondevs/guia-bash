@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Pipes — |, tee, xargs e pipefail | Guia Bash</title>
+<meta name="description" content="Aprenda pipes no Bash: ligar programas com |, os filtros clássicos (sort, uniq, cut, grep, wc), tee, |&amp;, xargs com -n, -I e -0, PIPESTATUS e pipefail, com saídas reais explicadas e terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Pipes (|)</span></h1>
+
+<p class="intro">O <strong>pipe</strong> (<code>|</code>, "cano" em inglês) liga a saída de um comando à entrada do próximo. Com ele, programas pequenos que fazem uma coisa só (ordenar, contar, cortar, filtrar) viram uma linha de montagem que responde perguntas como "qual fruta aparece mais na lista?" ou "quantos acessos deram erro 404?".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como o <code>|</code> liga programas, e como montar uma "linha de montagem" um passo de cada vez.</li>
+  <li>Os filtros clássicos: <code>sort</code>, <code>uniq -c</code>, <code>cut</code>, <code>grep</code>, <code>wc</code>, <code>head</code>.</li>
+  <li><code>tee</code> para ver e gravar, <code>|&amp;</code> para levar os erros junto.</li>
+  <li><code>xargs</code> para transformar linhas em argumentos (com <code>-n</code>, <code>-I {}</code> e <code>-0</code>), e <code>PIPESTATUS</code>/<code>pipefail</code> para saber quem falhou.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: uma linha de montagem</h2>
+<p>Em <a href="redirecionamento.html">Redirecionamento</a> você mandou a saída de um comando para um <strong>arquivo</strong>. O pipe manda para <strong>outro comando</strong>, sem arquivo no meio:</p>
+
+<pre class="syntax">  sort frutas.txt  ──1──►│ pipe │──0──►  uniq -c  ──1──►  tela
+                     (saída do sort = entrada do uniq)
+
+  o canal 2 (erros) de cada um continua indo para a tela</pre>
+
+<dl class="anatomy">
+  <dt>sort frutas.txt</dt><dd>Primeiro comando: lê o arquivo e escreve as linhas em ordem.</dd>
+  <dt>|</dt><dd>O pipe: o canal 1 do comando da esquerda vira o canal 0 do comando da direita. A tecla fica perto do <kbd>Enter</kbd>, com <kbd>Shift</kbd>.</dd>
+  <dt>uniq -c</dt><dd>Segundo comando: lê o que o <code>sort</code> mandou, em vez de um arquivo ou do teclado.</dd>
+</dl>
+
+<p>Um comando que lê da entrada, transforma e escreve na saída se chama <strong>filtro</strong>. Quase todos os comandos de texto são filtros: quando você não dá o nome de um arquivo, eles leem a entrada padrão, que pode ser um pipe.</p>
+
+<hr>
+
+<h2>Montando passo a passo: qual fruta aparece mais?</h2>
+<p>A Ana tem a lista <code>frutas.txt</code>, com repetições. Ela quer um ranking. O segredo para montar um pipe é <strong>acrescentar um pedaço por vez e olhar a saída</strong> antes do próximo.</p>
+
+<h3>Passo 1: o que temos</h3>
+<pre class="term">$ cat frutas.txt
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana</pre>
+
+<h3>Passo 2: <code>sort</code> junta as iguais</h3>
+<pre class="term">$ sort frutas.txt
+banana
+banana
+banana
+laranja
+maçã
+maçã
+uva                     « em ordem alfabética: as repetidas ficaram vizinhas</pre>
+
+<h3>Passo 3: <code>uniq -c</code> conta as vizinhas</h3>
+<p>O <code>uniq</code> (de <em>unique</em>, "único") junta linhas iguais <strong>que estão uma do lado da outra</strong>. Com <code>-c</code> (<em>count</em>), ele escreve quantas eram.</p>
+
+<pre class="term">$ sort frutas.txt | uniq -c
+      3 banana
+      1 laranja
+      2 maçã
+      1 uva                « o número na frente é a contagem</pre>
+
+<h3>Passo 4: <code>sort -rn</code> ordena pelo número</h3>
+<dl class="anatomy">
+  <dt>sort frutas.txt</dt><dd>Ordena para as iguais ficarem juntas.</dd>
+  <dt>| uniq -c</dt><dd>Conta cada grupo.</dd>
+  <dt>| sort</dt><dd>Ordena de novo, agora o resultado da contagem…</dd>
+  <dt>-r</dt><dd>…em ordem reversa (<em>reverse</em>): do maior para o menor…</dd>
+  <dt>-n</dt><dd>…comparando como <strong>números</strong> (<em>numeric</em>), para 10 vir depois de 9 e não antes de 2.</dd>
+</dl>
+
+<pre class="term">$ sort frutas.txt | uniq -c | sort -rn
+      3 banana
+      2 maçã
+      1 uva
+      1 laranja           « empate: o -r inverteu também a ordem alfabética</pre>
+
+<p>Para ficar só com a campeã, mais um filtro: <code>head -n 1</code> (as primeiras linhas).</p>
+<pre class="term">$ sort frutas.txt | uniq -c | sort -rn | head -n 1
+      3 banana</pre>
+
+<div class="warning">
+<strong>Por que o primeiro <code>sort</code> é obrigatório</strong>
+<p>Sem ele, o <code>uniq</code> só junta repetições vizinhas, e na lista original nenhuma banana está do lado da outra:</p>
+<pre class="term">$ uniq -c frutas.txt
+      1 banana
+      1 maçã
+      1 laranja
+      1 banana
+      1 uva
+      1 maçã
+      1 banana</pre>
+</div>
+
+<div class="try" data-goal="contains:~/ranking.txt=3 banana,ran:\btee\b" data-solucao="sort frutas.txt | uniq -c | sort -rn | tee ranking.txt">
+<p class="try-task"><strong>Missão:</strong> monte o ranking das frutas (da mais para a menos frequente) e, no fim do pipe, use <code>tee ranking.txt</code> para ver o resultado na tela <strong>e</strong> gravá-lo no arquivo. O <code>tee</code> está explicado logo abaixo.</p>
+</div>
+
+<hr>
+
+<h2>Mais filtros com os arquivos da Ana</h2>
+
+<h3>Os códigos do servidor: <code>cut</code></h3>
+<p>O arquivo <code>Documentos/acesso.log</code> registra cada acesso a um site. A última coluna é o código de resposta (200 = ok, 403 = proibido, 404 = não encontrado):</p>
+
+<pre class="term" data-cwd="~/Documentos">$ cat acesso.log
+192.168.0.10 - - [15/Oct/2026:09:01:12] "GET / HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:01:40] "GET /contato HTTP/1.1" 200
+192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+192.168.0.10 - - [15/Oct/2026:09:06:44] "POST /login HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:07:02] "GET / HTTP/1.1" 200</pre>
+
+<p>O <code>cut</code> ("cortar") pega colunas. Separando por espaço, o código é a 8ª:</p>
+
+<dl class="anatomy">
+  <dt>cut</dt><dd>Corta pedaços de cada linha.</dd>
+  <dt>-d" "</dt><dd><em>delimiter</em>: o separador de colunas é o espaço (entre aspas, para o Bash não engolir).</dd>
+  <dt>-f8</dt><dd><em>field</em>: fique com o campo (coluna) 8.</dd>
+  <dt>acesso.log</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ cut -d" " -f8 acesso.log
+200
+200
+403
+404
+200
+200
+$ cut -d" " -f8 acesso.log | sort | uniq -c
+      4 200
+      1 403
+      1 404                 « um "não encontrado"</pre>
+
+<p>Para responder só "quantos 404?", o <code>grep -c</code> conta as linhas que casam:</p>
+<pre class="term" data-cwd="~/Documentos">$ cut -d" " -f8 acesso.log | grep -c 404
+1</pre>
+
+<p>Com a mesma receita, a coluna 1 diz <strong>quem</strong> mais acessou:</p>
+<pre class="term" data-cwd="~/Documentos">$ cut -d" " -f1 acesso.log | sort | uniq -c | sort -rn
+      3 192.168.0.10
+      2 192.168.0.23
+      1 192.168.0.57</pre>
+
+<h3>Uma planilha CSV: <code>cut -d,</code></h3>
+<p>Em <code>alunos.csv</code> as colunas são separadas por vírgula. Para pegar só os nomes:</p>
+<pre class="term" data-cwd="~/Documentos">$ cut -d, -f1 alunos.csv
+nome                        « o cabeçalho veio junto
+Ana
+Bruno
+Carla
+Diego
+Elisa
+$ tail -n +2 alunos.csv | cut -d, -f1
+Ana                         « tail -n +2 = "da linha 2 em diante"
+Bruno
+Carla
+Diego
+Elisa</pre>
+
+<div class="try" data-setup="cd Documentos" data-goal="ran:\|,outre:^4$" data-solucao="cut -d&quot; &quot; -f8 acesso.log | grep -c 200">
+<p class="try-task"><strong>Missão:</strong> você está em <code>~/Documentos</code>. Usando um pipe, mostre <strong>quantos</strong> acessos do <code>acesso.log</code> deram certo (código 200). A resposta deve ser só o número.</p>
+</div>
+
+<hr>
+
+<h2>Ver e gravar ao mesmo tempo: <code>tee</code></h2>
+<p>O <code>tee</code> é como um "T" de encanamento: o que entra sai para a tela (ou para o próximo pipe) <strong>e</strong> é gravado num arquivo.</p>
+
+<dl class="anatomy">
+  <dt>… |</dt><dd>O resultado do pipe chega ao tee.</dd>
+  <dt>tee</dt><dd>Copia a entrada para a saída e para o arquivo.</dd>
+  <dt>ranking.txt</dt><dd>O arquivo (substitui o conteúdo, como <code>&gt;</code>).</dd>
+</dl>
+
+<pre class="term">$ sort frutas.txt | uniq -c | sort -rn | tee ranking.txt
+      3 banana
+      2 maçã
+      1 uva
+      1 laranja                « apareceu na tela…
+$ cat ranking.txt
+      3 banana
+      2 maçã
+      1 uva
+      1 laranja                « …e foi gravado</pre>
+
+<p>Com <code>-a</code> (<em>append</em>), o <code>tee</code> acrescenta, como <code>&gt;&gt;</code>: <code>date +%F | tee -a historico.txt</code>. Ele também é o jeito de gravar em arquivos do sistema: em <code>echo "x" | sudo tee -a /etc/arquivo</code>, quem abre o arquivo é o <code>tee</code>, rodando como root (veja <a href="redirecionamento.html">Redirecionamento</a>).</p>
+
+<hr>
+
+<h2>E os erros? <code>2&gt;&amp;1 |</code> e <code>|&amp;</code></h2>
+<p>O pipe leva só o canal 1. Os erros vão direto para a tela e não passam pelo próximo comando. Veja o <code>wc -l</code> contando linhas:</p>
+
+<pre class="term">$ ls Documentos nada | wc -l
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente    « foi direto para a tela
+6                                  « o wc contou só as 6 linhas da saída normal
+$ ls Documentos nada 2&gt;&amp;1 | wc -l
+7                                  « agora o erro entrou no pipe também</pre>
+
+<p>O Bash tem um atalho para <code>2&gt;&amp;1 |</code>: <code>|&amp;</code> <span class="versao">bash 4.0+</span>.</p>
+<pre class="term">$ ls Documentos nada |&amp; wc -l
+7</pre>
+
+<p>Aqui o <code>2&gt;&amp;1</code> vem <strong>antes</strong> do pipe, e está certo: o Bash liga o pipe primeiro, então quando lê <code>2&gt;&amp;1</code> o canal 1 já é o pipe. No macOS antigo (Bash 3.2), use <code>2&gt;&amp;1 |</code>.</p>
+
+<hr>
+
+<h2>Linhas viram argumentos: <code>xargs</code></h2>
+<p>Alguns comandos <strong>não leem a entrada</strong>: <code>rm</code>, <code>mkdir</code>, <code>cp</code> e <code>ls</code> querem os nomes como <strong>argumentos</strong>. Mandar uma lista para eles por pipe não adianta. O <code>xargs</code> ("<em>execute with arguments</em>") resolve: ele lê as palavras da entrada e as cola no fim de um comando.</p>
+
+<dl class="anatomy">
+  <dt>echo frutas.txt Documentos/notas.txt</dt><dd>Produz uma lista de nomes.</dd>
+  <dt>|</dt><dd>Manda a lista para o xargs.</dd>
+  <dt>xargs</dt><dd>Lê os nomes e monta o comando…</dd>
+  <dt>wc -l</dt><dd>…<code>wc -l frutas.txt Documentos/notas.txt</code>, e o executa.</dd>
+</dl>
+
+<pre class="term">$ echo frutas.txt Documentos/notas.txt | xargs wc -l
+  7 frutas.txt
+  4 Documentos/notas.txt
+ 11 total                   « um wc só, com os dois arquivos</pre>
+
+<h3><code>-n</code>: quantos argumentos por vez</h3>
+<p><code>-n 1</code> roda o comando uma vez para cada palavra:</p>
+<pre class="term">$ echo frutas.txt Documentos/notas.txt | xargs -n 1 wc -l
+7 frutas.txt
+4 Documentos/notas.txt      « dois wc separados: não há "total"
+$ echo "a b c" | xargs -n 2
+a b
+c                           « sem comando, o xargs usa echo</pre>
+
+<h3><code>-I {}</code>: colocar o nome no meio do comando</h3>
+<p>Por padrão o nome vai no <strong>fim</strong>. Com <code>-I {}</code>, você escolhe o lugar: cada linha da entrada substitui o <code>{}</code>, e o comando roda uma vez por linha.</p>
+
+<dl class="anatomy">
+  <dt>ls Imagens</dt><dd>Lista as fotos, uma por linha.</dd>
+  <dt>| xargs</dt><dd>Passa cada linha…</dd>
+  <dt>-I {}</dt><dd>…trocando <code>{}</code> pela linha (<em>I</em> de <em>insert</em>/<em>replace</em>).</dd>
+  <dt>cp Imagens/{} fotos/</dt><dd>O comando, com o nome no meio.</dd>
+</dl>
+
+<pre class="term">$ ls Imagens | xargs -I {} echo "Foto encontrada: {}"
+Foto encontrada: ferias.jpg
+Foto encontrada: perfil.png
+$ mkdir fotos
+$ ls Imagens | xargs -I {} cp Imagens/{} fotos/
+$ ls fotos
+ferias.jpg  perfil.png</pre>
+
+<h3>Nomes com espaço: <code>find -print0 | xargs -0</code></h3>
+<p>O <code>xargs</code> separa as palavras por espaço. Um nome como <code>praia 1.jpg</code> vira dois pedaços. A Ana criou três fotos de teste:</p>
+
+<pre class="term">$ touch "fotos/praia 1.jpg" "fotos/praia 2.jpg" fotos/serra.jpg
+$ find fotos -name "*.jpg"
+fotos/praia 2.jpg
+fotos/serra.jpg
+fotos/praia 1.jpg
+fotos/ferias.jpg
+$ find fotos -name "*.jpg" | xargs ls -l
+ls: não foi possível acessar 'fotos/praia': Arquivo ou diretório inexistente
+ls: não foi possível acessar '2.jpg': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'fotos/praia': Arquivo ou diretório inexistente
+ls: não foi possível acessar '1.jpg': Arquivo ou diretório inexistente
+-rw-rw-r-- 1 ana ana 2097152 out 15 10:30 fotos/ferias.jpg
+-rw-rw-r-- 1 ana ana       0 out 15 10:30 fotos/serra.jpg      « só os nomes sem espaço funcionaram</pre>
+
+<p>A solução é separar os nomes por um caractere que <strong>nunca</strong> aparece em nomes de arquivo: o caractere nulo. O <code>find</code> faz isso com <code>-print0</code> e o <code>xargs</code> entende com <code>-0</code>:</p>
+
+<dl class="anatomy">
+  <dt>find fotos -name "*.jpg"</dt><dd>Procura os .jpg dentro de <code>fotos</code>.</dd>
+  <dt>-print0</dt><dd>Escreve cada nome terminado pelo caractere nulo, em vez de uma quebra de linha.</dd>
+  <dt>| xargs -0</dt><dd>Separa os nomes pelo nulo, então espaços viram parte do nome.</dd>
+  <dt>ls -l</dt><dd>O comando que recebe os nomes.</dd>
+</dl>
+
+<pre class="term">$ find fotos -name "*.jpg" -print0 | xargs -0 ls -l
+-rw-rw-r-- 1 ana ana 2097152 out 15 10:30  fotos/ferias.jpg
+-rw-rw-r-- 1 ana ana       0 out 15 10:30 'fotos/praia 1.jpg'
+-rw-rw-r-- 1 ana ana       0 out 15 10:30 'fotos/praia 2.jpg'
+-rw-rw-r-- 1 ana ana       0 out 15 10:30  fotos/serra.jpg      « todos os quatro</pre>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Sempre que o <code>xargs</code> receber nomes de arquivo, use <code>find … -print0 | xargs -0 …</code>. Para coisas simples, o próprio <code>find</code> tem <code>-exec</code>, e um <a href="for.html">for</a> com curinga (<code>for f in fotos/*.jpg</code>) também lida bem com espaços.</p>
+</div>
+
+<div class="try" data-setup="mkdir tmp;;touch tmp/a.log tmp/b.log &quot;tmp/c d.log&quot; tmp/manter.txt" data-goal="absent:~/tmp/a.log,absent:~/tmp/c d.log,file:~/tmp/manter.txt,ran:xargs" data-solucao="find tmp -name &quot;*.log&quot; -print0 | xargs -0 rm">
+<p class="try-task"><strong>Missão:</strong> a pasta <code>tmp</code> tem arquivos <code>.log</code> (um deles com espaço no nome) e um <code>manter.txt</code>. Apague <strong>só os .log</strong> usando <code>find</code> e <code>xargs</code>, do jeito seguro para espaços. Confira com <code>ls tmp</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quem falhou no pipe? <code>PIPESTATUS</code> e <code>pipefail</code></h2>
+<p>O <a href="codigo-saida.html">código de saída</a> de um pipe é o do <strong>último</strong> comando. Se um do meio falhar, você não fica sabendo:</p>
+
+<pre class="term">$ grep kiwi frutas.txt | sort
+$ echo $?
+0                           « o grep não achou (1), mas o sort deu certo (0)</pre>
+
+<p>Duas ferramentas, por enquanto só para você conhecer:</p>
+<ul>
+  <li><code>PIPESTATUS</code> é um array com o código de <strong>cada</strong> comando do último pipe. Leia logo depois do pipe, senão ele muda:
+<pre class="term">$ grep kiwi frutas.txt | sort; echo "${PIPESTATUS[@]}"
+1 0</pre></li>
+  <li><code>set -o pipefail</code> faz o pipe devolver o código do último comando que <strong>falhou</strong>:
+<pre class="term">$ set -o pipefail
+$ grep kiwi frutas.txt | sort
+$ echo $?
+1</pre></li>
+</ul>
+<p>O <code>pipefail</code> é parte do "modo estrito" dos scripts, em <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+
+<h2>Cada lado do pipe roda à parte</h2>
+<p>Os comandos de um pipe rodam <strong>ao mesmo tempo</strong>, cada um num processo separado: o <code>sort</code> já começa enquanto o <code>cat</code> ainda lê. No Bash, cada lado roda num <strong>subshell</strong>, uma cópia do shell. Por isso uma variável criada dentro de um pipe some quando ele termina:</p>
+
+<pre class="term">$ echo Ana | read nome
+$ echo "nome: $nome"
+nome:                       « o read rodou numa cópia; a variável ficou lá</pre>
+
+<p>Por que isso acontece e como contornar estão em <a href="subshell.html">Subshells e Grupos</a> e <a href="read.html">read</a>.</p>
+
+<hr>
+
+<h2>Pipe, arquivo ou argumento: qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th><th>Exemplo</th></tr>
+<tr><td>Passar a saída para um filtro</td><td><code>|</code></td><td><code>sort frutas.txt | uniq -c</code></td></tr>
+<tr><td>O primeiro comando já aceita o arquivo</td><td>argumento, sem <code>cat</code></td><td><code>grep banana frutas.txt</code> (e não <code>cat frutas.txt | grep banana</code>)</td></tr>
+<tr><td>Guardar o resultado final</td><td><code>&gt;</code></td><td><code>… | sort -rn &gt; ranking.txt</code></td></tr>
+<tr><td>Guardar e ver ao mesmo tempo</td><td><code>| tee</code></td><td><code>… | tee ranking.txt</code></td></tr>
+<tr><td>Levar os erros junto</td><td><code>2&gt;&amp;1 |</code> ou <code>|&amp;</code></td><td><code>make |&amp; grep erro</code></td></tr>
+<tr><td>O comando quer argumentos, não entrada</td><td><code>| xargs</code></td><td><code>find tmp -name "*.log" -print0 | xargs -0 rm</code></td></tr>
+<tr><td>Saber se algum do meio falhou</td><td><code>PIPESTATUS</code> / <code>pipefail</code></td><td><code>set -o pipefail</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O <code>uniq</code> não juntou as repetidas</strong>
+<p><strong>O que aconteceu:</strong> o <code>uniq</code> só junta linhas iguais <strong>vizinhas</strong>.</p>
+<p><strong>Como resolver:</strong> coloque um <code>sort</code> antes: <code>sort arquivo | uniq -c</code>. (Ou use <code>sort -u</code> se só quiser tirar as repetidas.)</p>
+</div>
+
+<div class="cenario">
+<strong>O erro apareceu na tela em vez de passar pelo pipe</strong>
+<p><strong>O que aconteceu:</strong> o pipe só leva o canal 1; mensagens de erro saem pelo canal 2.</p>
+<p><strong>Como resolver:</strong> <code>comando 2&gt;&amp;1 | filtro</code>, ou <code>comando |&amp; filtro</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Uso: grep [OPÇÃO]... PADRÕES [ARQUIVO]..."</strong>
+<pre class="term">$ ls | grep
+Uso: grep [OPÇÃO]... PADRÕES [ARQUIVO]...
+Experimente "grep --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> o comando depois do pipe ficou incompleto: faltou dizer o que o <code>grep</code> procura.</p>
+<p><strong>Como resolver:</strong> <code>ls | grep txt</code>. Cada lado do pipe é um comando completo.</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado `|'"</strong>
+<pre class="term">$ cat frutas.txt | | sort
+bash: erro de sintaxe próximo ao token inesperado `|'</pre>
+<p><strong>O que aconteceu:</strong> entre dois <code>|</code> precisa haver um comando. Se a linha <strong>termina</strong> com <code>|</code>, o Bash mostra <code>&gt;</code> e espera o próximo comando.</p>
+<p><strong>Como resolver:</strong> apague o pipe a mais, ou complete a linha.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu um arquivo chamado <code>grep</code></strong>
+<pre class="term">$ ls &gt; grep txt
+ls: não foi possível acessar 'txt': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> foi digitado <code>&gt;</code> no lugar de <code>|</code>. A saída do <code>ls</code> foi gravada num arquivo chamado <code>grep</code>, e <code>txt</code> virou argumento do <code>ls</code>.</p>
+<p><strong>Como resolver:</strong> <code>rm grep</code> e repita com <code>|</code>. Lembre: <code>&gt;</code> manda para <strong>arquivo</strong>, <code>|</code> manda para <strong>comando</strong>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>xargs</code> partiu os nomes com espaço</strong>
+<p><strong>O que aconteceu:</strong> o <code>xargs</code> separa por espaço e quebra de linha. "praia 1.jpg" virou "praia" e "1.jpg".</p>
+<p><strong>Como resolver:</strong> <code>find … -print0 | xargs -0 …</code>. Se a lista vem de outro lugar, uma por linha, o GNU xargs aceita <code>-d '\n'</code> (separar só por quebra de linha).</p>
+</div>
+
+<div class="cenario">
+<strong>A variável criada no pipe ficou vazia</strong>
+<p><strong>O que aconteceu:</strong> o comando rodou num subshell (veja acima).</p>
+<p><strong>Como resolver:</strong> use <code>read nome &lt;&lt;&lt; "Ana"</code> ou <a href="substituicao-comando.html"><code>nome=$(comando)</code></a> em vez de pipe. Detalhes em <a href="subshell.html">Subshells</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>a | b</code></td><td>Saída de <code>a</code> vira entrada de <code>b</code></td><td><code>ls | wc -l</code></td></tr>
+<tr><td><code>a |&amp; b</code></td><td>Saída <strong>e erros</strong> de <code>a</code> para <code>b</code></td><td><code>ls x |&amp; less</code></td></tr>
+<tr><td><code>sort</code> / <code>sort -rn</code></td><td>Ordena / do maior número para o menor</td><td><code>sort frutas.txt</code></td></tr>
+<tr><td><code>uniq -c</code></td><td>Junta e conta linhas iguais vizinhas</td><td><code>sort f | uniq -c</code></td></tr>
+<tr><td><code>cut -d, -f1</code></td><td>Coluna 1, separada por vírgula</td><td><code>cut -d, -f1 alunos.csv</code></td></tr>
+<tr><td><code>grep -c</code></td><td>Conta as linhas que casam</td><td><code>… | grep -c 404</code></td></tr>
+<tr><td><code>head -n N</code> / <code>tail -n +N</code></td><td>Primeiras N linhas / da linha N em diante</td><td><code>tail -n +2 alunos.csv</code></td></tr>
+<tr><td><code>tee arq</code> / <code>tee -a arq</code></td><td>Mostra e grava (substitui / acrescenta)</td><td><code>… | tee ranking.txt</code></td></tr>
+<tr><td><code>xargs cmd</code></td><td>Linhas da entrada viram argumentos de <code>cmd</code></td><td><code>… | xargs wc -l</code></td></tr>
+<tr><td><code>xargs -n 1</code></td><td>Um argumento por execução</td><td><code>… | xargs -n 1 wc -l</code></td></tr>
+<tr><td><code>xargs -I {}</code></td><td>Coloca cada linha no lugar de <code>{}</code></td><td><code>… | xargs -I {} cp {} bak/</code></td></tr>
+<tr><td><code>find … -print0 | xargs -0</code></td><td>Nomes separados por nulo (seguro com espaços)</td><td><code>find . -name "*.log" -print0 | xargs -0 rm</code></td></tr>
+<tr><td><code>${PIPESTATUS[@]}</code></td><td>Códigos de cada comando do último pipe</td><td><code>echo "${PIPESTATUS[@]}"</code></td></tr>
+<tr><td><code>set -o pipefail</code></td><td>O pipe falha se qualquer parte falhar</td><td><code>set -o pipefail</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Contar arquivos</h3>
+<p>Complete para contar quantos itens há na pasta <code>Documentos</code>:</p>
+<div class="ex-code">ls Documentos | <input data-answer="wc -l" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>2. O ranking</h3>
+<p>Complete o pipe que conta as frutas e mostra da mais frequente para a menos:</p>
+<div class="ex-code">sort frutas.txt | <input data-answer="uniq -c" aria-label="contar"> | sort -rn</div>
+</div>
+
+<div class="exercise">
+<h3>3. Seguro com espaços</h3>
+<p>Complete para apagar os <code>.tmp</code> mesmo que algum nome tenha espaço:</p>
+<div class="ex-code">find . -name "*.tmp" <input data-answer="-print0" aria-label="opção do find"> | xargs <input data-answer="-0" aria-label="opção do xargs"> rm</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Por que <code>uniq -c frutas.txt</code> mostrou todas as contagens como 1?</p>
+<label><input type="radio" name="q4"> Porque o <code>-c</code> só conta letras.</label>
+<label><input type="radio" name="q4"> Porque o <code>uniq</code> só junta linhas iguais vizinhas, e a lista não estava ordenada.</label>
+<label><input type="radio" name="q4"> Porque o <code>uniq</code> precisa de um pipe para funcionar.</label>
+<label><input type="radio" name="q4"> Porque <code>frutas.txt</code> tem acentos.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Em <code>ls Documentos nada | wc -l</code>, por que a mensagem de erro aparece na tela?</p>
+<label><input type="radio" name="q5"> Porque o <code>wc</code> mostra os erros que recebe.</label>
+<label><input type="radio" name="q5"> Porque o pipe falhou.</label>
+<label><input type="radio" name="q5"> Porque o pipe leva só o canal 1, e o erro sai pelo canal 2.</label>
+<label><input type="radio" name="q5"> Porque faltou o <code>tee</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Para que serve o <code>xargs</code> em <code>… | xargs rm</code>?</p>
+<label><input type="radio" name="q6"> O <code>rm</code> não lê a entrada padrão; o <code>xargs</code> transforma as linhas recebidas em argumentos dele.</label>
+<label><input type="radio" name="q6"> Para o <code>rm</code> pedir confirmação.</label>
+<label><input type="radio" name="q6"> Para rodar o <code>rm</code> em segundo plano.</label>
+<label><input type="radio" name="q6"> Não serve para nada: <code>… | rm</code> faz o mesmo.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>|</code> liga a saída (canal 1) de um comando à entrada do próximo. Monte pipes um pedaço por vez, olhando a saída.</li>
+  <li><code>sort | uniq -c | sort -rn</code> é a receita do "o que aparece mais"; <code>cut</code> pega colunas; <code>grep -c</code> e <code>wc -l</code> contam.</li>
+  <li><code>tee</code> mostra e grava; <code>2&gt;&amp;1 |</code> ou <code>|&amp;</code> levam os erros junto.</li>
+  <li><code>xargs</code> transforma linhas em argumentos; com nomes de arquivo, use <code>find -print0 | xargs -0</code>.</li>
+  <li>O código de um pipe é o do último comando; <code>PIPESTATUS</code> e <code>set -o pipefail</code> mostram falhas no meio. Cada lado roda num subshell.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
