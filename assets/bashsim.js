@@ -10445,7 +10445,31 @@
     function palavraAntes(v, pos) { var i = pos; while (i > 0 && /\s/.test(v[i - 1])) i--; while (i > 0 && !/\s/.test(v[i - 1])) i--; return i; }
     function palavraDepois(v, pos) { var i = pos; while (i < v.length && !/[\w\u00c0-\uffff]/.test(v[i])) i++; while (i < v.length && /[\w\u00c0-\uffff]/.test(v[i])) i++; return i; }
     function palavraAntesAlfa(v, pos) { var i = pos; while (i > 0 && !/[\w\u00c0-\uffff]/.test(v[i - 1])) i--; while (i > 0 && /[\w\u00c0-\uffff]/.test(v[i - 1])) i--; return i; }
+    // Ctrl+R: busca reversa no histórico, como o readline
+    var busca = null; // {q, idx, original}
+    function mostrarBusca() {
+      var h = s.sh.hist, achou = -1;
+      for (var i = Math.min(busca.idx, h.length - 1); i >= 0; i--) if (busca.q && h[i].indexOf(busca.q) >= 0) { achou = i; break; }
+      if (busca.q === "") achou = -1;
+      busca.achado = achou;
+      pr.innerHTML = escHtml((achou < 0 && busca.q ? "(failed reverse-i-search)`" : "(reverse-i-search)`") + busca.q + "': ");
+      inp.value = achou >= 0 ? h[achou] : (busca.q ? inp.value : "");
+    }
+    function sairBusca(aceitar) {
+      var b = busca; busca = null; atualizarPrompt();
+      if (!aceitar) inp.value = b.original;
+    }
     inp.addEventListener("keydown", function (e) {
+      if (busca) {
+        if (e.ctrlKey && (e.key === "r" || e.key === "R")) { e.preventDefault(); busca.idx = busca.achado > 0 ? busca.achado - 1 : busca.idx; mostrarBusca(); return; }
+        if (e.key === "Escape" || (e.ctrlKey && (e.key === "g" || e.key === "G"))) { e.preventDefault(); sairBusca(false); return; }
+        if (e.key === "Backspace") { e.preventDefault(); busca.q = busca.q.slice(0, -1); busca.idx = s.sh.hist.length - 1; mostrarBusca(); return; }
+        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); busca.q += e.key; mostrarBusca(); return; }
+        if (e.key === "Enter") { sairBusca(true); }
+        else if (/^Arrow|^Home$|^End$/.test(e.key) || e.ctrlKey) { sairBusca(true); if (!e.ctrlKey) return; }
+        else return;
+      }
+      if (e.ctrlKey && (e.key === "r" || e.key === "R") && !lendo && !ocupado) { e.preventDefault(); busca = { q: "", idx: s.sh.hist.length - 1, original: inp.value, achado: -1 }; mostrarBusca(); return; }
       var v = inp.value, pos = inp.selectionStart;
       if (e.key === "Enter") { e.preventDefault(); inp.value = ""; hi = -1; enviar(v); rola(); return; }
       if (e.ctrlKey && !e.altKey && (e.key === "c" || e.key === "C")) {
