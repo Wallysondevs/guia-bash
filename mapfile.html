@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash mapfile e readarray — um arquivo inteiro num array | Guia Bash</title>
+<meta name="description" content="Aprenda mapfile e readarray no Bash: ler um arquivo ou a saída de um comando para um array, as opções -t, -n, -s, -d, -O e -C, a diferença para o while read e os erros comuns.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">mapfile e readarray</span></h1>
+
+<p class="intro">O <code>mapfile</code> lê um arquivo (ou a saída de um comando) e guarda <strong>cada linha num elemento de um array</strong>, de uma vez só. É a forma mais curta e mais segura de transformar "um texto com várias linhas" em "uma lista que o script pode percorrer, contar e indexar". O <code>readarray</code> é o mesmo comando com outro nome. <span class="versao">bash 4.0+</span></p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Ler um arquivo inteiro para um array com <code>mapfile -t</code>, e por que o <code>-t</code> quase sempre é obrigatório.</li>
+  <li>Pegar só algumas linhas (<code>-n</code>), pular o cabeçalho (<code>-s</code>) e trocar o separador (<code>-d</code>, inclusive <code>-d ''</code> com <code>find -print0</code>).</li>
+  <li>Ler a saída de um comando com <code>&lt; &lt;(comando)</code>, e por que <code>comando | mapfile</code> "não guarda nada".</li>
+  <li>Quando usar <code>mapfile</code> e quando usar <code>while read</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: um arquivo, várias linhas</h2>
+<p>A Ana tem uma lista de tarefas em <code>Documentos/notas.txt</code>, uma por linha. Ela quer um script que mostre as tarefas numeradas, diga quantas são e consiga pegar "a terceira tarefa" sem ler o arquivo de novo. Para isso, o ideal é ter as linhas num <a href="arrays.html">array</a>: <code>tarefas[0]</code> é a primeira, <code>tarefas[1]</code> a segunda, e assim por diante.</p>
+
+<p>Você poderia montar o array à mão, com um laço <code>while read</code> e um <code>+=</code> a cada volta (veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>). Funciona, mas são quatro linhas para uma tarefa tão comum. O <code>mapfile</code> faz isso numa linha só.</p>
+
+<p>O nome vem do inglês <em>map file</em>, "mapear o arquivo" (para um array). O sinônimo <code>readarray</code> quer dizer "ler para um array". Os dois são <strong>comandos internos</strong> do Bash, não programas separados:</p>
+
+<pre class="term">$ type mapfile readarray
+mapfile é um comando interno do shell
+readarray é um comando interno do shell</pre>
+
+<hr>
+
+<h2>A forma mais simples: <code>mapfile -t nome &lt; arquivo</code></h2>
+
+<dl class="anatomy">
+  <dt>mapfile</dt><dd>O comando: lê linhas da entrada padrão e guarda cada uma num elemento.</dd>
+  <dt>-t</dt><dd>Tira (<em>trim</em>) a quebra de linha do fim de cada elemento. Explicado logo abaixo.</dd>
+  <dt>linhas</dt><dd>O nome do array que vai ser criado (ou substituído). Sem <code>$</code>: você está dando um nome, não lendo um valor.</dd>
+  <dt>&lt; frutas.txt</dt><dd>Um <a href="redirecionamento.html">redirecionamento</a>: a entrada padrão do <code>mapfile</code> passa a ser o arquivo.</dd>
+</dl>
+
+<pre class="term">$ mapfile -t linhas &lt; frutas.txt
+$ declare -p linhas
+declare -a linhas=([0]="banana" [1]="maçã" [2]="laranja" [3]="banana" [4]="uva" [5]="maçã" [6]="banana")</pre>
+
+<p>O primeiro comando <strong>não mostra nada</strong>: o <code>mapfile</code> só guarda. Para ver o que ficou no array usamos <code>declare -p</code> (<em>print</em>), que mostra a variável do jeito que o Bash a enxerga:</p>
+<ul>
+  <li><code>declare -a</code> diz que <code>linhas</code> é um array indexado (<em>array</em>).</li>
+  <li>Cada <code>[número]="texto"</code> é um elemento. O primeiro é o <code>[0]</code>, não o <code>[1]</code>.</li>
+  <li>São 7 elementos, um por linha de <code>frutas.txt</code>, na mesma ordem do arquivo. As repetidas (banana aparece três vezes) continuam repetidas.</li>
+</ul>
+
+<p>Agora o array se usa como qualquer outro:</p>
+
+<pre class="term">$ echo "${#linhas[@]} linhas"
+7 linhas                       « ${#nome[@]} = quantos elementos
+$ echo "${linhas[2]}"
+laranja                        « o índice 2 é a TERCEIRA linha
+$ echo $?
+0</pre>
+
+<p>O <code>mapfile</code> devolve <strong>0</strong> quando leu o arquivo sem problema, mesmo que ele esteja vazio (o array fica com 0 elementos). Se o arquivo não existe, quem reclama é o shell, ao preparar o <code>&lt;</code>, e o código é <strong>1</strong>:</p>
+
+<pre class="term">$ mapfile -t x &lt; nada.txt
+bash: nada.txt: Arquivo ou diretório inexistente
+$ echo $?
+1</pre>
+
+<h3>Por que o <code>-t</code>?</h3>
+<p>Sem o <code>-t</code>, cada elemento guarda a linha <strong>com</strong> o caractere de quebra de linha (<code>\n</code>) que existe no fim dela no arquivo. Veja a diferença no <code>declare -p</code>:</p>
+
+<pre class="term">$ mapfile linhas &lt; frutas.txt
+$ declare -p linhas
+declare -a linhas=([0]=$'banana\n' [1]=$'maçã\n' [2]=$'laranja\n' [3]=$'banana\n' [4]=$'uva\n' [5]=$'maçã\n' [6]=$'banana\n')</pre>
+
+<p>O <code>$'banana\n'</code> é a forma do Bash de escrever "banana seguida de uma quebra de linha". Isso estraga comparações e deixa linhas em branco a mais na tela:</p>
+
+<pre class="term">$ [[ ${linhas[0]} == banana ]] &amp;&amp; echo igual || echo diferente
+diferente                      « "banana\n" não é igual a "banana"
+$ echo "[${linhas[0]}]"
+[banana
+]                              « o \n guardado quebrou a linha</pre>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Use sempre <code>mapfile -t</code>. Sem o <code>-t</code> só faz sentido quando você quer reescrever as linhas exatamente como vieram, com <code>printf '%s' "${linhas[@]}"</code>.</p>
+</div>
+
+<h3>Percorrer o resultado</h3>
+<p>Com as linhas num array, numerar as tarefas da Ana fica fácil. O <code>${!tarefas[@]}</code> devolve os <strong>índices</strong> (0, 1, 2, 3), e somamos 1 para mostrar a partir de 1:</p>
+
+<pre class="term">$ readarray -t tarefas &lt; Documentos/notas.txt
+$ for i in "${!tarefas[@]}"; do echo "$((i+1)). ${tarefas[i]}"; done
+1. Comprar café
+2. Ligar para o João
+3. Estudar Bash
+4. Fazer backup das fotos</pre>
+
+<p>Repare que usamos <code>readarray</code> desta vez: o resultado é idêntico. Linhas com espaços ("Ligar para o João") continuam inteiras, num elemento só. Essa é a grande vantagem sobre <code>tarefas=($(cat Documentos/notas.txt))</code>, que quebraria cada palavra num elemento (veja o erro em <a href="arrays.html">Arrays</a>).</p>
+
+<div class="try" data-goal="ran:(mapfile|readarray) .*tarefas,out:Fazer backup das fotos" data-solucao="mapfile -t tarefas &lt; Documentos/notas.txt;;echo &quot;${tarefas[3]}&quot;">
+<p class="try-task"><strong>Missão:</strong> leia <code>Documentos/notas.txt</code> para um array chamado <code>tarefas</code> (sem as quebras de linha) e mostre <strong>só a quarta</strong> tarefa com <code>echo</code>. Dica: a quarta tem índice 3.</p>
+</div>
+
+<hr>
+
+<h2>Uma novidade por vez: as opções</h2>
+
+<h3><code>-n</code>: ler só as primeiras N linhas</h3>
+<dl class="anatomy">
+  <dt>mapfile</dt><dd>O comando.</dd>
+  <dt>-t</dt><dd>Sem a quebra de linha.</dd>
+  <dt>-n 2</dt><dd>Lê no máximo 2 linhas (<em>number</em>) e para. <code>-n 0</code> = sem limite (o padrão).</dd>
+  <dt>primeiras</dt><dd>O array.</dd>
+  <dt>&lt; frutas.txt</dt><dd>De onde ler.</dd>
+</dl>
+
+<pre class="term">$ mapfile -t -n 2 primeiras &lt; frutas.txt
+$ declare -p primeiras
+declare -a primeiras=([0]="banana" [1]="maçã")</pre>
+
+<p>É o equivalente do <code>head -n 2</code>, mas o resultado já vai para um array. Útil para arquivos grandes, em que você só quer espiar o começo.</p>
+
+<h3><code>-s</code>: pular as primeiras linhas (o cabeçalho)</h3>
+<p>O <code>alunos.csv</code> começa com uma linha de cabeçalho, <code>nome,idade,cidade,nota</code>, que não é um aluno. O <code>-s 1</code> (<em>skip</em>, pular) descarta essa primeira linha:</p>
+
+<pre class="term">$ mapfile -t -s 1 alunos &lt; Documentos/alunos.csv
+$ printf '%s\n' "${alunos[@]}"
+Ana,29,Recife,9.5
+Bruno,34,Curitiba,7.0
+Carla,22,Salvador,8.5
+Diego,41,Manaus,6.0
+Elisa,27,Porto Alegre,10.0      « 5 alunos, sem o cabeçalho</pre>
+
+<p>O <code>printf '%s\n' "${alunos[@]}"</code> é o jeito seguro de mostrar um array, um elemento por linha: o <code>printf</code> repete o formato para cada elemento.</p>
+
+<p>As opções combinam. <code>-s 1 -n 2</code> = "pule 1 linha e depois leia 2":</p>
+
+<pre class="term">$ mapfile -t -s 1 -n 2 dois &lt; Documentos/alunos.csv
+$ declare -p dois
+declare -a dois=([0]="Ana,29,Recife,9.5" [1]="Bruno,34,Curitiba,7.0")</pre>
+
+<div class="tryscript" data-file="alunos.sh" data-goal="out:5 alunos,src:mapfile" >
+<p class="try-task"><strong>Missão:</strong> o script diz "6 alunos" e mostra "nome mora em cidade", porque leu o cabeçalho junto. Mude <strong>só a linha do <code>mapfile</code></strong> para pular o cabeçalho e clique em Rodar. A saída deve começar com "5 alunos".</p>
+<pre class="script">#!/usr/bin/env bash
+mapfile -t alunos &lt; Documentos/alunos.csv
+echo "${#alunos[@]} alunos"
+for linha in "${alunos[@]}"; do
+  IFS=, read -r nome idade cidade nota &lt;&lt;&lt; "$linha"
+  echo "$nome mora em $cidade"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+mapfile -t -s 1 alunos &lt; Documentos/alunos.csv
+echo "${#alunos[@]} alunos"
+for linha in "${alunos[@]}"; do
+  IFS=, read -r nome idade cidade nota &lt;&lt;&lt; "$linha"
+  echo "$nome mora em $cidade"
+done
+</pre>
+</div>
+
+<p>Dentro do laço, o <code>IFS=, read -r nome idade cidade nota &lt;&lt;&lt; "$linha"</code> divide cada linha nas vírgulas. Essa receita é explicada em <a href="strings.html">Manipular Strings</a>.</p>
+
+<h3><code>-d</code>: outro separador em vez da quebra de linha</h3>
+<p>Por padrão, o <code>mapfile</code> corta o texto a cada <code>\n</code>. O <code>-d</code> (<em>delimiter</em>, delimitador) troca esse caractere. Com <code>-d ,</code>, cada pedaço entre vírgulas vira um elemento:</p>
+
+<pre class="term">$ mapfile -t -d , campos &lt; &lt;(printf 'Ana,29,Recife,9.5')
+$ declare -p campos
+declare -a campos=([0]="Ana" [1]="29" [2]="Recife" [3]="9.5")</pre>
+
+<p>Com <code>-d</code>, o <code>-t</code> passa a remover <strong>o delimitador escolhido</strong> (a vírgula), não mais o <code>\n</code>. Por isso usamos <code>printf</code>, que não põe quebra de linha no fim. Com uma here-string (<code>&lt;&lt;&lt;</code>), que sempre acrescenta um <code>\n</code>, o último campo vem "sujo":</p>
+
+<pre class="term">$ mapfile -t -d , campos &lt;&lt;&lt; "Ana,29,Recife,9.5"
+$ declare -p campos
+declare -a campos=([0]="Ana" [1]="29" [2]="Recife" [3]=$'9.5\n')     « o \n ficou no último</pre>
+
+<p>Para dividir uma única linha por vírgulas, <code>IFS=, read -ra campos &lt;&lt;&lt; "$linha"</code> costuma ser mais simples (veja <a href="strings.html">Manipular Strings</a>). O <code>-d</code> brilha mesmo no caso seguinte.</p>
+
+<h3><code>-d ''</code>: nomes de arquivo com qualquer caractere</h3>
+<p>Nomes de arquivo podem ter espaços e até quebras de linha. O jeito 100% seguro de passar uma lista de nomes entre programas é separá-los pelo caractere <strong>nulo</strong> (o byte zero, que nenhum nome pode conter). O <code>find -print0</code> faz isso, e o <code>mapfile -d ''</code> lê exatamente esse formato: <code>''</code> (texto vazio) quer dizer "o delimitador é o nulo".</p>
+
+<dl class="anatomy">
+  <dt>mapfile -t</dt><dd>Lê sem o delimitador no fim.</dd>
+  <dt>-d ''</dt><dd>Corta no caractere nulo, não na quebra de linha.</dd>
+  <dt>pastas</dt><dd>O array.</dd>
+  <dt>&lt; &lt;(find … -print0)</dt><dd>Lê a saída do <code>find</code>, que termina cada nome com um nulo. O <code>&lt;( )</code> é explicado logo abaixo.</dd>
+</dl>
+
+<pre class="term">$ mapfile -t -d '' pastas &lt; &lt;(find . -mindepth 1 -maxdepth 1 -type d -print0)
+$ echo "${#pastas[@]} pastas"
+8 pastas
+$ printf '[%s]\n' "${pastas[@]}"
+[./Documentos]
+[./Música]
+[./Área de trabalho]          « inteiro, com os espaços
+[./Downloads]
+[./Modelos]
+[./Público]
+[./Vídeos]
+[./Imagens]</pre>
+
+<p>Os colchetes no <code>printf</code> mostram onde cada elemento começa e termina. A ordem é a que o <code>find</code> encontrou no disco (não é alfabética). Compare com o jeito ingênuo, que separa nos espaços:</p>
+
+<pre class="term">$ errado=($(find . -mindepth 1 -maxdepth 1 -type d))
+$ echo "${#errado[@]} pastas"
+10 pastas                      « 10?! Há só 8 pastas
+$ printf '[%s]\n' "${errado[@]}"
+[./Documentos]
+[./Música]
+[./Área]                       « "Área de trabalho" virou
+[de]                           « três elementos
+[trabalho]
+…</pre>
+
+<p>(Encurtamos a segunda listagem com <code>…</code>.)</p>
+
+<h3><code>-O</code>: continuar um array que já existe</h3>
+<p>Normalmente o <code>mapfile</code> <strong>apaga</strong> o array antes de preencher. O <code>-O N</code> (<em>origin</em>, origem) começa a gravar no índice N e mantém o que havia antes. Usando o tamanho atual como origem, você acrescenta no fim:</p>
+
+<pre class="term">$ mapfile -t linhas &lt; frutas.txt
+$ mapfile -t -O "${#linhas[@]}" linhas &lt; Documentos/notas.txt
+$ echo "${#linhas[@]}"
+11                             « 7 frutas + 4 tarefas</pre>
+
+<h3><code>-C</code> e <code>-c</code>: chamar uma função durante a leitura</h3>
+<p>Esta opção é rara, mas aparece em scripts por aí. O <code>-C função</code> (<em>callback</em>, "chamada de volta") faz o <code>mapfile</code> rodar uma função a cada <code>-c N</code> linhas lidas. A função recebe dois argumentos: o <strong>índice</strong> do elemento que vai ser gravado e a <strong>linha</strong>.</p>
+
+<pre class="term">$ mostrar() { echo "lendo linha $1: $2"; }
+$ mapfile -t -C mostrar -c 3 frutas &lt; frutas.txt
+lendo linha 2: laranja         « a cada 3 linhas…
+lendo linha 5: maçã            « …a função é chamada
+$ declare -p frutas
+declare -a frutas=([0]="banana" [1]="maçã" [2]="laranja" [3]="banana" [4]="uva" [5]="maçã" [6]="banana")</pre>
+
+<p>O uso típico é mostrar progresso ("lidas 1000 linhas…") ao carregar arquivos enormes. Se você precisa <strong>processar</strong> cada linha, um laço <code>for</code> depois do <code>mapfile</code> é mais claro.</p>
+
+<h3>Sem nome: o array <code>MAPFILE</code></h3>
+<p>Se você não der um nome, o resultado vai para o array <code>MAPFILE</code> (aqui sem <code>-t</code>, por isso o <code>echo</code> deixa uma linha em branco a mais):</p>
+
+<pre class="term">$ mapfile &lt; Documentos/notas.txt
+$ echo "${#MAPFILE[@]}"
+4
+$ echo "${MAPFILE[0]}"
+Comprar café
+                               « a linha vazia é o \n guardado
+</pre>
+
+<p>Prefira sempre dar um nome que diga o que o array guarda.</p>
+
+<hr>
+
+<h2>Da saída de um comando: <code>&lt; &lt;(comando)</code></h2>
+<p>Muitas vezes as linhas não estão num arquivo, mas na saída de um comando: <code>ls</code>, <code>grep</code>, <code>find</code>… Para isso, usamos a <strong>substituição de processo</strong> <code>&lt;(comando)</code>, que faz a saída do comando parecer um arquivo. O primeiro <code>&lt;</code> é o redirecionamento de sempre; o segundo faz parte do <code>&lt;( )</code>. O espaço entre eles é obrigatório.</p>
+
+<pre class="term">$ mapfile -t contas &lt; &lt;(ls Downloads)
+$ declare -p contas
+declare -a contas=([0]="foto.jpg" [1]="fotos-viagem.zip" [2]="manual.pdf" [3]="musica.mp3" [4]="ubuntu-26.04-desktop-amd64.iso")</pre>
+
+<p>Os detalhes de como o <code>&lt;( )</code> funciona estão em <a href="substituicao-processo.html">Substituição de Processo</a>.</p>
+
+<h3>Por que não <code>comando | mapfile</code>?</h3>
+<p>Parece o jeito óbvio, mas o array sai vazio:</p>
+
+<pre class="term">$ ls Downloads | mapfile -t arquivos
+$ echo "${#arquivos[@]}"
+0                              « nada?!</pre>
+
+<p><strong>O que aconteceu:</strong> cada lado de um <a href="pipes.html">pipe</a> roda num <a href="subshell.html">subshell</a>, uma cópia do shell. O <code>mapfile</code> encheu o array <strong>na cópia</strong>, e a cópia acabou junto com o pipe. O shell em que você digita nunca viu o array. Com <code>&lt; &lt;(ls Downloads)</code>, quem roda à parte é o <code>ls</code>, e o <code>mapfile</code> fica no seu shell.</p>
+
+<p>Em <strong>scripts</strong>, existe uma alternativa: <code>shopt -s lastpipe</code> faz o último comando do pipe rodar no shell atual. Ela só vale quando o controle de jobs está desligado, que é o normal num script (no terminal interativo não tem efeito):</p>
+
+<pre class="file" data-file="pipe.sh">#!/usr/bin/env bash
+shopt -s lastpipe
+ls Downloads | mapfile -t arquivos
+echo "${#arquivos[@]} arquivos"
+</pre>
+
+<pre class="term">$ bash pipe.sh
+5 arquivos</pre>
+
+<hr>
+
+<h2><code>mapfile</code> × <code>while read</code>: qual usar?</h2>
+<p>As duas formas leem linhas. A diferença é <strong>quando</strong> você trabalha com elas: o <code>mapfile</code> carrega tudo primeiro e você usa depois; o <code>while read</code> trata uma linha de cada vez, enquanto lê.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>mapfile -t a &lt; arq</code></th><th><code>while IFS= read -r l; do …; done &lt; arq</code></th></tr>
+<tr><td>Resultado</td><td>Um array com todas as linhas</td><td>Uma linha por vez, na variável <code>l</code></td></tr>
+<tr><td>Tamanho do código</td><td>Uma linha</td><td>Três ou mais linhas</td></tr>
+<tr><td>Memória</td><td>Guarda o arquivo inteiro</td><td>Guarda só a linha atual</td></tr>
+<tr><td>Contar, pegar a linha N, voltar atrás</td><td>Fácil: <code>${#a[@]}</code>, <code>${a[N]}</code></td><td>Precisa de contadores e variáveis extras</td></tr>
+<tr><td>Dividir cada linha em campos</td><td>Precisa de um passo a mais (<code>read</code> no laço)</td><td>Direto: <code>while IFS=, read -r nome idade …</code></td></tr>
+<tr><td>Última linha sem <code>\n</code> no fim</td><td>É lida normalmente</td><td>É perdida, a não ser com <code>|| [[ -n $l ]]</code></td></tr>
+<tr><td>Arquivos gigantes ou fluxo sem fim (<code>tail -f</code>)</td><td>Ruim: espera tudo chegar</td><td>Bom: começa na hora</td></tr>
+<tr><td>Bash</td><td>4.0+</td><td>Qualquer versão (até o <code>sh</code>)</td></tr>
+</table>
+</div>
+
+<p><strong>Resumo da escolha:</strong> você precisa da lista inteira (contar, ordenar, acessar por posição, percorrer duas vezes)? <code>mapfile</code>. Vai tratar cada linha e esquecer? <code>while read</code>.</p>
+
+<p>A linha "última linha sem <code>\n</code>" merece uma prova. O <code>printf</code> abaixo cria um arquivo cuja última linha não termina com quebra de linha (acontece com arquivos feitos em alguns editores):</p>
+
+<pre class="term">$ printf 'um\ndois\ntrês' &gt; semfim.txt
+$ mapfile -t l &lt; semfim.txt; declare -p l
+declare -a l=([0]="um" [1]="dois" [2]="três")      « as 3 linhas
+$ while read -r linha; do echo "$linha"; done &lt; semfim.txt
+um
+dois                                               « o "três" sumiu</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O array ficou vazio</strong>
+<pre class="term">$ ls Downloads | mapfile -t arquivos
+$ echo "${#arquivos[@]}"
+0</pre>
+<p><strong>O que aconteceu:</strong> o <code>mapfile</code> rodou no subshell do pipe; o array morreu com ele.</p>
+<p><strong>Como resolver:</strong> <code>mapfile -t arquivos &lt; &lt;(ls Downloads)</code>. Em script, também serve <code>shopt -s lastpipe</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>As comparações falham e aparecem linhas em branco a mais</strong>
+<pre class="term">$ mapfile linhas &lt; frutas.txt
+$ [[ ${linhas[0]} == banana ]] &amp;&amp; echo igual || echo diferente
+diferente</pre>
+<p><strong>O que aconteceu:</strong> faltou o <code>-t</code>; cada elemento terminou com <code>\n</code>.</p>
+<p><strong>Como confirmar:</strong> <code>declare -p linhas</code> mostra <code>$'banana\n'</code>.</p>
+<p><strong>Como resolver:</strong> <code>mapfile -t linhas &lt; frutas.txt</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"mapfile: command not found" no Mac</strong>
+<pre class="term" data-host="macbook" data-title="Terminal do macOS (ilustrativo)">$ mapfile -t linhas &lt; frutas.txt
+bash: mapfile: command not found</pre>
+<p><strong>O que aconteceu:</strong> o <code>/bin/bash</code> do macOS é a versão 3.2, anterior ao <code>mapfile</code> (que chegou no Bash 4.0). A saída acima é ilustrativa: o laboratório do guia usa o Bash 5.3.</p>
+<p><strong>Como confirmar:</strong> <code>echo $BASH_VERSION</code>.</p>
+<p><strong>Como resolver:</strong> instale um Bash novo (veja <a href="onde-tem-bash.html">Bash em Cada Sistema</a>) ou use a forma compatível: <code>linhas=(); while IFS= read -r l; do linhas+=("$l"); done &lt; frutas.txt</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"opção inválida"</strong>
+<pre class="term">$ mapfile -t -z a &lt; frutas.txt
+bash: mapfile: -z: opção inválida
+mapfile: uso: mapfile [-d delim] [-n número] [-O origem] [-s número] [-t] [-u fd] [-C chamada] [-c quantidade] [array]</pre>
+<p><strong>O que aconteceu:</strong> o <code>mapfile</code> não tem <code>-z</code> (essa opção é de outros programas, como <code>sort -z</code>). A segunda linha mostra todas as opções válidas. Para ler nomes separados por nulo, use <code>-d ''</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Área de trabalho" virou três elementos</strong>
+<p><strong>O que aconteceu:</strong> o array foi montado com <code>a=($(comando))</code>, que separa nos espaços e ainda expande curingas.</p>
+<p><strong>Como resolver:</strong> <code>mapfile -t a &lt; &lt;(comando)</code> para uma linha por elemento, ou <code>mapfile -t -d '' a &lt; &lt;(find … -print0)</code> para nomes de arquivo.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>mapfile -t a &lt; arq</code></td><td>Uma linha por elemento, sem o <code>\n</code></td><td><code>mapfile -t linhas &lt; frutas.txt</code></td></tr>
+<tr><td><code>readarray</code></td><td>Sinônimo exato de <code>mapfile</code></td><td><code>readarray -t linhas &lt; frutas.txt</code></td></tr>
+<tr><td><code>-n N</code></td><td>Lê no máximo N linhas (0 = todas)</td><td><code>mapfile -t -n 10 a &lt; arq</code></td></tr>
+<tr><td><code>-s N</code></td><td>Pula as N primeiras linhas</td><td><code>mapfile -t -s 1 a &lt; dados.csv</code></td></tr>
+<tr><td><code>-d C</code></td><td>Usa o caractere C como separador</td><td><code>mapfile -t -d , a &lt; &lt;(printf 'x,y')</code></td></tr>
+<tr><td><code>-d ''</code></td><td>Separador nulo (par do <code>find -print0</code>)</td><td><code>mapfile -t -d '' a &lt; &lt;(find . -print0)</code></td></tr>
+<tr><td><code>-O N</code></td><td>Começa no índice N sem apagar o resto</td><td><code>mapfile -t -O "${#a[@]}" a &lt; mais.txt</code></td></tr>
+<tr><td><code>-C f -c N</code></td><td>Chama a função <code>f</code> a cada N linhas</td><td><code>mapfile -t -C progresso -c 1000 a &lt; arq</code></td></tr>
+<tr><td><code>-u FD</code></td><td>Lê do descritor FD em vez da entrada padrão</td><td><code>mapfile -t -u 3 a 3&lt; arq</code></td></tr>
+<tr><td>sem nome</td><td>Grava no array <code>MAPFILE</code></td><td><code>mapfile &lt; arq</code></td></tr>
+<tr><td><code>&lt; &lt;(cmd)</code></td><td>Lê a saída de um comando</td><td><code>mapfile -t a &lt; &lt;(ls)</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Sem a quebra de linha</h3>
+<p>Complete para ler <code>frutas.txt</code> para o array <code>f</code>, sem o <code>\n</code> no fim de cada elemento:</p>
+<div class="ex-code">mapfile <input data-answer="-t" aria-label="opção"> f &lt; frutas.txt</div>
+</div>
+
+<div class="exercise">
+<h3>2. Pular o cabeçalho</h3>
+<p>Complete para ler <code>alunos.csv</code> sem a primeira linha:</p>
+<div class="ex-code">mapfile -t <input data-answer="-s 1|-s1" aria-label="opção"> alunos &lt; Documentos/alunos.csv</div>
+</div>
+
+<div class="exercise">
+<h3>3. Da saída de um comando</h3>
+<p>Complete para guardar no array <code>logs</code> as linhas de <code>acesso.log</code> que contêm "404":</p>
+<div class="ex-code">mapfile -t logs <input data-answer="&lt; &lt;(grep 404 Documentos/acesso.log)|&lt; &lt;(grep &quot;404&quot; Documentos/acesso.log)|&lt; &lt;(grep '404' Documentos/acesso.log)" aria-label="entrada"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Depois de <code>ls | mapfile -t nomes</code>, o comando <code>echo ${#nomes[@]}</code> mostra 0. Por quê?</p>
+<label><input type="radio" name="q4"> Porque o <code>ls</code> não escreve nada quando a saída é um pipe.</label>
+<label><input type="radio" name="q4"> Porque faltou o <code>-d ''</code>.</label>
+<label><input type="radio" name="q4"> Porque o <code>mapfile</code> rodou num subshell do pipe, e o array sumiu com ele.</label>
+<label><input type="radio" name="q4"> Porque <code>mapfile</code> só lê arquivos, nunca comandos.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Você vai acompanhar um log que não para de crescer (<code>tail -f</code>) e tratar cada linha assim que ela chega. O que usar?</p>
+<label><input type="radio" name="q5"> <code>mapfile -t</code>, porque é mais rápido.</label>
+<label><input type="radio" name="q5"> Um laço <code>while read</code>, porque trata uma linha por vez sem esperar o fim.</label>
+<label><input type="radio" name="q5"> <code>mapfile -C</code> com <code>-c 0</code>.</label>
+<label><input type="radio" name="q5"> <code>a=($(tail -f arq))</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>mapfile -t nome &lt; arquivo</code> põe cada linha num elemento; <code>readarray</code> é o mesmo comando. <span class="versao">bash 4.0+</span></li>
+  <li>Use sempre o <code>-t</code>, senão cada elemento guarda o <code>\n</code> do fim.</li>
+  <li><code>-n</code> limita, <code>-s</code> pula, <code>-d</code> troca o separador (<code>-d ''</code> com <code>find -print0</code>), <code>-O</code> acrescenta.</li>
+  <li>De um comando: <code>mapfile -t a &lt; &lt;(comando)</code>. Com <code>comando | mapfile</code> o array some.</li>
+  <li><code>mapfile</code> quando você precisa da lista inteira; <code>while read</code> para tratar linha a linha.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
