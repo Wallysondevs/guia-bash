@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Cola de Expansões — chaves, til, ${ }, $(( )), $( ), curingas e aspas | Guia Bash</title>
+<meta name="description" content="Cola de todas as expansões do Bash 5.3, na ordem em que acontecem: chaves, til, parâmetros (todas as formas ${…}, inclusive os operadores @), aritmética, substituição de comando e de processo, separação de palavras, curingas com extglob e aspas. Cada linha com exemplo e resultado conferidos.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Cola de Expansões</span></h1>
+
+<p class="intro">Antes de executar um comando, o Bash <strong>reescreve</strong> a linha: troca <code>{a,b}</code> por <code>a b</code>, <code>~</code> pela sua pasta, <code>$x</code> pelo valor, <code>*.txt</code> pelos nomes dos arquivos… Cada uma dessas trocas é uma <strong>expansão</strong>. Esta página é a cola de todas elas, na ordem em que o Bash as faz, com um exemplo e o resultado de cada forma, conferidos no Bash 5.3.</p>
+
+<div class="note">
+<strong>A ordem das expansões</strong>
+<p>1. chaves → 2. til → 3. parâmetros, aritmética e substituição de comando/processo (da esquerda para a direita) → 4. separação de palavras → 5. curingas → 6. remoção de aspas. A ordem explica muita coisa: <code>{1..$n}</code> não funciona porque as chaves vêm antes da variável. Veja <a href="ordem-expansoes.html">A Ordem das Expansões</a>.</p>
+</div>
+
+<p class="indice-letras"><a href="#chaves">Chaves</a> · <a href="#til">Til</a> · <a href="#parametros">Parâmetros</a> · <a href="#operadores">Operadores @</a> · <a href="#arrays">Arrays</a> · <a href="#aritmetica">Aritmética</a> · <a href="#comando">Comando</a> · <a href="#processo">Processo</a> · <a href="#palavras">Palavras (IFS)</a> · <a href="#curingas">Curingas</a> · <a href="#extglob">extglob</a> · <a href="#aspas">Aspas</a></p>
+
+<hr>
+
+<h2 id="chaves">1. Chaves <code>{ }</code></h2>
+<p>Geram texto, sem olhar se os arquivos existem. Não aceitam variáveis dentro (<code>{1..$n}</code> fica literal: use <code>seq</code> ou <code>for ((…))</code>). Veja <a href="chaves.html">Chaves</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>{a,b,c}</code></td><td><code>echo {a,b,c}</code></td><td><code>a b c</code></td></tr>
+<tr><td><code>pre{x,y}pos</code></td><td><code>echo arq{1,2}.txt</code></td><td><code>arq1.txt arq2.txt</code></td></tr>
+<tr><td><code>{N..M}</code></td><td><code>echo {1..5}</code></td><td><code>1 2 3 4 5</code></td></tr>
+<tr><td><code>{N..M..passo}</code> com zeros</td><td><code>echo {01..10..3}</code></td><td><code>01 04 07 10</code></td></tr>
+<tr><td><code>{a..e}</code> letras</td><td><code>echo {a..e}</code></td><td><code>a b c d e</code></td></tr>
+<tr><td>decrescente</td><td><code>echo {5..1}</code></td><td><code>5 4 3 2 1</code></td></tr>
+<tr><td>combinadas</td><td><code>echo {a,b}{1,2}</code></td><td><code>a1 a2 b1 b2</code></td></tr>
+<tr><td>sequências combinadas</td><td><code>echo {x..z}{1..2}</code></td><td><code>x1 x2 y1 y2 z1 z2</code></td></tr>
+</table>
+</div>
+
+<h2 id="til">2. Til <code>~</code></h2>
+<p>Só vale no começo de uma palavra (ou depois de <code>=</code> e <code>:</code> numa atribuição) e <strong>fora</strong> de aspas. Veja <a href="navegar.html">Navegar</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Vira</th><th>Exemplo → resultado</th></tr>
+<tr><td><code>~</code></td><td>sua pasta pessoal (<code>$HOME</code>)</td><td><code>echo ~</code> → <code>/home/ana</code></td></tr>
+<tr><td><code>~usuario</code></td><td>a pasta pessoal de outro usuário</td><td><code>echo ~ana</code> → <code>/home/ana</code></td></tr>
+<tr><td><code>~+</code></td><td>a pasta atual (<code>$PWD</code>)</td><td><code>echo ~+</code> → <code>/home/ana</code></td></tr>
+<tr><td><code>~-</code></td><td>a pasta anterior (<code>$OLDPWD</code>)</td><td><code>cd /tmp; cd; echo ~-</code> → <code>/tmp</code></td></tr>
+<tr><td><code>"~"</code></td><td>nada: entre aspas fica literal</td><td><code>echo "~"</code> → <code>~</code></td></tr>
+</table>
+</div>
+
+<h2 id="parametros">3. Parâmetros <code>$x</code> e <code>${ }</code></h2>
+<p>Nos exemplos: <code>x=arquivo.tar.gz</code>, <code>v=</code> (existe, mas vazia), <code>u=texto</code>, <code>n=Bash</code>. Veja <a href="variaveis-intro.html">Variáveis</a> e <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</p>
+
+<h3>Valor e valores padrão</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Significado</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>$x</code> / <code>${x}</code></td><td>O valor. As chaves separam o nome do texto colado: <code>${x}_bak</code>.</td><td><code>echo "${x}"</code></td><td><code>arquivo.tar.gz</code></td></tr>
+<tr><td><code>${v:-padrão}</code></td><td>Se vazia ou inexistente, <strong>use</strong> o padrão (a variável não muda).</td><td><code>echo "${v:-padrão}" "[$v]"</code></td><td><code>padrão []</code></td></tr>
+<tr><td><code>${v:=padrão}</code></td><td>Se vazia ou inexistente, <strong>atribua</strong> o padrão e use.</td><td><code>echo "${v:=agora}" "[$v]"</code></td><td><code>agora [agora]</code></td></tr>
+<tr><td><code>${u:+outro}</code></td><td>Se <strong>tem</strong> valor, use o outro; senão, nada.</td><td><code>echo "${u:+existe}" "[${v:+existe}]"</code></td><td><code>existe []</code></td></tr>
+<tr><td><code>${v:?mensagem}</code></td><td>Se vazia ou inexistente, erro com a mensagem (num script, o script para).</td><td><code>echo "${v:?está vazia}"</code></td><td><code>bash: v: está vazia</code></td></tr>
+<tr><td><code>${x-p}</code> <code>${x=p}</code> <code>${x+p}</code> <code>${x?m}</code></td><td>Sem os dois-pontos: só testa se <strong>existe</strong> (vazia conta como existente).</td><td><code>echo ${nada-vazio} ${vazio=}"[${vazio-x}]"</code></td><td><code>vazio []</code></td></tr>
+<tr><td>padrão com expansão</td><td>O padrão pode ter variáveis e <code>$( )</code>; só é calculado se for usado.</td><td><code>nome=Ana; echo "${nome:+Olá, $nome}"</code></td><td><code>Olá, Ana</code></td></tr>
+</table>
+</div>
+
+<h3>Tamanho, cortes e trocas</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Significado</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>${#x}</code></td><td>Tamanho em caracteres.</td><td><code>echo "${#x}"</code></td><td><code>14</code></td></tr>
+<tr><td><code>${x#pad}</code></td><td>Tira do <strong>começo</strong> o menor trecho que casa.</td><td><code>echo "${x#*.}"</code></td><td><code>tar.gz</code></td></tr>
+<tr><td><code>${x##pad}</code></td><td>Tira do começo o <strong>maior</strong> trecho.</td><td><code>echo "${x##*.}"</code></td><td><code>gz</code></td></tr>
+<tr><td><code>${x%pad}</code></td><td>Tira do <strong>fim</strong> o menor trecho.</td><td><code>echo "${x%.*}"</code></td><td><code>arquivo.tar</code></td></tr>
+<tr><td><code>${x%%pad}</code></td><td>Tira do fim o maior trecho.</td><td><code>echo "${x%%.*}"</code></td><td><code>arquivo</code></td></tr>
+<tr><td><code>${x/de/para}</code></td><td>Troca a <strong>primeira</strong> ocorrência.</td><td><code>echo "${x/a/A}"</code></td><td><code>Arquivo.tar.gz</code></td></tr>
+<tr><td><code>${x//de/para}</code></td><td>Troca <strong>todas</strong>.</td><td><code>echo "${x//a/A}"</code></td><td><code>Arquivo.tAr.gz</code></td></tr>
+<tr><td><code>${x/#de/para}</code></td><td>Troca só se estiver no começo.</td><td><code>echo "${x/#arq/ARQ}"</code></td><td><code>ARQuivo.tar.gz</code></td></tr>
+<tr><td><code>${x/%de/para}</code></td><td>Troca só se estiver no fim.</td><td><code>echo "${x/%gz/bz2}"</code></td><td><code>arquivo.tar.bz2</code></td></tr>
+<tr><td><code>${x/de}</code> ou <code>${x/de/}</code></td><td>Apaga (troca por nada).</td><td><code>echo "${x/tar./}"</code></td><td><code>arquivo.gz</code></td></tr>
+<tr><td><code>/</code> dentro do padrão</td><td>Escape com <code>\/</code>.</td><td><code>echo "${HOME/#\/home/C:}"</code></td><td><code>C:/ana</code></td></tr>
+</table>
+</div>
+<p>Dica para lembrar: no teclado americano, <code>#</code> fica à esquerda de <code>%</code> (Shift+3 e Shift+5), assim como o começo fica à esquerda do fim. Os padrões são curingas (<code>*</code>, <code>?</code>, <code>[ ]</code>), não regex.</p>
+
+<h3>Maiúsculas, fatias e indireção</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Significado</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>${n^}</code> / <code>${n^^}</code></td><td>Primeira letra / todas em maiúscula. <span class="versao">bash 4.0+</span></td><td><code>echo "${n^}" "${n^^}"</code></td><td><code>Bash BASH</code></td></tr>
+<tr><td><code>${n,}</code> / <code>${n,,}</code></td><td>Primeira / todas em minúscula. <span class="versao">bash 4.0+</span></td><td><code>echo "${n,}" "${n,,}"</code></td><td><code>bash bash</code></td></tr>
+<tr><td><code>${n~~}</code></td><td>Inverte maiúsculas e minúsculas (não documentado, mas existe).</td><td><code>echo "${n~~}"</code></td><td><code>bASH</code></td></tr>
+<tr><td><code>${x:início:tamanho}</code></td><td>Fatia; a posição começa em 0.</td><td><code>echo "${x:0:7}"</code></td><td><code>arquivo</code></td></tr>
+<tr><td><code>${x:início}</code></td><td>Do início até o fim.</td><td><code>echo "${x:8}"</code></td><td><code>tar.gz</code></td></tr>
+<tr><td><code>${x: -N}</code></td><td>Os últimos N (o espaço antes do <code>-</code> é obrigatório: <code>${x:-2}</code> é o "valor padrão").</td><td><code>echo "${x: -2}"</code></td><td><code>gz</code></td></tr>
+<tr><td><code>${x:(-6):3}</code></td><td>Começa 6 antes do fim, pega 3.</td><td><code>echo "${x:(-6):3}"</code></td><td><code>tar</code></td></tr>
+<tr><td><code>${!nome}</code></td><td>Indireção: o valor da variável cujo <strong>nome</strong> está em <code>nome</code>.</td><td><code>cor=azul; ref=cor; echo "${!ref}"</code></td><td><code>azul</code></td></tr>
+<tr><td><code>${!prefixo*}</code> / <code>${!prefixo@}</code></td><td>Os nomes das variáveis que começam com o prefixo.</td><td><code>echo "${!BASH_ARGV@}"</code></td><td><code>BASH_ARGV BASH_ARGV0</code></td></tr>
+</table>
+</div>
+<p>A indireção e o <code>declare -n</code> estão em <a href="eval-indirecao.html">eval, Indireção e nameref</a>; as fatias e trocas, em <a href="strings.html">Manipular Strings</a>.</p>
+
+<h3 id="operadores">Operadores <code>@</code> (transformações)</h3>
+<p>Exemplos com <code>f='Olá mundo'</code>. <span class="versao">bash 4.4+</span> (<code>@U @L @u @K</code>: 5.1+; <code>@k</code>: 5.2+)</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Significado</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>${f@Q}</code></td><td>O valor entre aspas, pronto para ser reusado como código.</td><td><code>echo "${f@Q}"</code></td><td><code>'Olá mundo'</code></td></tr>
+<tr><td><code>${f@U}</code> / <code>${f@L}</code></td><td>Tudo maiúsculo / minúsculo.</td><td><code>echo "${f@U}" "${f@L}"</code></td><td><code>OLÁ MUNDO olá mundo</code></td></tr>
+<tr><td><code>${f@u}</code></td><td>Primeira letra maiúscula.</td><td><code>echo "${f@u}"</code></td><td><code>Olá mundo</code></td></tr>
+<tr><td><code>${t@E}</code></td><td>Interpreta os escapes <code>\t \n</code>… como o <code>$'…'</code>.</td><td><code>t='a\tb'; echo "${t@E}"</code></td><td><code>a	b</code> (com TAB)</td></tr>
+<tr><td><code>${p@P}</code></td><td>Expande como um prompt (<code>\u</code>, <code>\h</code>, <code>\w</code>…).</td><td><code>p='\u@\h'; echo "${p@P}"</code></td><td><code>ana@notebook</code></td></tr>
+<tr><td><code>${num@A}</code></td><td>O comando <code>declare</code> que recria a variável.</td><td><code>declare -i num=7; echo "${num@A}"</code></td><td><code>declare -i num='7'</code></td></tr>
+<tr><td><code>${num@a}</code></td><td>As letras dos atributos.</td><td><code>echo "${num@a}"</code></td><td><code>i</code></td></tr>
+<tr><td><code>${arr[@]@K}</code></td><td>Pares índice/valor, com aspas, numa palavra só.</td><td><code>arr=(x y); echo "${arr[@]@K}"</code></td><td><code>0 "x" 1 "y"</code></td></tr>
+<tr><td><code>${arr[@]@k}</code></td><td>Pares índice/valor, cada um uma palavra.</td><td><code>echo "${arr[@]@k}"</code></td><td><code>0 x 1 y</code></td></tr>
+</table>
+</div>
+
+<h3 id="arrays">Arrays e parâmetros posicionais</h3>
+<p>Exemplos com <code>a=(um dois três)</code>. Veja <a href="arrays.html">Arrays</a>, <a href="arrays-associativos.html">Arrays Associativos</a> e <a href="argumentos.html">Argumentos</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Significado</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>${a[N]}</code></td><td>O item N (começa em 0).</td><td><code>echo "${a[1]}"</code></td><td><code>dois</code></td></tr>
+<tr><td><code>"${a[@]}"</code></td><td>Todos, cada um uma palavra (a forma certa para laços).</td><td><code>echo "${a[@]}"</code></td><td><code>um dois três</code></td></tr>
+<tr><td><code>"${a[*]}"</code></td><td>Todos numa palavra só, unidos pelo 1º caractere do <code>IFS</code>.</td><td><code>echo "${a[*]}"</code></td><td><code>um dois três</code></td></tr>
+<tr><td><code>${#a[@]}</code></td><td>Quantos itens.</td><td><code>echo "${#a[@]}"</code></td><td><code>3</code></td></tr>
+<tr><td><code>${#a[N]}</code></td><td>Tamanho do item N.</td><td><code>echo "${#a[1]}"</code></td><td><code>4</code></td></tr>
+<tr><td><code>${!a[@]}</code></td><td>Os índices (ou as chaves, num associativo).</td><td><code>echo "${!a[@]}"</code></td><td><code>0 1 2</code></td></tr>
+<tr><td><code>${a[@]:i:n}</code></td><td>Fatia: n itens a partir do i.</td><td><code>echo "${a[@]:1:2}"</code></td><td><code>dois três</code></td></tr>
+<tr><td><code>${a[@]/de/para}</code></td><td>Troca em cada item (vale também <code>#</code>, <code>%</code>, <code>^^</code>…).</td><td><code>echo "${a[@]/o/0}"</code></td><td><code>um d0is três</code></td></tr>
+<tr><td><code>"$@"</code></td><td>Os argumentos, cada um intacto.</td><td><code>set -- a "b c" d; printf '[%s]' "$@"</code></td><td><code>[a][b c][d]</code></td></tr>
+<tr><td><code>"$*"</code></td><td>Os argumentos numa palavra, unidos pelo 1º caractere do <code>IFS</code>.</td><td><code>printf '[%s]' "$*"</code>; com <code>IFS=,</code>: <code>echo "$*"</code></td><td><code>[a b c d]</code>; <code>a,b c,d</code></td></tr>
+<tr><td><code>$#</code>, <code>${10}</code></td><td>Quantos argumentos; do 10º em diante, chaves obrigatórias.</td><td><code>set -- a b c; echo $#</code></td><td><code>3</code></td></tr>
+</table>
+</div>
+
+<h2 id="aritmetica">4. Aritmética <code>$(( ))</code></h2>
+<p>Só números inteiros (64 bits). Dentro, as variáveis dispensam o <code>$</code>. Veja <a href="aritmetica.html">Contas</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>+ - * / %</code> (precedência normal)</td><td><code>echo $((2 + 3 * 4)) $(( (2+3)*4 ))</code></td><td><code>14 20</code></td></tr>
+<tr><td>divisão inteira e resto</td><td><code>echo $((7 / 2)) $((7 % 2))</code></td><td><code>3 1</code></td></tr>
+<tr><td>potência <code>**</code></td><td><code>echo $((2 ** 8))</code></td><td><code>256</code></td></tr>
+<tr><td>bases <code>BASE#número</code>, <code>0x</code>, <code>0</code> (octal!)</td><td><code>echo $((16#ff)) $((2#1010)) $((0x1F)) $((010)) $((10#010))</code></td><td><code>255 10 31 8 10</code></td></tr>
+<tr><td>comparação (1 = verdade, 0 = falso)</td><td><code>echo $((10 &gt; 3))</code></td><td><code>1</code></td></tr>
+<tr><td>atribuição e vírgula</td><td><code>echo $((x2 = 5, x2 * 2))</code></td><td><code>10</code></td></tr>
+<tr><td><code>i++</code> (usa e soma) / <code>++i</code> (soma e usa)</td><td><code>i=5; echo $((i++)) $i $((++i))</code></td><td><code>5 6 7</code></td></tr>
+<tr><td>condicional <code>? :</code></td><td><code>echo $(( i &gt; 3 ? 100 : 0 ))</code></td><td><code>100</code></td></tr>
+<tr><td>divisão por zero</td><td><code>echo $(( 1 / 0 ))</code></td><td><code>bash: 1 / 0 : divisão por 0 (token de erro é "0 ")</code></td></tr>
+<tr><td>estouro (64 bits)</td><td><code>echo $((2**63))</code></td><td><code>-9223372036854775808</code></td></tr>
+</table>
+</div>
+
+<h2 id="comando">5. Substituição de comando <code>$( )</code></h2>
+<p>Roda o comando e põe a saída no lugar, sem as quebras de linha do fim. Veja <a href="substituicao-comando.html">Substituição de Comando</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>$(comando)</code></td><td><code>echo "hoje: $(date +%Y)"</code></td><td><code>hoje: 2026</code></td></tr>
+<tr><td><code>`comando`</code> (crases, forma antiga)</td><td><code>echo "pasta: `basename $PWD`"</code></td><td><code>pasta: ana</code></td></tr>
+<tr><td>aspas dentro de <code>$( )</code> são independentes</td><td><code>echo "$(echo "aspas "dentro" funcionam")"</code></td><td><code>aspas dentro funcionam</code></td></tr>
+<tr><td><code>${ comando; }</code>: sem criar subshell <span class="versao">bash 5.3+</span></td><td><code>x=5; y=${ x=7; echo $x; }; echo "$x $y"</code></td><td><code>7 7</code> (o <code>x</code> mudou no shell atual)</td></tr>
+<tr><td><code>${| comando; }</code>: o valor é o <code>REPLY</code> <span class="versao">bash 5.3+</span></td><td><code>echo ${| REPLY=valor; }</code></td><td><code>valor</code></td></tr>
+</table>
+</div>
+
+<h2 id="processo">6. Substituição de processo <code>&lt;( )</code> e <code>&gt;( )</code></h2>
+<p>Põe no lugar um <strong>nome de arquivo</strong> (<code>/dev/fd/63</code>) ligado à saída (ou entrada) do comando. Para comandos que exigem arquivos. Veja <a href="substituicao-processo.html">Substituição de Processo</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>&lt;(comando)</code></td><td><code>wc -l &lt;(printf 'a\nb\n')</code></td><td><code>2 /dev/fd/63</code></td></tr>
+<tr><td>comparar duas saídas</td><td><code>diff &lt;(echo a) &lt;(echo b)</code></td><td><code>1c1</code> / <code>&lt; a</code> / <code>---</code> / <code>&gt; b</code></td></tr>
+<tr><td><code>&gt;(comando)</code></td><td><code>echo oi | tee &gt;(wc -c)</code></td><td><code>oi</code> e <code>3</code></td></tr>
+</table>
+</div>
+
+<h2 id="palavras">7. Separação de palavras (<code>IFS</code>)</h2>
+<p>O resultado de <code>$x</code>, <code>$( )</code> e <code>$(( ))</code> <strong>sem aspas</strong> é cortado nos caracteres do <code>IFS</code> (padrão: espaço, TAB e quebra de linha). Entre aspas, não. Veja <a href="aspas.html">Aspas</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td>sem aspas: os espaços somem</td><td><code>var="a   b"; echo $var</code></td><td><code>a b</code></td></tr>
+<tr><td>com aspas: intacto</td><td><code>echo "$var"</code></td><td><code>a   b</code></td></tr>
+<tr><td>outro separador para um comando</td><td><code>IFS=: read -r u1 u2 &lt;&lt;&lt; "x:y"; echo "$u1 $u2"</code></td><td><code>x y</code></td></tr>
+<tr><td>outro separador para o shell</td><td><code>lista="1,2,3"; IFS=,; set -- $lista; echo $#; unset IFS</code></td><td><code>3</code></td></tr>
+</table>
+</div>
+
+<h2 id="curingas">8. Curingas (<em>globbing</em>)</h2>
+<p>Trocados pelos nomes de arquivos que casam, em ordem alfabética. Se nada casa, o padrão fica como está. Exemplos dentro de <code>~/Documentos</code> (<code>acesso.log alunos.csv notas.txt projetos relatorio.odt</code>). Veja <a href="curingas.html">Curingas</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Casa com</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>*</code></td><td>qualquer sequência (até vazia), sem pegar nomes com ponto no começo</td><td><code>echo *.txt</code></td><td><code>notas.txt</code></td></tr>
+<tr><td><code>?</code></td><td>exatamente um caractere</td><td><code>echo ??????.csv</code></td><td><code>alunos.csv</code></td></tr>
+<tr><td><code>[abc]</code> / <code>[a-z]</code></td><td>um caractere da lista / do intervalo</td><td><code>echo [an]*.txt</code></td><td><code>notas.txt</code></td></tr>
+<tr><td><code>[!a]</code> ou <code>[^a]</code></td><td>um caractere que <strong>não</strong> está na lista</td><td><code>echo [!a]*</code></td><td><code>notas.txt projetos relatorio.odt</code></td></tr>
+<tr><td>com chaves</td><td>(as chaves vêm antes)</td><td><code>echo *.{txt,csv}</code></td><td><code>notas.txt alunos.csv</code></td></tr>
+<tr><td><code>**</code> com <code>shopt -s globstar</code></td><td>qualquer número de subpastas</td><td><code>echo Documentos/**/*.html</code></td><td><code>Documentos/projetos/site/index.html</code></td></tr>
+</table>
+</div>
+
+<h3>Opções que mudam os curingas</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Efeito</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td>(padrão)</td><td>sem resultado, o padrão fica literal</td><td><code>echo *.xyz</code></td><td><code>*.xyz</code></td></tr>
+<tr><td><code>shopt -s nullglob</code></td><td>sem resultado, o padrão some</td><td><code>echo "[" *.xyz "]"</code></td><td><code>[ ]</code></td></tr>
+<tr><td><code>shopt -s failglob</code></td><td>sem resultado, é erro</td><td><code>echo *.xyz</code></td><td><code>bash: sem correspondência: *.xyz</code></td></tr>
+<tr><td><code>shopt -s dotglob</code></td><td><code>*</code> pega também os ocultos</td><td><code>echo .b*</code> (em <code>~</code>)</td><td><code>.bash_history .bashrc</code></td></tr>
+<tr><td><code>shopt -s nocaseglob</code></td><td>ignora maiúsculas/minúsculas</td><td><code>echo d*</code> (em <code>~</code>)</td><td><code>Documentos Downloads</code></td></tr>
+</table>
+</div>
+
+<h3 id="extglob">Curingas estendidos (<code>shopt -s extglob</code>)</h3>
+<p>Ligue numa linha <strong>antes</strong> de usar: o Bash lê a linha inteira antes de executá-la, e um <code>shopt -s extglob; echo !(*.txt)</code> na mesma linha dá <code>erro de sintaxe próximo ao token inesperado `('</code>. Dentro de <code>[[ ]]</code> eles já funcionam sem a opção.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Casa com</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>!(pad)</code></td><td>tudo que <strong>não</strong> casa</td><td><code>echo !(*.txt)</code></td><td><code>acesso.log alunos.csv projetos relatorio.odt</code></td></tr>
+<tr><td><code>@(a|b)</code></td><td>exatamente um dos padrões</td><td><code>echo @(notas|alunos).*</code></td><td><code>alunos.csv notas.txt</code></td></tr>
+<tr><td><code>+(pad)</code></td><td>uma ou mais repetições</td><td><code>echo +([a-z]).log</code></td><td><code>acesso.log</code></td></tr>
+<tr><td><code>*(pad)</code></td><td>zero ou mais repetições</td><td><code>[[ 007 == *(0)7 ]] &amp;&amp; echo sim</code></td><td><code>sim</code></td></tr>
+<tr><td><code>?(pad)</code></td><td>zero ou uma vez</td><td><code>echo ?(rel)atorio.odt</code></td><td><code>relatorio.odt</code></td></tr>
+<tr><td>combinado</td><td></td><td><code>echo *.@(txt|csv)</code></td><td><code>alunos.csv notas.txt</code></td></tr>
+</table>
+</div>
+
+<h2 id="aspas">9. Aspas e remoção de aspas</h2>
+<p>A última etapa tira as aspas e barras que você digitou (elas só serviam para o shell). Veja <a href="aspas.html">Aspas e Escapes</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que é expandido lá dentro</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>'simples'</code></td><td>nada: tudo literal</td><td><code>echo 'simples $HOME \n'</code></td><td><code>simples $HOME \n</code></td></tr>
+<tr><td><code>"duplas"</code></td><td><code>$var</code>, <code>$( )</code>, <code>$(( ))</code>, <code>`…`</code>, <code>\$ \" \\ \`</code>; sem chaves, til, curingas nem separação de palavras</td><td><code>echo "duplas $HOME \$HOME"</code></td><td><code>duplas /home/ana $HOME</code></td></tr>
+<tr><td><code>$'…'</code></td><td>escapes do C: <code>\t \n \e \x41 \u00e1</code></td><td><code>echo $'dolar-aspas\ttab'</code></td><td><code>dolar-aspas	tab</code></td></tr>
+<tr><td><code>\x</code> fora de aspas</td><td>o próximo caractere vira literal</td><td><code>echo sem\ aspas</code></td><td><code>sem aspas</code></td></tr>
+<tr><td>aritmética dentro e fora</td><td></td><td><code>echo "$((1+1))" '$((1+1))'</code></td><td><code>2 $((1+1))</code></td></tr>
+<tr><td><code>$"…"</code></td><td>como <code>"…"</code>, mas traduzido pelo gettext (raro)</td><td><code>echo $"Olá"</code></td><td><code>Olá</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só a extensão</h3>
+<p><code>x=foto.da.praia.jpg</code>. Complete para mostrar só <code>jpg</code>:</p>
+<div class="ex-code">echo "${x<input data-answer="##*." aria-label="operador">}"</div>
+</div>
+
+<div class="exercise">
+<h3>2. Sem a extensão</h3>
+<p>Com o mesmo <code>x</code>, complete para mostrar <code>foto.da.praia</code>:</p>
+<div class="ex-code">echo "${x<input data-answer="%.*" aria-label="operador">}"</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Por que <code>n=5; echo {1..$n}</code> mostra <code>{1..5}</code> e não <code>1 2 3 4 5</code>?</p>
+<label><input type="radio" name="q3"> Porque faltam aspas.</label>
+<label><input type="radio" name="q3"> Porque a expansão de chaves acontece antes da de variáveis: quando o <code>$n</code> vira 5, as chaves já passaram.</label>
+<label><input type="radio" name="q3"> Porque <code>n</code> não foi exportada.</label>
+<label><input type="radio" name="q3"> Porque chaves só aceitam letras.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. <code>v=</code> (vazia). O que <code>echo "[${v-padrão}]" "[${v:-padrão}]"</code> mostra?</p>
+<label><input type="radio" name="q4"> <code>[] [padrão]</code></label>
+<label><input type="radio" name="q4"> <code>[padrão] [padrão]</code></label>
+<label><input type="radio" name="q4"> <code>[] []</code></label>
+<label><input type="radio" name="q4"> <code>[padrão] []</code></label>
+</div>
+
+<div class="exercise">
+<h3>5. Os últimos 3</h3>
+<p>Complete para mostrar os 3 últimos caracteres de <code>x</code> (cuidado com o espaço):</p>
+<div class="ex-code">echo "${x: <input data-answer="-3" aria-label="posição">}"</div>
+</div>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
