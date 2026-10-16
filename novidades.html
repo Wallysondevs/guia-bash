@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Novidades — o que mudou do 4.0 ao 5.3 | Guia Bash</title>
+<meta name="description" content="As novidades do Bash 4.x, 5.0, 5.1, 5.2 e 5.3 que importam no dia a dia: EPOCHSECONDS, SRANDOM, wait -p, ${var@U}, patsub_replacement, ${ cmd; } sem subshell, GLOBSORT e mais, conferidas no Bash 5.3.9 e nas notas oficiais (NEWS).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Novidades do Bash 5</span></h1>
+
+<p class="intro">O Bash continua evoluindo: cada versão traz variáveis, opções e formas de escrever que deixam os scripts mais curtos, mais rápidos ou mais seguros. Esta página reúne as novidades que mais importam, do 4.0 ao 5.3, com o selo da versão em que cada uma apareceu. Assim você sabe o que pode usar e o que vai quebrar numa máquina com Bash mais antigo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Descobrir a versão do Bash, no terminal e dentro de um script (<code>BASH_VERSINFO</code>).</li>
+  <li>O que cada versão trouxe de útil, numa tabela com o selo da versão.</li>
+  <li>As novidades do 5.x na prática: <code>EPOCHSECONDS</code>, <code>SRANDOM</code>, <code>wait -p</code>, <code>${var@U}</code>, o <code>&amp;</code> do <code>patsub_replacement</code>…</li>
+  <li>A grande novidade do 5.3: substituição de comando <strong>sem subshell</strong>, <code>${ cmd; }</code> e <code>${| cmd; }</code>.</li>
+  <li>Como fazer um script avisar quando a versão é velha demais.</li>
+</ul>
+</div>
+
+<p>Fonte: tudo nesta página foi conferido no Bash 5.3.9 do laboratório do guia e nas notas oficiais de versão, o arquivo <code>NEWS</code>, que os pacotes do Debian/Ubuntu instalam em <code>/usr/share/doc/bash/NEWS.gz</code> (leia com <code>zless /usr/share/doc/bash/NEWS.gz</code>).</p>
+
+<hr>
+
+<h2>Que Bash eu tenho?</h2>
+<p>Há três jeitos. No terminal, o mais completo é perguntar ao próprio programa:</p>
+
+<pre class="term">$ bash --version | head -2
+GNU bash, versão 5.3.9(1)-release (x86_64-pc-linux-gnu)
+Copyright (C) 2025 Free Software Foundation, Inc.
+$ echo "$BASH_VERSION"
+5.3.9(1)-release
+$ echo "${BASH_VERSINFO[@]}"
+5 3 9 1 release x86_64-pc-linux-gnu</pre>
+
+<dl class="anatomy">
+  <dt>5</dt><dd><code>${BASH_VERSINFO[0]}</code>: a versão principal (<em>major</em>).</dd>
+  <dt>3</dt><dd><code>${BASH_VERSINFO[1]}</code>: a versão secundária (<em>minor</em>). Juntas: Bash 5.3.</dd>
+  <dt>9</dt><dd><code>${BASH_VERSINFO[2]}</code>: o nível de correção (<em>patch level</em>), o 5.3 com 9 correções.</dd>
+  <dt>1</dt><dd>O número de compilação (<em>build</em>).</dd>
+  <dt>release</dt><dd>O estado: <code>release</code> é a versão final (poderia ser <code>beta</code>, <code>rc1</code>…).</dd>
+  <dt>x86_64-pc-linux-gnu</dt><dd>Para que máquina e sistema ele foi compilado.</dd>
+</dl>
+
+<p><code>$BASH_VERSION</code> é um texto bom para mostrar; <code>BASH_VERSINFO</code> é um <a href="arrays.html">array</a> de números, bom para <strong>comparar</strong>. Atenção: <code>$BASH_VERSION</code> diz qual Bash está rodando <strong>agora</strong>. Um script com <code>#!/bin/sh</code> não roda no Bash em todo sistema (veja <a href="portabilidade.html">POSIX sh e Bashismos</a>).</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Bash que vem instalado</th></tr>
+<tr><td>Ubuntu 26.04, Fedora, Arch</td><td>5.3</td></tr>
+<tr><td>Debian 13, Ubuntu 24.04</td><td>5.2</td></tr>
+<tr><td>macOS (<code>/bin/bash</code>)</td><td>3.2 (o shell padrão do macOS é o zsh; um Bash novo pode ser instalado pelo Homebrew)</td></tr>
+</table>
+</div>
+<p>Mais detalhes em <a href="onde-tem-bash.html">Bash em Cada Sistema</a>.</p>
+
+<div class="try" data-goal="ran:BASH_VERSINFO,out:5" data-solucao="echo &quot;${BASH_VERSINFO[0]}&quot;">
+<p class="try-task"><strong>Missão:</strong> mostre só o número da versão <strong>principal</strong> do Bash do simulador, usando o array <code>BASH_VERSINFO</code>.</p>
+</div>
+
+<hr>
+
+<h2>A tabela das novidades</h2>
+<p>As que mais aparecem em scripts do dia a dia, por versão. Os itens com link têm aula própria.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Versão</th><th>Novidade</th><th>Para quê</th></tr>
+<tr><td><span class="versao">4.0</span></td><td><a href="arrays-associativos.html">Arrays associativos</a> (<code>declare -A</code>)</td><td>Chave de texto → valor</td></tr>
+<tr><td><span class="versao">4.0</span></td><td><code>${x^^}</code>, <code>${x,,}</code>, <code>${x^}</code></td><td>Maiúsculas/minúsculas (<a href="strings.html">Strings</a>)</td></tr>
+<tr><td><span class="versao">4.0</span></td><td><a href="mapfile.html"><code>mapfile</code>/<code>readarray</code></a></td><td>Arquivo → array</td></tr>
+<tr><td><span class="versao">4.0</span></td><td><code>globstar</code> (<code>**</code>), <code>autocd</code></td><td>Curinga recursivo; <code>cd</code> sem digitar <code>cd</code> (<a href="shopt.html">shopt</a>)</td></tr>
+<tr><td><span class="versao">4.0</span></td><td><code>&amp;&gt;&gt;</code>, <code>|&amp;</code>, <code>coproc</code>, <code>;&amp;</code> e <code>;;&amp;</code> no <code>case</code>, <code>$BASHPID</code></td><td>Atalhos de redirecionamento, coprocessos, <a href="case.html">case</a> encadeado, <a href="subshell.html">subshells</a></td></tr>
+<tr><td><span class="versao">4.1</span></td><td><code>{fd}&gt;arquivo</code>; <code>printf -v</code> em posições de array</td><td>O Bash escolhe o número do <a href="descritores.html">descritor</a></td></tr>
+<tr><td><span class="versao">4.2</span></td><td><code>lastpipe</code>; <code>printf '%(%F)T'</code>; <code>test -v</code>; índices negativos (<code>${a[-1]}</code>)</td><td>Pipe sem perder variáveis; data sem chamar o <code>date</code>; "a variável existe?"</td></tr>
+<tr><td><span class="versao">4.3</span></td><td>nameref (<code>declare -n</code>); <code>wait -n</code></td><td><a href="eval-indirecao.html">Indireção</a> segura; esperar a próxima tarefa (<a href="jobs.html">jobs</a>)</td></tr>
+<tr><td><span class="versao">4.4</span></td><td><code>${x@Q}</code>, <code>@E</code>, <code>@P</code>, <code>@A</code>, <code>@a</code>; <code>inherit_errexit</code>; <code>mapfile -d</code>; <code>BASH_LOADABLES_PATH</code></td><td>Transformações de valor; <code>set -e</code> dentro de <code>$( )</code></td></tr>
+<tr><td><span class="versao">5.0</span></td><td><code>EPOCHSECONDS</code>, <code>EPOCHREALTIME</code>, <code>BASH_ARGV0</code>; <code>globasciiranges</code> e <code>checkwinsize</code> ligadas por padrão</td><td>Hora sem chamar o <code>date</code></td></tr>
+<tr><td><span class="versao">5.1</span></td><td><code>SRANDOM</code>; <code>wait -p</code>; <code>${x@U}</code>, <code>@u</code>, <code>@L</code>, <code>@K</code></td><td>Número aleatório melhor; saber qual tarefa terminou</td></tr>
+<tr><td><span class="versao">5.2</span></td><td><code>patsub_replacement</code> (o <code>&amp;</code> no <code>${x/a/b}</code>); <code>@k</code>; <code>varredir_close</code>; <code>globskipdots</code>; valor padrão de <code>BASH_LOADABLES_PATH</code></td><td>Atenção: pode mudar scripts antigos</td></tr>
+<tr><td><span class="versao">5.3</span></td><td><code>${ cmd; }</code> e <code>${| cmd; }</code>; <code>GLOBSORT</code>; <code>compgen -V</code>; <code>source -p</code>; <code>read -E</code>; <code>BASH_TRAPSIG</code>, <code>BASH_MONOSECONDS</code>; <code>array_expand_once</code>; <code>bash_source_fullpath</code>; <code>TIMEFORMAT</code> com 6 casas</td><td>Substituição de comando sem subshell e mais</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Bash 5.0: a hora sem chamar o <code>date</code> <span class="versao">bash 5.0+</span></h2>
+<p><code>EPOCHSECONDS</code> é o número de segundos desde 1º/1/1970 (a "época" do Unix), o mesmo que <code>date +%s</code>, mas sem criar um processo. <code>EPOCHREALTIME</code> é o mesmo com <strong>microssegundos</strong>:</p>
+
+<pre class="term">$ echo $EPOCHSECONDS
+1792156255
+$ date +%s
+1792156255
+$ echo $EPOCHREALTIME
+1792156255,523673                  « em pt_BR, com vírgula decimal</pre>
+
+<p>Medir quanto um trecho demora fica fácil:</p>
+
+<pre class="term">$ inicio=$EPOCHSECONDS; sleep 1; echo "$(( EPOCHSECONDS - inicio )) s"
+1 s</pre>
+
+<div class="warning">
+<strong>A vírgula do <code>EPOCHREALTIME</code> engana a conta</strong>
+<p>O separador decimal segue o idioma (<code>LC_NUMERIC</code>): em português é vírgula. E dentro de <code>$(( ))</code> a vírgula é um <strong>operador</strong> ("faça a conta da esquerda, jogue fora, use a da direita"). Sem erro nenhum, a conta sai absurda:</p>
+<pre class="term">$ inicio=$EPOCHREALTIME
+$ sleep 0.25
+$ fim=$EPOCHREALTIME
+$ echo $(( fim - inicio ))
+-747091                            « só os microssegundos de cada um: errado!
+$ echo $(( ${fim/,/} - ${inicio/,/} ))
+252909                             « tirando a vírgula: 252.909 microssegundos
+$ echo "$(( (${fim/,/} - ${inicio/,/}) / 1000 )) ms"
+252 ms</pre>
+<p>O <code>${fim/,/}</code> (veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>) apaga a vírgula, e o número vira microssegundos inteiros. Com <code>LC_NUMERIC=C</code>, o Bash usa ponto (<code>1792156306.126410</code>), mas a conta inteira do Bash continua sem aceitar decimais.</p>
+</div>
+
+<hr>
+
+<h2>Bash 5.1: <code>SRANDOM</code>, <code>wait -p</code> e <code>@U</code> <span class="versao">bash 5.1+</span></h2>
+
+<h3><code>SRANDOM</code></h3>
+<p><code>$RANDOM</code> dá um número de 0 a 32767, de um gerador simples. <code>$SRANDOM</code> dá um número de 32 bits (até 4.294.967.295) vindo do gerador seguro do sistema. Use-o para nomes temporários, senhas e sorteios que não podem ser adivinhados:</p>
+
+<pre class="term">$ echo $RANDOM
+17267
+$ echo $SRANDOM $SRANDOM
+3602373573 202954302</pre>
+
+<h3><code>wait -n -p</code></h3>
+<p>O <code>wait -n</code> espera a próxima tarefa que terminar; com <code>-p variavel</code>, ele também guarda <strong>qual</strong> foi (o PID). Detalhes em <a href="jobs.html">Jobs</a> e <a href="paralelo.html">Rodar em Paralelo</a>.</p>
+
+<pre class="term">$ sleep 0.2 &amp; sleep 0.1 &amp;
+[1] 59397
+[2] 59398
+$ wait -n -p quem; echo "terminou o PID $quem"
+terminou o PID 59398               « o sleep 0.1, o job 2</pre>
+
+<h3><code>${x@U}</code>, <code>@u</code>, <code>@L</code> e <code>@K</code></h3>
+<p>Transformações escritas como <code>${variavel@letra}</code>. As três primeiras fazem o mesmo que <code>${x^^}</code>, <code>${x^}</code> e <code>${x,,}</code> do Bash 4, com letras mais fáceis de lembrar: <strong>U</strong>pper, <strong>u</strong>pper só a primeira, <strong>L</strong>ower.</p>
+
+<pre class="term">$ nome="ana maria"
+$ echo "${nome@U}"
+ANA MARIA
+$ echo "${nome@u}"
+Ana maria
+$ X="ANA"; echo "${X@L}"
+ana
+$ declare -A idade=([Ana]=29 [Bruno]=34)
+$ echo "${idade[@]@K}"
+Ana "29" Bruno "34"                « @K: pares chave valor, com o valor entre aspas</pre>
+
+<div class="tryscript" data-file="cracha.sh" data-args="ana maria" data-goal="out:ANA MARIA,src:@U">
+<p class="try-task"><strong>Missão:</strong> o crachá do evento deve mostrar o nome em <strong>maiúsculas</strong>. Use a transformação <code>@U</code> do Bash 5.1 no <code>echo</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+nome="$*"
+echo "CRACHÁ: $nome"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+nome="$*"
+echo "CRACHÁ: ${nome@U}"
+</pre>
+</div>
+
+<hr>
+
+<h2>Bash 5.2: atenção ao <code>&amp;</code> <span class="versao">bash 5.2+</span></h2>
+
+<h3><code>patsub_replacement</code>: o <code>&amp;</code> virou especial</h3>
+<p>Na substituição <code>${variavel/padrão/troca}</code>, o Bash 5.2 passou a entender <code>&amp;</code> na troca como "o pedaço que casou com o padrão", como no <code>sed</code>. A opção que controla isso, <code>patsub_replacement</code>, vem <strong>ligada</strong>:</p>
+
+<pre class="term">$ fruta=banana
+$ echo "${fruta/an/[&amp;]}"
+b[an]ana                           « o &amp; virou "an", o pedaço encontrado
+$ echo "${fruta//a/&amp;&amp;}"
+baanaanaa                          « cada a virou aa
+$ shopt patsub_replacement
+patsub_replacement  	on</pre>
+
+<p>Isso é útil, mas pode <strong>mudar o resultado de scripts antigos</strong> que usavam um <code>&amp;</code> de verdade na troca (por exemplo, para montar URLs com <code>&amp;</code>). Para ter o <code>&amp;</code> literal, escape com <code>\&amp;</code>, ou desligue a opção:</p>
+
+<pre class="term">$ echo "${fruta/an/\&amp;}"
+b&amp;ana
+$ shopt -u patsub_replacement; echo "${fruta/an/[&amp;]}"
+b[&amp;]ana                          « o comportamento do Bash 5.1 e anteriores</pre>
+
+<h3><code>@k</code>, <code>varredir_close</code> e <code>globskipdots</code></h3>
+<ul>
+  <li><code>${array[@]@k}</code>: como o <code>@K</code>, mas cada chave e cada valor viram <strong>palavras separadas</strong>, prontas para um laço:</li>
+</ul>
+
+<pre class="term">$ printf "&lt;%s&gt;\n" "${idade[@]@k}"
+&lt;Ana&gt;
+&lt;29&gt;
+&lt;Bruno&gt;
+&lt;34&gt;</pre>
+
+<ul>
+  <li><code>varredir_close</code> (desligada por padrão): um <code>{fd}&gt;arquivo</code> num comando comum deixa o <a href="descritores.html">descritor</a> aberto depois do comando. Com a opção ligada, o Bash fecha sozinho (só o <code>exec</code> mantém aberto):</li>
+</ul>
+
+<pre class="term">$ : {fd}&gt;log.txt
+$ echo "fd=$fd"
+fd=10
+$ ls /proc/$$/fd
+0
+1
+10                                 « continua aberto
+2
+255
+$ exec {fd}&gt;&amp;-
+$ shopt -s varredir_close
+$ : {fd}&gt;log.txt
+$ ls /proc/$$/fd
+0
+1
+2
+255                                « fechado sozinho depois do comando</pre>
+
+<ul>
+  <li><code>globskipdots</code> (ligada por padrão): o curinga <code>.*</code> não devolve mais <code>.</code> e <code>..</code>. Um <code>rm -r .*</code> deixou de ser uma armadilha que apagava a pasta de cima:</li>
+</ul>
+
+<pre class="term">$ echo .*
+.bash_history .bashrc .profile</pre>
+
+<ul>
+  <li><code>BASH_LOADABLES_PATH</code> (criada no 4.4) ganhou um valor padrão: a lista de pastas onde o <code>enable</code> procura <em>builtins carregáveis</em> (comandos extras compilados, como <code>csv</code> e <code>fltexpr</code>, que alguns sistemas instalam à parte, no Debian/Ubuntu pelo pacote <code>bash-builtins</code>). No laboratório, nenhuma dessas pastas existe:</li>
+</ul>
+
+<pre class="term">$ echo "$BASH_LOADABLES_PATH"
+/usr/local/lib/bash:/usr/lib/bash:/opt/local/lib/bash:/usr/pkg/lib/bash:/opt/pkg/lib/bash:.
+$ enable fltexpr
+bash: enable: fltexpr: não é um comando interno do shell</pre>
+
+<hr>
+
+<h2>Bash 5.3: substituição de comando sem subshell <span class="versao">bash 5.3+</span></h2>
+<p>A <a href="substituicao-comando.html">substituição de comando</a> <code>$( … )</code> roda os comandos num <a href="subshell.html">subshell</a>: uma cópia do shell, criada só para isso. É seguro (nada vaza), mas tem custo, e variáveis definidas lá dentro se perdem. O Bash 5.3 trouxe duas formas novas que rodam <strong>no próprio shell</strong>:</p>
+
+<dl class="anatomy">
+  <dt>${ comandos; }</dt><dd>Captura a <strong>saída</strong> dos comandos, como <code>$( )</code>, mas sem subshell. Precisa de <strong>espaço</strong> (ou tab/quebra de linha) depois do <code>{</code> e de <code>;</code> antes do <code>}</code>, como um grupo <code>{ …; }</code>.</dd>
+  <dt>${| comandos; }</dt><dd>Não captura a saída: o resultado é o valor que os comandos deixarem na variável <code>REPLY</code>.</dd>
+</dl>
+
+<p>A prova de que não há subshell: compare o <code>$BASHPID</code>, o número do processo atual.</p>
+
+<pre class="term">$ echo "$$ $BASHPID"
+59353 59353                        « o shell principal
+$ echo "$(echo $BASHPID)"
+59354                              « $( ): outro processo, a cópia
+$ echo "${ echo $BASHPID; }"
+59353                              « ${ }: o mesmo processo do shell</pre>
+
+<p>E a consequência mais visível: <strong>variáveis mudadas lá dentro continuam mudadas</strong>.</p>
+
+<pre class="term">$ n=1
+$ x=$(n=2; echo "dentro: $n")
+$ echo "$x / fora: $n"
+dentro: 2 / fora: 1                « o $( ) não mexeu no n de fora
+$ y=${ n=3; echo "dentro: $n"; }
+$ echo "$y / fora: $n"
+dentro: 3 / fora: 3                « o ${ } mexeu: n agora é 3</pre>
+
+<p>Pela mesma razão, um <code>cd</code> dentro de <code>${ }</code> muda a pasta do shell, e um <code>exit</code> lá dentro encerra o script. É o preço de não ter a cópia de proteção.</p>
+
+<pre class="term">$ cd Documentos; echo ${ cd ..; pwd; }; pwd
+/home/ana
+/home/ana                          « o cd .. de dentro valeu para o shell</pre>
+
+<h3><code>${| … }</code> e a variável <code>REPLY</code></h3>
+<p>Com a barra, o Bash não olha a saída: o valor da expansão é o que estiver em <code>REPLY</code> no fim. Combina com comandos que já sabem guardar em variável, como o <code>printf -v</code>:</p>
+
+<pre class="term">$ z=${| REPLY="resultado sem saída na tela"; }
+$ echo "$z"
+resultado sem saída na tela
+$ hoje=${| printf -v REPLY "%(%d/%m/%Y)T" -1; }
+$ echo "$hoje"
+16/10/2026                         « a data de hoje, sem chamar o date e sem subshell</pre>
+
+<p>O resto funciona como no <code>$( )</code>: as quebras de linha do fim são removidas, o código de saída é o do último comando de dentro, e erros aparecem normalmente:</p>
+
+<pre class="term">$ linhas=${ wc -l &lt; frutas.txt; }
+$ echo "[$linhas]"
+[7]
+$ v=${ ls nada; }; echo "código $?"
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+código 2</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Captura</th><th>Subshell?</th><th>Use quando</th></tr>
+<tr><td><code>$( cmd )</code></td><td>A saída</td><td>Sim</td><td>Sempre que precisar funcionar em qualquer Bash (e no <code>sh</code>)</td></tr>
+<tr><td><code>${ cmd; }</code></td><td>A saída</td><td>Não</td><td>Bash 5.3+, em laços (mais rápido) ou quando quer manter variáveis</td></tr>
+<tr><td><code>${| cmd; }</code></td><td><code>$REPLY</code></td><td>Não</td><td>Bash 5.3+, com funções/comandos que devolvem por variável</td></tr>
+</table>
+</div>
+
+<h3>As outras novidades do 5.3</h3>
+
+<p><strong><code>GLOBSORT</code></strong>: escolhe a ordem do resultado dos <a href="curingas.html">curingas</a>: <code>name</code> (o padrão), <code>size</code>, <code>mtime</code> (data de modificação), <code>atime</code>, <code>ctime</code>, <code>blocks</code>, <code>numeric</code> ou <code>none</code>; com <code>-</code> na frente, ao contrário.</p>
+
+<pre class="term" data-cwd="~/Documentos">$ echo *
+acesso.log alunos.csv notas.txt projetos relatorio.odt
+$ GLOBSORT=size; echo *
+notas.txt alunos.csv acesso.log projetos relatorio.odt     « do menor para o maior
+$ GLOBSORT=-mtime; echo *
+projetos acesso.log alunos.csv relatorio.odt notas.txt     « do mais novo para o mais velho
+$ unset GLOBSORT</pre>
+
+<p>"O arquivo mais recente da pasta" virou <code>GLOBSORT=-mtime; arquivos=(*); echo "${arquivos[0]}"</code>, sem <code>ls -t | head -1</code>.</p>
+
+<p><strong><code>compgen -V nome</code></strong>: guarda o resultado do <a href="complete.html"><code>compgen</code></a> num array, em vez de mostrar:</p>
+
+<pre class="term">$ compgen -V lista -d D; declare -p lista
+declare -a lista=([0]="Documentos" [1]="Downloads")</pre>
+
+<p><strong><code>source -p caminho</code></strong>: procura o arquivo nas pastas indicadas, em vez do <code>$PATH</code>:</p>
+
+<pre class="term">$ source -p ./bin2 util.sh
+carregou util.sh
+$ source util.sh
+bash: util.sh: Arquivo ou diretório inexistente</pre>
+
+<p><strong><code>BASH_TRAPSIG</code></strong>: dentro de um <a href="trap.html"><code>trap</code></a>, o número do sinal que o disparou (útil quando a mesma função trata vários sinais):</p>
+
+<pre class="term">$ trap 'echo "trap do sinal $BASH_TRAPSIG"' USR1
+$ kill -USR1 $$
+trap do sinal 10</pre>
+
+<p><strong><code>TIMEFORMAT</code> com até 6 casas</strong> e <strong><code>BASH_MONOSECONDS</code></strong> (segundos de um relógio que só anda para a frente, bom para medir intervalos, porque não muda quando alguém acerta a hora do sistema):</p>
+
+<pre class="term">$ TIMEFORMAT="%6R s"; time sleep 0.1
+0,101807 s
+$ echo $BASH_MONOSECONDS
+2711</pre>
+
+<p><strong><code>bash_source_fullpath</code></strong> (desligada por padrão): <code>BASH_SOURCE</code> passa a ter o caminho completo do arquivo:</p>
+
+<pre class="term">$ source ./mostra.sh
+BASH_SOURCE: ./mostra.sh
+$ shopt -s bash_source_fullpath
+$ source ./mostra.sh
+BASH_SOURCE: /home/ana/mostra.sh</pre>
+
+<p><strong><code>array_expand_once</code></strong> (desligada por padrão; substitui a <code>assoc_expand_once</code> do 5.0): faz comandos internos como <code>printf -v</code>, <code>read</code> e <code>test -v</code> não expandirem de novo o índice de um array. Sem ela, uma chave vinda de fora pode executar código, a mesma injeção da aula <a href="eval-indirecao.html">eval</a>:</p>
+
+<pre class="term">$ declare -A cont
+$ k='$(echo INJETADO &gt;&amp;2)'
+$ printf -v "cont[$k]" %s x
+INJETADO                           « o texto da chave foi executado!
+bash: cont[$(echo INJETADO &gt;&amp;2)]: subscrito de array incorreto
+$ shopt -s array_expand_once
+$ printf -v "cont[$k]" %s x
+$ declare -p cont
+declare -A cont=(["\$(echo INJETADO &gt;&amp;2)"]="x" )   « agora é só uma chave</pre>
+
+<p><strong><code>read -E</code></strong>: como o <code>read -e</code> (que usa a edição de linha do terminal), mas com o <a href="completar.html">Tab</a> completando como no prompt do Bash, inclusive as regras do <code>complete</code>. Só tem efeito quando a entrada é um terminal; experimente no seu: <code>read -E -p "Arquivo: " arq</code>.</p>
+
+<hr>
+
+<h2>Exigir uma versão no script</h2>
+<p>Se o script usa algo do 5.3, é melhor ele parar logo no começo, com uma mensagem clara, do que falhar no meio com um erro de sintaxe estranho:</p>
+
+<pre class="file" data-file="versao.sh">#!/usr/bin/env bash
+if (( BASH_VERSINFO[0] &lt; 5 || (BASH_VERSINFO[0] == 5 &amp;&amp; BASH_VERSINFO[1] &lt; 3) )); then
+  echo "Este script precisa do Bash 5.3 ou mais novo (você tem $BASH_VERSION)." &gt;&amp;2
+  exit 1
+fi
+echo "Bash $BASH_VERSION: tudo certo"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>(( … ))</code></td><td>Conta do Bash; dentro dela, <code>BASH_VERSINFO[0]</code> dispensa o <code>$</code> e as chaves (<a href="aritmetica.html">Contas</a>).</td></tr>
+<tr><td><code>BASH_VERSINFO[0] &lt; 5</code></td><td>Principal menor que 5 (4.x, 3.2…): velho demais.</td></tr>
+<tr><td><code>|| (… == 5 &amp;&amp; … &lt; 3)</code></td><td>Ou é 5, mas a secundária é menor que 3 (5.0, 5.1, 5.2).</td></tr>
+<tr><td><code>&gt;&amp;2</code> e <code>exit 1</code></td><td>A mensagem vai para a saída de erro, e o script termina com código 1.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash versao.sh
+Bash 5.3.9(1)-release: tudo certo</pre>
+
+<p>Um cuidado: esse teste só funciona se o script estiver rodando <strong>no Bash</strong>. Rodado com <code>sh</code> (que no Debian/Ubuntu é o <code>dash</code>), o <code>(( ))</code> nem é entendido, e o resultado é uma confusão, com código 0:</p>
+
+<pre class="term">$ sh versao.sh
+versao.sh: 2: cannot open 5: No such file
+versao.sh: 2: BASH_VERSINFO[0]: not found
+Bash : tudo certo</pre>
+
+<p>Para se proteger também disso, teste antes se é Bash: <code>[ -n "$BASH_VERSION" ] || { echo "Rode com bash" &gt;&amp;2; exit 1; }</code>, que funciona em qualquer <code>sh</code>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O script antigo passou a mostrar outra coisa no Bash 5.2</strong>
+<pre class="term">$ fruta=banana
+$ echo "${fruta/an/[&amp;]}"
+b[an]ana</pre>
+<p><strong>O que aconteceu:</strong> a troca tinha um <code>&amp;</code>, que no 5.2+ significa "o pedaço que casou" (<code>patsub_replacement</code>).</p>
+<p><strong>Como resolver:</strong> escreva <code>\&amp;</code> para um <code>&amp;</code> literal, ou ponha <code>shopt -u patsub_replacement</code> no começo do script.</p>
+</div>
+
+<div class="cenario">
+<strong>Conta com <code>EPOCHREALTIME</code> deu número negativo (sem erro)</strong>
+<p><strong>O que aconteceu:</strong> a vírgula decimal do português virou o operador vírgula dentro de <code>$(( ))</code>.</p>
+<p><strong>Como resolver:</strong> tire a vírgula (<code>${t/,/}</code>) e trabalhe em microssegundos, como na seção do 5.0. Ou use <code>EPOCHSECONDS</code>, se segundos bastarem.</p>
+</div>
+
+<div class="cenario">
+<strong>Funciona no seu computador, mas dá erro de sintaxe no servidor</strong>
+<p><strong>O que aconteceu:</strong> o servidor tem um Bash mais antigo (por exemplo, 5.2 no Debian 13): <code>${ cmd; }</code>, <code>GLOBSORT</code>, <code>source -p</code> e <code>compgen -V</code> não existem lá. No macOS, o <code>/bin/bash</code> 3.2 não tem nem <code>declare -A</code>, <code>mapfile</code>, <code>${x,,}</code> ou <code>globstar</code>.</p>
+<p><strong>Como confirmar:</strong> <code>bash --version</code> nas duas máquinas. <strong>Como resolver:</strong> use as formas mais antigas da coluna "Use quando" (<code>$( )</code> no lugar de <code>${ }</code>) ou ponha o teste de versão no começo do script.</p>
+</div>
+
+<div class="cenario">
+<strong><code>${ cmd }</code> sem o <code>;</code></strong>
+<pre class="term">$ x=${ echo oi }
+&gt;                                  « o Bash continua esperando o fechamento
+$ echo ${echo oi; }
+bash: ${echo oi; }: substituição incorreta</pre>
+<p><strong>O que aconteceu:</strong> como num grupo <code>{ …; }</code>, o <code>}</code> só fecha depois de <code>;</code> ou quebra de linha; sem isso, ele vira argumento do <code>echo</code> e o Bash fica esperando (aperte <code>Ctrl+C</code>). E precisa de espaço depois do <code>{</code>: <code>${echo oi; }</code>, sem espaço, é lido como uma expansão de parâmetro comum, com um nome inválido.</p>
+<p><strong>Como resolver:</strong> escreva sempre <code>${ cmd; }</code>, com o espaço e o <code>;</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Recurso</th><th>Versão</th><th>Exemplo</th></tr>
+<tr><td><code>BASH_VERSION</code> / <code>BASH_VERSINFO</code></td><td>2.0+</td><td><code>(( BASH_VERSINFO[0] &gt;= 5 ))</code></td></tr>
+<tr><td><code>EPOCHSECONDS</code> / <code>EPOCHREALTIME</code></td><td>5.0</td><td><code>inicio=$EPOCHSECONDS</code></td></tr>
+<tr><td><code>SRANDOM</code></td><td>5.1</td><td><code>echo $SRANDOM</code></td></tr>
+<tr><td><code>wait -n -p var</code></td><td>5.1</td><td><code>wait -n -p quem</code></td></tr>
+<tr><td><code>${x@U} ${x@u} ${x@L} ${a[@]@K}</code></td><td>5.1</td><td><code>echo "${nome@U}"</code></td></tr>
+<tr><td><code>${a[@]@k}</code></td><td>5.2</td><td><code>for p in "${a[@]@k}"</code></td></tr>
+<tr><td><code>patsub_replacement</code> (<code>&amp;</code>)</td><td>5.2 (ligada)</td><td><code>${x/an/[&amp;]}</code></td></tr>
+<tr><td><code>varredir_close</code>, <code>globskipdots</code></td><td>5.2</td><td><code>shopt -s varredir_close</code></td></tr>
+<tr><td><code>${ cmd; }</code> / <code>${| cmd; }</code></td><td>5.3</td><td><code>n=${ wc -l &lt; f; }</code></td></tr>
+<tr><td><code>GLOBSORT</code></td><td>5.3</td><td><code>GLOBSORT=-mtime</code></td></tr>
+<tr><td><code>compgen -V</code>, <code>source -p</code>, <code>read -E</code></td><td>5.3</td><td><code>compgen -V lista -f</code></td></tr>
+<tr><td><code>BASH_TRAPSIG</code>, <code>BASH_MONOSECONDS</code></td><td>5.3</td><td><code>echo $BASH_TRAPSIG</code> num trap</td></tr>
+<tr><td><code>array_expand_once</code>, <code>bash_source_fullpath</code></td><td>5.3</td><td><code>shopt -s array_expand_once</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A versão secundária</h3>
+<p>Complete para mostrar só o <code>3</code> de "5.3":</p>
+<div class="ex-code">echo "${BASH_VERSINFO[<input data-answer="1" aria-label="índice" style="width:2em">]}"</div>
+</div>
+
+<div class="exercise">
+<h3>2. Sem subshell</h3>
+<p>Complete a forma do Bash 5.3 que captura a saída de <code>date</code> sem criar subshell:</p>
+<div class="ex-code">hoje=<input data-answer="${ date; }|${ date;}" aria-label="expansão"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Aleatório de verdade</h3>
+<p>Qual variável do Bash 5.1 dá um número aleatório de 32 bits vindo do gerador seguro do sistema?</p>
+<div class="ex-code"><input data-answer="SRANDOM|$SRANDOM" aria-label="variável"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. No Bash 5.3, o que <code>echo "${fruta/an/&amp;&amp;}"</code> mostra, com <code>fruta=banana</code>?</p>
+<label><input type="radio" name="q4"> <code>b&amp;&amp;ana</code></label>
+<label><input type="radio" name="q4"> <code>banana</code></label>
+<label><input type="radio" name="q4"> <code>bananana</code></label>
+<label><input type="radio" name="q4"> Um erro de sintaxe.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Depois de <code>n=1; x=${ n=5; echo ok; }</code>, quanto vale <code>$n</code>?</p>
+<label><input type="radio" name="q5"> 1</label>
+<label><input type="radio" name="q5"> 5</label>
+<label><input type="radio" name="q5"> ok</label>
+<label><input type="radio" name="q5"> Fica vazio.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Um script usa <code>declare -A</code> e <code>mapfile</code>. Em qual destes sistemas ele <strong>não</strong> roda com o Bash que vem instalado?</p>
+<label><input type="radio" name="q6"> Ubuntu 24.04</label>
+<label><input type="radio" name="q6"> Debian 13</label>
+<label><input type="radio" name="q6"> Fedora</label>
+<label><input type="radio" name="q6"> macOS, com o <code>/bin/bash</code> 3.2</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Versão: <code>bash --version</code>, <code>$BASH_VERSION</code> (texto) e <code>BASH_VERSINFO</code> (números para comparar).</li>
+  <li>5.0: <code>EPOCHSECONDS</code>/<code>EPOCHREALTIME</code> (cuidado com a vírgula). 5.1: <code>SRANDOM</code>, <code>wait -p</code>, <code>@U @u @L @K</code>.</li>
+  <li>5.2: o <code>&amp;</code> na troca de <code>${x/a/b}</code> virou "o que casou" (<code>\&amp;</code> para o literal); <code>@k</code>, <code>varredir_close</code>, <code>globskipdots</code>.</li>
+  <li>5.3: <code>${ cmd; }</code> e <code>${| cmd; }</code> sem subshell (variáveis e <code>cd</code> valem fora), <code>GLOBSORT</code>, <code>compgen -V</code>, <code>source -p</code>, <code>BASH_TRAPSIG</code>, <code>array_expand_once</code>.</li>
+  <li>Use o recurso novo só se todas as máquinas tiverem a versão; senão, teste a versão no começo do script.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
