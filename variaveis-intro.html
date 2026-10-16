@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Variáveis — o básico: criar, usar e apagar | Guia Bash</title>
+<meta name="description" content="Aprenda o básico das variáveis no Bash: criar com nome=valor (sem espaços), usar com $nome e ${nome}, o erro 'comando não encontrado', variáveis prontas como HOME, USER, PWD e PATH, unset, set e env.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Variáveis: o Básico</span></h1>
+
+<p class="intro">Uma <strong>variável</strong> é um nome que guarda um valor. Você guarda uma vez (<code>nome=Ana</code>) e usa quantas vezes quiser (<code>$nome</code>). Variáveis estão em todo lugar no Bash: a sua pasta pessoal, o seu usuário e a lista de pastas onde os comandos moram já estão guardados em variáveis, antes mesmo de você digitar qualquer coisa.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Criar uma variável com <code>nome=valor</code> e por que <strong>não pode haver espaços</strong> em volta do <code>=</code>.</li>
+  <li>Usar o valor com <code>$nome</code> e <code>${nome}</code>, e quando as chaves são obrigatórias.</li>
+  <li>As variáveis prontas: <code>HOME USER PWD SHELL PATH LANG RANDOM</code>.</li>
+  <li>O que acontece com uma variável que não existe, e como apagar uma com <code>unset</code>.</li>
+  <li>Como ver todas as variáveis com <code>set</code> e <code>env</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: uma etiqueta numa caixa</h2>
+<p>Pense numa caixa com uma etiqueta. A etiqueta é o <strong>nome</strong> (<code>cidade</code>); o que está dentro é o <strong>valor</strong> (<code>Recife</code>). Quando você quer o conteúdo, não precisa lembrar o que pôs lá: basta pedir pela etiqueta.</p>
+<p>No terminal isso economiza digitação e evita erros. No script, é o que permite o mesmo código funcionar para pessoas, arquivos e pastas diferentes: muda o valor, o resto fica igual.</p>
+
+<hr>
+
+<h2>Criar uma variável: <code>nome=valor</code></h2>
+<p>Para criar (os programadores dizem <strong>atribuir</strong>), escreva o nome, o sinal de igual e o valor, <strong>tudo colado</strong>:</p>
+
+<dl class="anatomy">
+  <dt>nome</dt><dd>O nome da variável. Você escolhe.</dd>
+  <dt>=</dt><dd>"Guarde em…". Sem espaço antes nem depois.</dd>
+  <dt>Ana</dt><dd>O valor guardado. Para o Bash, é sempre texto.</dd>
+</dl>
+
+<pre class="term">$ nome=Ana
+$ echo $?
+0                       « deu certo, mesmo sem mostrar nada</pre>
+
+<p>A atribuição é silenciosa: não aparece nada na tela. O código de saída <code>0</code> confirma que deu certo (veja <a href="codigo-saida.html">Código de Saída</a>).</p>
+
+<h3>Regras para o nome</h3>
+<ul>
+  <li>Pode ter letras sem acento (<code>a-z</code>, <code>A-Z</code>), números e o sublinhado <code>_</code>.</li>
+  <li><strong>Não</strong> pode começar com número.</li>
+  <li><strong>Não</strong> pode ter hífen, ponto, espaço nem acento.</li>
+  <li>Maiúsculas e minúsculas são diferentes: <code>nome</code>, <code>Nome</code> e <code>NOME</code> são três variáveis.</li>
+</ul>
+
+<p>Quando o nome é inválido, o Bash não entende a linha como atribuição. Ele acha que é o nome de um comando, procura, não acha e reclama:</p>
+
+<pre class="term">$ meu_nome=Ana
+$ echo $meu_nome
+Ana
+$ 1nome=x
+bash: 1nome=x: comando não encontrado
+$ nome-completo=x
+bash: nome-completo=x: comando não encontrado</pre>
+
+<h3>Mudar o valor</h3>
+<p>Atribuir de novo troca o valor. O antigo é perdido:</p>
+
+<pre class="term">$ total=10
+$ total=20
+$ echo $total
+20</pre>
+
+<h3>Valores com espaço: use aspas</h3>
+<p>O espaço separa as partes de um comando. Para guardar um valor com espaço, coloque-o entre aspas:</p>
+
+<pre class="term">$ nome="Ana Souza"
+$ echo "$nome"
+Ana Souza</pre>
+
+<p>Sem aspas, <code>nome=Ana Souza</code> dá erro. Você vai ver por quê na seção <a href="#quando">Quando não funciona</a>.</p>
+
+<hr>
+
+<h2>Usar o valor: <code>$nome</code></h2>
+<p>Para usar o valor, escreva um cifrão <code>$</code> antes do nome. O Bash troca <code>$nome</code> pelo valor <strong>antes</strong> de rodar o comando. Isso se chama <strong>expansão de parâmetro</strong>: é a mesma ideia das <a href="chaves.html">chaves</a> e dos <a href="curingas.html">curingas</a>. O comando nunca vê o <code>$nome</code>; ele recebe o texto já trocado.</p>
+
+<pre class="term">$ nome=Ana
+$ echo $nome
+Ana
+$ echo "Olá, $nome!"
+Olá, Ana!</pre>
+
+<pre class="syntax">você digita:     echo "Olá, $nome!"
+o Bash troca:    echo "Olá, Ana!"
+o echo recebe:   Olá, Ana!</pre>
+
+<p>Variáveis podem aparecer em qualquer parte do comando, e em qualquer comando, não só no <code>echo</code>:</p>
+
+<pre class="term">$ pasta=Documentos
+$ ls "$pasta"
+acesso.log
+alunos.csv
+notas.txt
+projetos
+relatorio.odt
+$ echo "Caminho: $HOME/Documentos"
+Caminho: /home/ana/Documentos</pre>
+
+<h3>Aspas duplas × aspas simples</h3>
+<p>Dentro de aspas <strong>duplas</strong>, o <code>$</code> continua funcionando. Dentro de aspas <strong>simples</strong>, tudo é literal, e o <code>$nome</code> sai como está:</p>
+
+<pre class="term">$ nome="Ana Souza"
+$ echo "Arquivo de $nome"
+Arquivo de Ana Souza          « duplas: o Bash trocou
+$ echo '$nome'
+$nome                         « simples: o Bash não mexeu</pre>
+
+<p>A aula <a href="aspas.html">Aspas e Escapes</a> mostra em detalhe o que cada tipo de aspas protege.</p>
+
+<h3>Por que <code>"$nome"</code> com aspas, sempre</h3>
+<p>Sem aspas, depois de trocar a variável o Bash ainda <strong>separa o valor em palavras</strong> nos espaços (e procura curingas nele). Com aspas, o valor chega inteiro ao comando. Veja a diferença com o nome da pasta <code>Área de trabalho</code>:</p>
+
+<pre class="term">$ arq="Área de trabalho"
+$ ls $arq
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente
+$ ls "$arq"
+$ echo $?
+0                             « a pasta existe e está vazia</pre>
+
+<p>Sem aspas, o <code>ls</code> recebeu três nomes. Com aspas, recebeu um só, o certo. Os espaços extras também somem sem aspas:</p>
+
+<pre class="term">$ frase="  muitos    espaços   aqui  "
+$ echo $frase
+muitos espaços aqui
+$ echo "$frase"
+  muitos    espaços   aqui  </pre>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Escreva <code>"$variavel"</code>, com aspas duplas, sempre que for usar uma variável. Você só tira as aspas quando quer, de propósito, que o valor seja quebrado em palavras, e isso é raro.</p>
+</div>
+
+<div class="try" data-goal="var:cidade=Porto Alegre,out:Moro em Porto Alegre" data-solucao="cidade=&quot;Porto Alegre&quot;;;echo &quot;Moro em $cidade&quot;">
+<p class="try-task"><strong>Missão:</strong> crie a variável <code>cidade</code> com o valor <code>Porto Alegre</code> (cuidado com o espaço!). Depois use-a num <code>echo</code> para mostrar <code>Moro em Porto Alegre</code>.</p>
+</div>
+
+<hr>
+
+<h2>Chaves no nome: <code>${nome}</code></h2>
+<p><code>$nome</code> e <code>${nome}</code> são a mesma coisa. As chaves só marcam <strong>onde o nome termina</strong>. Elas são obrigatórias quando, logo depois do nome, vem uma letra, um número ou um <code>_</code>, porque esses caracteres poderiam fazer parte do nome.</p>
+
+<pre class="term">$ fruta=maçã
+$ echo "Duas $frutas"
+Duas                          « o Bash procurou a variável "frutas", que não existe
+$ echo "Duas ${fruta}s"
+Duas maçãs                    « as chaves dizem: o nome é só "fruta"</pre>
+
+<dl class="anatomy">
+  <dt>$</dt><dd>"Troque pelo valor de…"</dd>
+  <dt>{fruta}</dt><dd>…a variável <code>fruta</code>. As chaves fecham o nome aqui.</dd>
+  <dt>s</dt><dd>Texto comum, colado logo depois do valor.</dd>
+</dl>
+
+<p>O sublinhado engana muita gente, porque ele <strong>pode</strong> fazer parte de nomes. Já o hífen e o ponto não podem, então ali o nome termina sozinho:</p>
+
+<pre class="term">$ arquivo=relatorio
+$ echo "$arquivo_2026.txt"
+.txt                          « procurou "arquivo_2026": vazia
+$ echo "${arquivo}_2026.txt"
+relatorio_2026.txt
+$ echo "$arquivo-2026.txt"
+relatorio-2026.txt            « o hífen não entra em nomes: funcionou sem chaves</pre>
+
+<p>As chaves também abrem a porta para muitos truques, como <code>${#nome}</code> (quantas letras tem o valor) e <code>${nome:-padrão}</code>. Eles estão em <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</p>
+
+<pre class="term">$ echo "$nome tem ${#nome} letras"
+Ana Souza tem 9 letras        « o espaço também conta</pre>
+
+<div class="try" data-setup="arquivo=relatorio" data-goal="out:relatorio_2026.txt,ran:\$\{arquivo\}" data-solucao="echo &quot;${arquivo}_2026.txt&quot;">
+<p class="try-task"><strong>Missão:</strong> a variável <code>arquivo</code> já existe e vale <code>relatorio</code>. Mostre na tela <code>relatorio_2026.txt</code> usando a variável. Primeiro tente <code>echo "$arquivo_2026.txt"</code> e veja o que sai; depois corrija com chaves.</p>
+</div>
+
+<hr>
+
+<h2>Variável que não existe = vazia</h2>
+<p>Usar uma variável que nunca foi criada <strong>não dá erro</strong>. O Bash troca por nada, e o comando segue em frente. Os colchetes abaixo são só para você enxergar o vazio:</p>
+
+<pre class="term">$ echo "[$cidade]"
+[]
+$ echo $?
+0                             « nenhum aviso, nenhum erro
+$ cidade=Recife
+$ echo "[$cidade]"
+[Recife]</pre>
+
+<p>Isso é cômodo, mas perigoso: um erro de digitação no nome (<code>$cidde</code>) vira texto vazio sem nenhum aviso. Em scripts, a opção <code>set -u</code> transforma isso em erro; ela aparece em <a href="remover.html">Apagar com Segurança</a> e em <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+
+<h3>Apagar uma variável: <code>unset</code></h3>
+<p><code>unset</code> (de "des-definir") remove a variável. Depois disso ela volta a ser vazia:</p>
+
+<dl class="anatomy">
+  <dt>unset</dt><dd>Comando interno do Bash que apaga variáveis.</dd>
+  <dt>cidade</dt><dd>O <strong>nome</strong> da variável, <strong>sem</strong> <code>$</code>. Com <code>$</code>, o Bash trocaria pelo valor e o <code>unset</code> tentaria apagar uma variável chamada <code>Recife</code>.</dd>
+</dl>
+
+<pre class="term">$ unset cidade
+$ echo "[$cidade]"
+[]</pre>
+
+<h3>Existe ou está vazia? <code>declare -p</code></h3>
+<p>Como as duas situações aparecem iguais no <code>echo</code>, use <code>declare -p</code> (de <em>print</em>) para ver a variável de verdade. Ele mostra a definição, ou reclama se ela não existe:</p>
+
+<pre class="term">$ nome=Ana
+$ declare -p nome
+declare -- nome="Ana"
+$ unset nome
+$ declare -p nome
+bash: declare: nome: não encontrado
+$ echo $?
+1</pre>
+
+<hr>
+
+<h2>Variáveis que já vêm prontas</h2>
+<p>Quando o Bash começa, várias variáveis já estão criadas, pelo sistema ou pelo próprio Bash. Por convenção, elas têm nomes em MAIÚSCULAS:</p>
+
+<pre class="term">$ echo $HOME
+/home/ana
+$ echo $USER
+ana
+$ echo $PWD
+/home/ana
+$ cd Documentos
+$ echo $PWD
+/home/ana/Documentos          « o Bash atualiza o PWD a cada cd
+$ cd
+$ echo $SHELL
+/bin/bash
+$ echo $LANG
+pt_BR.UTF-8
+$ echo $RANDOM
+32099
+$ echo $RANDOM
+10174                         « um número novo a cada uso</pre>
+
+<p>O <code>RANDOM</code> devolve um número sorteado entre 0 e 32767; no seu terminal os números serão outros.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>O que guarda</th><th>Na máquina da Ana</th></tr>
+<tr><td><code>HOME</code></td><td>Sua pasta pessoal. É para onde <code>cd</code> sem nada e o <code>~</code> levam.</td><td><code>/home/ana</code></td></tr>
+<tr><td><code>USER</code></td><td>Seu nome de usuário.</td><td><code>ana</code></td></tr>
+<tr><td><code>PWD</code></td><td>A pasta atual (<em>print working directory</em>). Veja <a href="navegar.html">Navegar</a>.</td><td>muda a cada <code>cd</code></td></tr>
+<tr><td><code>SHELL</code></td><td>O shell padrão da conta (não necessariamente o que está rodando agora).</td><td><code>/bin/bash</code></td></tr>
+<tr><td><code>PATH</code></td><td>A lista de pastas onde o Bash procura os comandos, separadas por <code>:</code>.</td><td><code>/usr/local/sbin:…:/bin</code></td></tr>
+<tr><td><code>LANG</code></td><td>Idioma e codificação. É por ele que as mensagens saem em português.</td><td><code>pt_BR.UTF-8</code></td></tr>
+<tr><td><code>RANDOM</code></td><td>Um número aleatório de 0 a 32767, novo a cada leitura.</td><td>muda sempre</td></tr>
+</table>
+</div>
+
+<p>O <code>PATH</code> merece uma olhada:</p>
+
+<pre class="term">$ echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</pre>
+
+<p>Quando você digita <code>ls</code>, o Bash procura um arquivo chamado <code>ls</code> em cada uma dessas pastas, da esquerda para a direita. No seu computador o <code>PATH</code> provavelmente é mais longo. A aula <a href="path.html">PATH e Onde os Comandos Moram</a> explica tudo; outras variáveis especiais estão em <a href="ref-variaveis.html">Variáveis Especiais</a>.</p>
+
+<p>Juntando as prontas com as suas:</p>
+
+<pre class="term">$ echo "Você é $USER e está em $PWD"
+Você é ana e está em /home/ana</pre>
+
+<hr>
+
+<h2>Maiúsculas × minúsculas: a convenção</h2>
+<p>O Bash diferencia maiúsculas de minúsculas, então estas são três variáveis independentes:</p>
+
+<pre class="term">$ nome=ana
+$ NOME=Carla
+$ echo "$nome $NOME"
+ana Carla
+$ echo "[$Nome]"
+[]                            « Nome nunca foi criada</pre>
+
+<p>A convenção é:</p>
+<ul>
+  <li><strong>MAIÚSCULAS</strong> para as variáveis do sistema e do Bash (<code>HOME</code>, <code>PATH</code>, <code>USER</code>…) e para as que você exporta para outros programas.</li>
+  <li><strong>minúsculas</strong> para as suas, no terminal e nos scripts (<code>nome</code>, <code>total</code>, <code>pasta_destino</code>).</li>
+</ul>
+
+<p>Seguir isso evita sobrescrever sem querer uma variável importante. Veja o que acontece se a Ana resolve chamar a pasta dos scripts dela de <code>PATH</code>:</p>
+
+<pre class="term">$ PATH=/home/ana/scripts
+$ ls
+bash: ls: comando não encontrado
+$ echo $?
+127</pre>
+
+<p>Ela trocou a lista de pastas onde os comandos moram. Agora o Bash não acha mais o <code>ls</code>. A mudança vale só para este terminal: feche-o e abra outro, e tudo volta ao normal. Com o nome <code>pasta</code>, minúsculo, nada disso aconteceria.</p>
+
+<hr>
+
+<h2>Ver todas as variáveis: <code>set</code> e <code>env</code></h2>
+<p>Há duas listas, e elas são diferentes:</p>
+
+<dl class="anatomy">
+  <dt>set</dt><dd>Sem argumentos, mostra <strong>todas</strong> as variáveis do shell atual, inclusive as que você criou (e também as funções). Vem em ordem alfabética.</dd>
+  <dt>env</dt><dd>Mostra só as variáveis de <strong>ambiente</strong>, as que serão passadas para os programas que você rodar.</dd>
+</dl>
+
+<p>As listas são longas, então usamos <code>head</code> para ver o começo e <code>grep</code> para procurar uma (veja <a href="pipes.html">Pipes</a>):</p>
+
+<pre class="term">$ nome=Ana
+$ set | head -n 3
+BASH=/usr/bin/bash
+BASHOPTS=checkwinsize:cmdhist:complete_fullquote:expand_aliases:extquote:force_fignore:globasciiranges:globskipdots:histappend:hostcomplete:interactive_comments:patsub_replacement:progcomp:promptvars:sourcepath
+BASH_ALIASES=()
+$ set | grep '^nome='
+nome=Ana                      « a sua variável está no set…
+$ env | head -n 5
+SHELL=/bin/bash
+LANGUAGE=pt_BR:pt:en
+EDITOR=nano
+PWD=/home/ana
+LOGNAME=ana
+$ env | grep '^nome='
+$ echo $?
+1                             « …mas não está no env (o grep não achou)</pre>
+
+<p>Por que a sua <code>nome</code> não aparece no <code>env</code>? Porque uma variável criada com <code>nome=Ana</code> existe só dentro deste shell. Um programa chamado a partir dele, mesmo outro Bash, não a recebe:</p>
+
+<pre class="term">$ bash -c 'echo "[$nome]"'
+[]</pre>
+
+<p>Para passar uma variável adiante existe o <code>export</code>, assunto de <a href="variaveis.html">Variáveis, Escopo e export</a>. Para ver uma variável só, <code>printenv HOME</code> (do ambiente) ou <code>declare -p nome</code> (qualquer uma) são mais diretos.</p>
+
+<h3>Formas de ver o valor: qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Mostra</th><th>Melhor quando…</th></tr>
+<tr><td><code>echo "$nome"</code></td><td>Só o valor</td><td>Uso do dia a dia.</td></tr>
+<tr><td><code>echo "[$nome]"</code></td><td>O valor entre marcas</td><td>Você quer enxergar espaços ou o vazio.</td></tr>
+<tr><td><code>declare -p nome</code></td><td>A definição completa, ou erro se não existir</td><td>Diferenciar "vazia" de "não existe".</td></tr>
+<tr><td><code>printenv HOME</code></td><td>Uma variável de ambiente</td><td>Conferir o que os programas recebem.</td></tr>
+<tr><td><code>set</code></td><td>Todas as do shell</td><td>Procurar com <code>set | grep</code>.</td></tr>
+<tr><td><code>env</code></td><td>Todas as de ambiente</td><td>Ver o que é passado aos programas.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Experimente no editor</h2>
+<p>Este script tem o erro mais clássico de quem está começando. Rode como está, leia a mensagem, corrija e rode de novo.</p>
+
+<div class="tryscript" data-file="saudacao.sh" data-goal="out:Olá, Ana! Você tem 29 anos.">
+<p class="try-task"><strong>Missão:</strong> o script deveria mostrar <code>Olá, Ana! Você tem 29 anos.</code>, mas mostra uma mensagem de erro e <code>Olá, !</code>. Corrija a linha 2 e clique em Rodar.</p>
+<pre class="script">#!/usr/bin/env bash
+nome = Ana
+idade=29
+echo "Olá, $nome! Você tem $idade anos."
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+nome=Ana
+idade=29
+echo "Olá, $nome! Você tem $idade anos."
+</pre>
+</div>
+
+<p>Rodando o script com o erro, a saída é esta. Repare que, em script, o Bash acrescenta o nome do arquivo e a linha:</p>
+
+<pre class="term">$ bash saudacao.sh
+saudacao.sh: linha 2: nome: comando não encontrado
+Olá, ! Você tem 29 anos.
+$ echo $?
+0                             « o script seguiu em frente e terminou "bem"</pre>
+
+<hr>
+
+<h2 id="quando">Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"nome: comando não encontrado"</strong>
+<pre class="term">$ nome = Ana
+bash: nome: comando não encontrado
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> com espaços, a linha virou três palavras: <code>nome</code>, <code>=</code> e <code>Ana</code>. A primeira palavra de um comando é o nome do programa, então o Bash procurou um programa chamado <code>nome</code>, passando <code>=</code> e <code>Ana</code> como argumentos. O código 127 significa "comando não encontrado".</p>
+<p><strong>Como resolver:</strong> tudo colado: <code>nome=Ana</code>. Em outras linguagens os espaços são permitidos; no Bash, não.</p>
+</div>
+
+<div class="cenario">
+<strong>"Ana: comando não encontrado"</strong>
+<pre class="term">$ nome= Ana
+bash: Ana: comando não encontrado
+$ echo "[$nome]"
+[]</pre>
+<p><strong>O que aconteceu:</strong> com espaço só <strong>depois</strong> do <code>=</code>, o Bash entende <code>nome=</code> (valor vazio) e depois o comando <code>Ana</code>. Uma atribuição colada antes de um comando vale só para aquele comando, por isso <code>nome</code> nem ficou criada.</p>
+<p><strong>Como resolver:</strong> <code>nome=Ana</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Souza: comando não encontrado"</strong>
+<pre class="term">$ nome=Ana Souza
+bash: Souza: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o espaço separou o valor. O Bash entendeu "rode o comando <code>Souza</code> com <code>nome</code> valendo <code>Ana</code>". Como no caso anterior, a variável não foi guardada (se ela já existia, continua com o valor antigo).</p>
+<p><strong>Como resolver:</strong> aspas em volta do valor: <code>nome="Ana Souza"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Ana=Bruno: comando não encontrado"</strong>
+<pre class="term">$ nome=Ana
+$ $nome=Bruno
+bash: Ana=Bruno: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o <code>$</code> serve para <strong>ler</strong> a variável. Aqui o Bash trocou <code>$nome</code> por <code>Ana</code> e a linha virou <code>Ana=Bruno</code>, que não é uma atribuição feita por você: é texto gerado, e o Bash tenta rodá-lo como comando.</p>
+<p><strong>Como resolver:</strong> para guardar, escreva o nome sem <code>$</code>: <code>nome=Bruno</code>. Regra: <strong>sem <code>$</code> para guardar, com <code>$</code> para usar</strong>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada (ou só um pedaço)</strong>
+<pre class="term">$ echo "Duas $frutas"
+Duas
+$ echo "$arquivo_2026.txt"
+.txt</pre>
+<p><strong>O que aconteceu:</strong> o Bash procurou variáveis que não existem (<code>frutas</code> e <code>arquivo_2026</code>) e, como sempre, trocou por vazio sem avisar. Pode ser erro de digitação ou letras grudadas no nome.</p>
+<p><strong>Como confirmar:</strong> <code>declare -p frutas</code> responde "não encontrado".</p>
+<p><strong>Como resolver:</strong> confira a grafia (maiúsculas contam!) e use chaves para separar o nome do texto seguinte: <code>"${fruta}s"</code>, <code>"${arquivo}_2026.txt"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O valor com espaços virou vários argumentos</strong>
+<pre class="term">$ arq="Área de trabalho"
+$ ls $arq
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> sem aspas, o valor foi quebrado nos espaços depois da troca.</p>
+<p><strong>Como resolver:</strong> <code>ls "$arq"</code>. Sempre <code>"$variavel"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu um <code>&gt;</code> e o terminal "travou"</strong>
+<pre class="term">$ echo "Nome:
+&gt; </pre>
+<p><strong>O que aconteceu:</strong> faltou fechar as aspas. O <code>&gt;</code> é o prompt de continuação do Bash: ele está esperando o resto do texto.</p>
+<p><strong>Como resolver:</strong> digite a aspa que falta e <kbd>Enter</kbd>, ou cancele com <kbd>Ctrl</kbd>+<kbd>C</kbd> e digite de novo. Mais detalhes em <a href="aspas.html">Aspas e Escapes</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"ls: comando não encontrado" depois de criar uma variável</strong>
+<pre class="term">$ PATH=/home/ana/scripts
+$ ls
+bash: ls: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> você sobrescreveu uma variável do sistema, o <code>PATH</code>.</p>
+<p><strong>Como resolver:</strong> feche este terminal e abra outro. Use nomes minúsculos para as suas variáveis.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>nome=valor</code></td><td>Cria ou muda a variável. Sem espaços em volta do <code>=</code>.</td><td><code>total=10</code></td></tr>
+<tr><td><code>nome="com espaço"</code></td><td>Guarda um valor com espaços.</td><td><code>cidade="Porto Alegre"</code></td></tr>
+<tr><td><code>$nome</code></td><td>Usa o valor.</td><td><code>echo $total</code></td></tr>
+<tr><td><code>"$nome"</code></td><td>Usa o valor sem quebrar em palavras. A forma recomendada.</td><td><code>ls "$pasta"</code></td></tr>
+<tr><td><code>${nome}</code></td><td>Igual a <code>$nome</code>, marcando onde o nome termina.</td><td><code>"${fruta}s"</code></td></tr>
+<tr><td><code>${#nome}</code></td><td>Quantos caracteres tem o valor.</td><td><code>echo ${#nome}</code></td></tr>
+<tr><td><code>'$nome'</code></td><td>Texto literal, sem troca.</td><td><code>echo '$nome'</code></td></tr>
+<tr><td><code>unset nome</code></td><td>Apaga a variável (sem <code>$</code>).</td><td><code>unset cidade</code></td></tr>
+<tr><td><code>declare -p nome</code></td><td>Mostra a definição, ou erro se não existe.</td><td><code>declare -p nome</code></td></tr>
+<tr><td><code>set</code> / <code>env</code></td><td>Lista as variáveis do shell / do ambiente.</td><td><code>set | grep '^nome='</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Criar sem erro</h3>
+<p>Complete para guardar <code>Bash</code> na variável <code>curso</code>:</p>
+<div class="ex-code"><input data-answer="curso=Bash|curso=&quot;Bash&quot;|curso='Bash'" aria-label="atribuição"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Colado no texto</h3>
+<p>A variável <code>ano</code> vale <code>2026</code>. Complete para mostrar <code>backup_2026.tar</code>:</p>
+<div class="ex-code">echo "backup_<input data-answer="${ano}|$ano" aria-label="variável">.tar"</div>
+</div>
+
+<div class="exercise">
+<h3>3. Agora com o nome antes</h3>
+<p>A variável <code>base</code> vale <code>foto</code>. Complete para mostrar <code>foto_01.jpg</code>:</p>
+<div class="ex-code">echo "<input data-answer="${base}" aria-label="variável">_01.jpg"</div>
+</div>
+
+<div class="exercise">
+<h3>4. Apagar</h3>
+<p>Complete para apagar a variável <code>cidade</code>:</p>
+<div class="ex-code"><input data-answer="unset" aria-label="comando"> cidade</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Com <code>nome=Ana</code>, qual é a saída de <code>echo '$nome'</code>?</p>
+<label><input type="radio" name="q5"> <code>Ana</code></label>
+<label><input type="radio" name="q5"> Uma linha vazia.</label>
+<label><input type="radio" name="q5"> <code>$nome</code></label>
+<label><input type="radio" name="q5"> <code>bash: nome: comando não encontrado</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">6. O que acontece com <code>echo "[$xyz]"</code>, se <code>xyz</code> nunca foi criada?</p>
+<label><input type="radio" name="q6"> Aparece um erro e o código de saída é 1.</label>
+<label><input type="radio" name="q6"> Aparece <code>[]</code> e o código de saída é 0.</label>
+<label><input type="radio" name="q6"> Aparece <code>[$xyz]</code>.</label>
+<label><input type="radio" name="q6"> O Bash pede para você digitar o valor.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">7. Por que <code>total = 5</code> dá "comando não encontrado"?</p>
+<label><input type="radio" name="q7"> Porque variáveis não podem guardar números.</label>
+<label><input type="radio" name="q7"> Porque faltou o <code>$</code> antes de <code>total</code>.</label>
+<label><input type="radio" name="q7"> Porque <code>total</code> é uma palavra reservada.</label>
+<label><input type="radio" name="q7"> Porque, com espaços, o Bash entende <code>total</code> como nome de um comando.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Crie com <code>nome=valor</code>, tudo colado; valores com espaço vão entre aspas.</li>
+  <li>Sem <code>$</code> para guardar, com <code>$</code> para usar. O Bash troca <code>$nome</code> pelo valor antes de rodar o comando.</li>
+  <li>Use <code>"$nome"</code> com aspas duplas; aspas simples deixam <code>$nome</code> literal.</li>
+  <li><code>${nome}</code> marca onde o nome termina: <code>"${fruta}s"</code>, <code>"${arquivo}_2026"</code>.</li>
+  <li>Variável que não existe vira vazio, sem erro. <code>unset</code> apaga; <code>declare -p</code> confere.</li>
+  <li>Prontas: <code>HOME USER PWD SHELL PATH LANG RANDOM</code>. Suas variáveis em minúsculas, para não estragar as do sistema.</li>
+  <li><code>set</code> lista todas; <code>env</code>, só as de ambiente. Para passar adiante, <a href="variaveis.html">export</a>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
