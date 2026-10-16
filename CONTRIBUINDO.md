@@ -172,7 +172,7 @@ $L -n SEUNOME -t < sessao.txt      # terminal de verdade (cores, ls em colunas, 
 ```
 - `-n SEUNOME`: cada autor usa **a própria** pasta pessoal (`homes/SEUNOME`), para não atrapalhar os outros. Use `-r` quando quiser o estado inicial.
 - No modo `-i`, o shell é interativo: as mensagens de erro saem como no terminal (`bash: xyz: comando não encontrado`). Em script, o Bash acrescenta o nome e a linha (`teste.sh: linha 3: xyz: comando não encontrado`) — mostre a forma certa para cada caso.
-- `id`/`groups` no laboratório não mostram os grupos extras da Ana; use os do estado inicial acima.
+- `id`/`groups` no laboratório não mostram os grupos extras da Ana; use os do estado inicial acima. Arquivos do sistema aparecem como de `nobody nogroup` (na máquina real: `root root`) — corrija ao publicar ou evite mostrar. O `hostname` real é barrado pelo AppArmor dentro da caixa; o laboratório usa um substituto em `/usr/local/bin/hostname` (então `type hostname` lá não é fiel: na máquina real é `/usr/bin/hostname`).
 - Datas e horas: o laboratório usa o relógio real. Nas aulas, prefira datas coerentes com 15/10/2026.
 - **Proibido:** `sudo`, instalar pacotes, rodar comandos fora do laboratório que alterem `~` real, usar a internet a partir do laboratório, mexer em `~/guia-bash-lab/template`, `bin` ou `etc`.
 - O que não dá para rodar no laboratório (cron real, systemd, rede, ssh) é mostrado como **saída ilustrativa**, e o texto avisa.
