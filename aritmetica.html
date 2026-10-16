@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Contas — $(( )), (( )), let, bc e números aleatórios | Guia Bash</title>
+<meta name="description" content="Aritmética no Bash: $(( )), (( )) como teste e seu código de saída, let, declare -i, operadores, divisão inteira, bases e a pegadinha do 08, números com vírgula com bc, awk e printf, expr, $RANDOM e $SRANDOM, com saídas reais e missões.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Contas: $(( )), let e bc</span></h1>
+
+<p class="intro">Para o Bash, tudo é texto: <code>5+3</code> é só uma sequência de três caracteres. Para ele <strong>calcular</strong>, você precisa pedir, e a forma de pedir é a <strong>expansão aritmética</strong> <code>$(( ))</code>. Nesta aula você aprende a fazer contas inteiras, usar contas como condição, e o que fazer quando precisa de casas decimais.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Calcular com <code>$(( ))</code> e alterar variáveis com <code>(( ))</code>, <code>let</code> e <code>declare -i</code>.</li>
+  <li>Por que <code>(( ))</code> devolve um <strong>código de saída</strong> e como usar isso em testes.</li>
+  <li>Os operadores, a divisão inteira (<code>7/2</code> dá <code>3</code>!) e as bases (<code>2#1010</code>, <code>16#ff</code>, e a pegadinha do <code>08</code>).</li>
+  <li>Números com vírgula com <code>bc</code>, <code>awk</code> e <code>printf</code>, e as armadilhas do português.</li>
+  <li>Números aleatórios com <code>$RANDOM</code> e <code>$SRANDOM</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: o Bash não faz conta sozinho</h2>
+<pre class="term">$ echo 5+3
+5+3                     « só texto
+$ echo $((5+3))
+8                       « agora sim</pre>
+
+<p>Isso confunde quem vem de outras linguagens, mas faz sentido: o shell foi feito para rodar comandos, e a maior parte do que você digita é texto (nomes de arquivos, opções). Contas são a exceção, e por isso têm uma sintaxe própria.</p>
+
+<h2>A expansão aritmética: <code>$(( ))</code></h2>
+<dl class="anatomy">
+  <dt>$((</dt><dd>"Calcule o que vem a seguir e coloque o resultado aqui."</dd>
+  <dt>a + b</dt><dd>A conta. Dentro dos parênteses duplos os espaços são livres e as variáveis <strong>não precisam de <code>$</code></strong>.</dd>
+  <dt>))</dt><dd>Fim da conta.</dd>
+</dl>
+
+<pre class="term">$ a=10
+$ b=3
+$ echo $((a + b))
+13
+$ echo $(( $a * $b ))
+30                      « com $ também funciona; sem $ é mais limpo
+$ echo $((a - b)) $((a * b)) $((a / b)) $((a % b)) $((2 ** 10))
+7 30 3 1 1024</pre>
+
+<p>Leia a última linha da saída na ordem: <code>10-3=7</code>, <code>10×3=30</code>, <code>10÷3=3</code> (inteiro!), resto de <code>10÷3</code> é <code>1</code>, e <code>2</code> elevado a <code>10</code> é <code>1024</code>.</p>
+
+<p>O <code>$(( ))</code> é uma <strong>expansão</strong>, como <code>$nome</code>: ele vira um texto (o resultado) e esse texto entra no comando. Por isso você o usa dentro de <code>echo</code>, de uma atribuição, de um argumento:</p>
+<pre class="term">$ ano=2026
+$ echo "Daqui a 10 anos será $((ano + 10))"
+Daqui a 10 anos será 2036
+$ idade=$((ano - 1997))
+$ echo $idade
+29</pre>
+
+<h3>Ordem das operações</h3>
+<p>Como na escola: <code>**</code> antes de <code>* / %</code>, que vêm antes de <code>+ -</code>. Use parênteses para mudar a ordem:</p>
+<pre class="term">$ echo $(( 2 + 3 * 4 ))
+14
+$ echo $(( (2 + 3) * 4 ))
+20</pre>
+
+<hr>
+
+<h2>A divisão é inteira</h2>
+<p>O Bash só trabalha com <strong>números inteiros</strong>. Na divisão, a parte depois da vírgula é simplesmente <strong>jogada fora</strong> (não é arredondada):</p>
+<pre class="term">$ echo $((7 / 2))
+3                       « 3,5 virou 3
+$ echo $((-7 / 2))
+-3                      « corta em direção ao zero, também para negativos</pre>
+
+<p>Para saber "quanto sobrou", use o <strong>resto</strong>, <code>%</code> (chamado de <em>módulo</em>). Ele é ótimo para saber se um número é par: o resto da divisão por 2 é zero.</p>
+<pre class="term">$ echo $((7 % 2))
+1                       « 7 é ímpar</pre>
+
+<p>Se precisar de decimais, pule para <a href="#decimais">Números com vírgula</a>.</p>
+
+<hr>
+
+<h2>Mudar a variável: <code>(( ))</code>, <code>let</code> e <code>declare -i</code></h2>
+
+<h3><code>(( ))</code> sem o <code>$</code></h3>
+<p>Sem o cifrão, <code>(( ))</code> é um <strong>comando</strong>: calcula, pode alterar variáveis, e não coloca o resultado em lugar nenhum. É a forma preferida para contadores.</p>
+
+<pre class="term">$ n=5
+$ ((n++))
+$ echo $n
+6                       « ++ soma 1
+$ ((n += 10))
+$ echo $n
+16                      « += soma e guarda
+$ ((n *= 2)); echo $n
+32</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrito</th><th>Equivale a</th><th>Nome</th></tr>
+<tr><td><code>((n++))</code> / <code>((n--))</code></td><td><code>n = n + 1</code> / <code>n = n - 1</code></td><td>incremento / decremento</td></tr>
+<tr><td><code>((n += 5))</code></td><td><code>n = n + 5</code></td><td>atribuição composta (também <code>-= *= /= %=</code>)</td></tr>
+<tr><td><code>((n = a * 2))</code></td><td>atribui o resultado</td><td>atribuição</td></tr>
+</table>
+</div>
+
+<p>Há uma diferença entre <code>n++</code> e <code>++n</code> que aparece quando você usa o valor na mesma conta: <code>n++</code> devolve o valor <strong>antigo</strong> e depois soma; <code>++n</code> soma primeiro.</p>
+<pre class="term">$ n=16
+$ echo $((n--)) $n
+16 15                   « mostrou 16, depois virou 15
+$ echo $((++n)) $n
+16 16                   « somou primeiro, mostrou 16</pre>
+
+<h3><code>let</code>: a forma antiga</h3>
+<p><code>let</code> faz o mesmo que <code>(( ))</code>, mas cada conta é um argumento: <strong>sem espaços</strong>, ou tudo entre aspas.</p>
+<pre class="term">$ let total=5*4
+$ echo $total
+20
+$ let "total = total + 1"
+$ echo $total
+21
+$ let total = total + 1
+bash: let: =: erro de sintaxe aritmética: esperava operando (token de erro é "=")</pre>
+<p>No último caso, o <code>let</code> recebeu cinco argumentos separados (<code>total</code>, <code>=</code>, <code>total</code>, <code>+</code>, <code>1</code>) e tentou calcular cada um. Por isso, hoje se prefere <code>(( ))</code>, onde os espaços são livres.</p>
+
+<h3><code>declare -i</code>: a variável que sempre calcula</h3>
+<p>Com o atributo <code>-i</code> (de <em>integer</em>), toda atribuição já é uma conta. O <code>+=</code> passa a <strong>somar</strong> em vez de colar texto:</p>
+<pre class="term">$ declare -i soma=0
+$ soma+=5
+$ soma+=10
+$ echo $soma
+15                      « sem o -i, o resultado seria o texto "0510"</pre>
+<p>O <code>declare</code> e seus outros atributos estão em <a href="variaveis.html">Variáveis, Escopo e export</a>.</p>
+
+<div class="try" data-goal="var:r=65536,ran:\(\(" data-solucao="r=$((2 ** 16))">
+<p class="try-task"><strong>Missão:</strong> guarde na variável <code>r</code> o resultado de 2 elevado a 16, usando <code>$(( ))</code>. Confira com <code>echo $r</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>(( ))</code> como teste: o código de saída</h2>
+<p>Todo comando devolve um <a href="codigo-saida.html">código de saída</a>, e <code>(( ))</code> também. A regra é:</p>
+<ul>
+  <li>se o resultado da conta é <strong>diferente de zero</strong>, o código é <code>0</code> (sucesso, "verdadeiro");</li>
+  <li>se o resultado é <strong>zero</strong>, o código é <code>1</code> (falha, "falso").</li>
+</ul>
+<p>Parece invertido, mas segue a lógica do shell: <code>0</code> é sucesso. Isso faz de <code>(( ))</code> um ótimo teste numérico:</p>
+
+<pre class="term">$ (( 3 &gt; 2 ))
+$ echo $?
+0                       « verdadeiro
+$ (( 3 &lt; 2 ))
+$ echo $?
+1                       « falso
+$ (( 0 ))
+$ echo $?
+1                       « resultado zero = falso
+$ n=7
+$ (( n &gt; 5 )) &amp;&amp; echo "maior que 5"
+maior que 5
+$ if (( n % 2 == 0 )); then echo par; else echo ímpar; fi
+ímpar</pre>
+
+<p>Dentro de <code>(( ))</code>, <code>&gt;</code> e <code>&lt;</code> são comparações, não <a href="redirecionamento.html">redirecionamentos</a>. O <code>if</code> está em <a href="if.html">if, elif, else</a>, e a comparação de números com <code>[ ]</code> (<code>-gt</code>, <code>-lt</code>…) em <a href="testes.html">Testes</a>.</p>
+
+<p>Já o <code>$(( ))</code> devolve o resultado da comparação como <strong>número</strong>: <code>1</code> para verdadeiro, <code>0</code> para falso (o contrário do código de saída!):</p>
+<pre class="term">$ echo $(( 3 &gt; 2 )) $(( 3 &lt; 2 ))
+1 0
+$ echo $(( 5 == 5 )) $(( 5 != 5 ))
+1 0</pre>
+
+<div class="warning">
+<strong>A pegadinha do contador que começa em zero</strong>
+<pre class="term">$ x=0
+$ ((x++))
+$ echo $?
+1                       « "falhou"?!
+$ ((x++))
+$ echo $?
+0</pre>
+<p>O <code>x++</code> devolve o valor <strong>antigo</strong>. Na primeira vez, ele era <code>0</code>, então <code>((x++))</code> deu código <code>1</code>. A conta funcionou (<code>x</code> virou 1), mas o código diz "falso". Num script com <code>set -e</code> (veja <a href="modo-estrito.html">modo estrito</a>), isso <strong>encerra o script</strong>. Use <code>((++x))</code> ou <code>x=$((x + 1))</code> para não cair nisso.</p>
+</div>
+
+<hr>
+
+<h2>Todos os operadores</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Grupo</th><th>Operadores</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td>Contas</td><td><code>+ - * / % **</code></td><td><code>$((2 ** 10))</code></td><td><code>1024</code></td></tr>
+<tr><td>Incremento</td><td><code>++ --</code></td><td><code>((n++))</code></td><td>soma 1 a <code>n</code></td></tr>
+<tr><td>Atribuição</td><td><code>= += -= *= /= %=</code></td><td><code>((n += 2))</code></td><td>soma 2 a <code>n</code></td></tr>
+<tr><td>Comparação</td><td><code>== != &lt; &lt;= &gt; &gt;=</code></td><td><code>$((5 &gt;= 3))</code></td><td><code>1</code></td></tr>
+<tr><td>Lógicos</td><td><code>&amp;&amp; || !</code></td><td><code>$((1 &amp;&amp; 0))</code></td><td><code>0</code></td></tr>
+<tr><td>Ternário</td><td><code>cond ? a : b</code></td><td><code>$((idade &gt;= 18 ? 1 : 0))</code></td><td><code>a</code> se verdadeiro, senão <code>b</code></td></tr>
+<tr><td>Bits</td><td><code>&amp; | ^ ~ &lt;&lt; &gt;&gt;</code></td><td><code>$((1 &lt;&lt; 4))</code></td><td><code>16</code></td></tr>
+<tr><td>Agrupamento</td><td><code>( )</code></td><td><code>$(((2 + 3) * 4))</code></td><td><code>20</code></td></tr>
+<tr><td>Vírgula</td><td><code>,</code></td><td><code>$((a=1, a+5))</code></td><td>calcula as duas, devolve a última: <code>6</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ echo $(( 1 &amp;&amp; 0 )) $(( 1 || 0 )) $(( ! 0 ))
+0 1 1
+$ idade=17
+$ echo $(( idade &gt;= 18 ? 1 : 0 ))
+0
+$ echo $(( 6 &amp; 3 )) $(( 6 | 3 )) $(( 6 ^ 3 )) $(( 1 &lt;&lt; 4 )) $(( 256 &gt;&gt; 2 ))
+2 7 5 16 64</pre>
+
+<p>O ternário (do latim, "de três partes") é um <code>if</code> de uma linha, mas só devolve <strong>números</strong>. Os operadores de bits trabalham com o número em binário; você vai usá-los raramente, em permissões e máscaras.</p>
+
+<div class="warning">
+<strong><code>!0</code> sem espaço no terminal</strong>
+<pre class="term">$ echo $(( !0 ))
+bash: !0: event not found</pre>
+<p>No terminal interativo, <code>!</code> seguido de texto é a <a href="historico.html">expansão do histórico</a>. Escreva <code>! 0</code>, com espaço. Em scripts, o problema não acontece.</p>
+</div>
+
+<hr>
+
+<h2>Bases: binário, hexadecimal e a pegadinha do <code>08</code></h2>
+<p>Você pode escrever números em outras bases com <code>BASE#número</code>, e o Bash entende os prefixos da linguagem C:</p>
+<pre class="term">$ echo $((2#1010)) $((16#ff)) $((8#17)) $((0x1F)) $((010))
+10 255 15 31 8</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrito</th><th>Base</th><th>Vale</th></tr>
+<tr><td><code>2#1010</code></td><td>2 (binário)</td><td>10</td></tr>
+<tr><td><code>16#ff</code> ou <code>0xff</code></td><td>16 (hexadecimal)</td><td>255</td></tr>
+<tr><td><code>8#17</code> ou <code>017</code></td><td>8 (octal)</td><td>15</td></tr>
+<tr><td><code>010</code></td><td>8 (octal!), por causa do zero à esquerda</td><td>8, <strong>não</strong> 10</td></tr>
+<tr><td><code>10#010</code></td><td>10 (decimal, forçado)</td><td>10</td></tr>
+</table>
+</div>
+
+<p>A última linha é a mais importante: <strong>um número que começa com 0 é lido em octal</strong>. Em octal só existem os dígitos de 0 a 7. Isso estoura com datas e horas, que adoram zero à esquerda:</p>
+
+<pre class="term">$ mes=08
+$ echo $((mes + 1))
+bash: 08: valor muito grande para esta base de numeração (token de erro é "08")
+$ echo $((10#$mes + 1))
+9                       « 10# força a base 10</pre>
+
+<p>Em agosto e setembro (<code>08</code> e <code>09</code>), um script que soma meses ou horas quebra de repente. A solução é sempre pôr <code>10#</code> na frente da variável. Atenção: aqui o <code>$</code> é obrigatório (<code>10#$mes</code>), porque o <code>10#</code> precisa colar no valor.</p>
+
+<hr>
+
+<h2 id="decimais">Números com vírgula</h2>
+<p>O Bash não sabe fazer <code>3.5 + 1</code>:</p>
+<pre class="term">$ echo $((3.5 + 1))
+bash: 3.5 + 1: erro de sintaxe aritmética: operador aritmético inválido (token de erro é ".5 + 1")
+$ echo $((3,5 + 1))
+6                       « sem erro, mas errado! a vírgula é o operador "faça as duas"</pre>
+<p>Repare no segundo: em português escrevemos <code>3,5</code>, mas para o Bash a vírgula é o operador da tabela acima. Ele calculou <code>3</code>, depois <code>5 + 1</code>, e devolveu <code>6</code>. Não confie em contas com vírgula dentro de <code>$(( ))</code>. Para decimais, chame um programa que saiba fazê-las.</p>
+
+<h3><code>bc</code>: a calculadora do terminal</h3>
+<p><code>bc</code> (<em>basic calculator</em>) lê contas da entrada e responde. Por padrão ele também corta os decimais; a variável <code>scale</code> diz quantas casas você quer. Ele usa <strong>ponto</strong>, nunca vírgula.</p>
+
+<dl class="anatomy">
+  <dt>echo "scale=2; 7 / 2"</dt><dd>Duas instruções para o bc, separadas por <code>;</code>: "use 2 casas decimais" e a conta.</dd>
+  <dt>|</dt><dd>O <a href="pipes.html">pipe</a> entrega o texto ao bc.</dd>
+  <dt>bc</dt><dd>Calcula e mostra o resultado.</dd>
+</dl>
+
+<pre class="term">$ echo "7 / 2" | bc
+3                       « sem scale: inteiro
+$ echo "scale=2; 7 / 2" | bc
+3.50
+$ echo "scale=2; 10 / 3" | bc
+3.33                    « corta, não arredonda
+$ echo "scale=2; 2 / 3" | bc
+.66                     « o bc omite o zero antes do ponto
+$ bc -l &lt;&lt;&lt; "10 / 3"
+3.33333333333333333333  « -l carrega a biblioteca matemática e usa 20 casas</pre>
+
+<p>Com variáveis do Bash é igual: o Bash troca as variáveis antes, e o bc recebe só números.</p>
+<pre class="term">$ preco=19.90
+$ qtd=3
+$ echo "$preco * $qtd" | bc
+59.70</pre>
+<p>Para guardar o resultado numa variável, use <a href="substituicao-comando.html">substituição de comando</a>: <code>total=$(echo "$preco * $qtd" | bc)</code>.</p>
+
+<h3><code>awk</code></h3>
+<p>O <code>awk</code> faz contas com decimais direto, o que é ótimo para somar colunas de arquivos (ele é apresentado em <a href="ferramentas-texto.html">grep, sed, awk e cia.</a>). Mas veja o que acontece na máquina da Ana, que está em português:</p>
+
+<pre class="term">$ awk 'BEGIN { print 7 / 2 }'
+3,5                     « saiu com vírgula, por causa do LANG=pt_BR
+$ awk -F, 'NR &gt; 1 { soma += $4 } END { print soma / (NR - 1) }' Documentos/alunos.csv
+8                       « ERRADO: a média das notas é 8,2
+$ LC_ALL=C awk -F, 'NR &gt; 1 { soma += $4 } END { print soma / (NR - 1) }' Documentos/alunos.csv
+8.2                     « certo</pre>
+
+<p>O <code>awk</code> do Debian e do Ubuntu (o <code>mawk</code>) segue o idioma do sistema: ele espera <strong>vírgula</strong> nos números. Ao ler <code>9.5</code> do arquivo, ele parou no ponto e entendeu <code>9</code>. Rodar com <code>LC_ALL=C</code> (idioma neutro, só para aquele comando; veja <a href="variaveis.html">VAR=valor comando</a>) faz ele usar o ponto. O <code>gawk</code> (GNU awk, padrão no Fedora e no Arch) usa ponto sempre.</p>
+
+<h3><code>printf "%.2f"</code>: arredondar para mostrar</h3>
+<p>O <code>printf</code> formata números com um número fixo de casas, <strong>arredondando</strong>. A mesma armadilha do idioma aparece aqui:</p>
+<pre class="term">$ printf "%.2f\n" 3.14159
+bash: printf: 3.14159: número inválido
+3,00
+$ printf "%.2f\n" 3,14159
+3,14                    « em pt_BR, o printf espera vírgula
+$ LC_NUMERIC=C printf "%.2f\n" 3.14159
+3.14</pre>
+<p>Como o <code>bc</code> sempre devolve com ponto, a combinação segura é <code>LC_NUMERIC=C printf "%.2f\n" "$(echo "10/3" | bc -l)"</code>. Mais sobre formatos em <a href="printf.html">printf e echo</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Decimais?</th><th>Separador</th><th>Melhor para</th></tr>
+<tr><td><code>$(( ))</code></td><td>Não (corta)</td><td>—</td><td>Contadores, índices, tudo que é inteiro. Rápido: não cria processo.</td></tr>
+<tr><td><code>bc</code></td><td>Sim, com <code>scale</code> (corta)</td><td>Sempre ponto</td><td>Dinheiro, porcentagens, precisão grande.</td></tr>
+<tr><td><code>awk</code></td><td>Sim</td><td>Depende do idioma no <code>mawk</code> (use <code>LC_ALL=C</code>)</td><td>Contas sobre colunas de arquivos.</td></tr>
+<tr><td><code>printf "%.2f"</code></td><td>Só formata (arredonda)</td><td>Depende do idioma (use <code>LC_NUMERIC=C</code>)</td><td>Mostrar o resultado bonito.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="media.sh" data-args="9.5 7.0 8.5" data-goal="out:8.33,src:\bbc\b">
+<p class="try-task"><strong>Missão:</strong> o script deveria mostrar a média das três notas recebidas, mas o Bash não faz conta com decimais e dá erro. Troque a conta para usar o <code>bc</code> com 2 casas, de forma que a saída seja <code>8.33</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+echo $(( ($1 + $2 + $3) / 3 ))
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+echo "scale=2; ($1 + $2 + $3) / 3" | bc
+</pre>
+</div>
+
+<hr>
+
+<h2><code>expr</code>: a forma antiga</h2>
+<p>Antes do <code>$(( ))</code>, as contas eram feitas com o programa <code>expr</code>. Você ainda vai encontrá-lo em scripts velhos. Ele exige espaço entre tudo, e o <code>*</code> precisa de barra, senão vira <a href="curingas.html">curinga</a>:</p>
+<pre class="term">$ expr 5 + 3
+8
+$ expr 5+3
+5+3                     « sem espaços: um argumento só, que ele devolve como texto
+$ expr 5 * 3
+expr: erro de sintaxe: argumento inesperado ‘Área de trabalho’   « o * virou a lista de arquivos!
+$ expr 5 \* 3
+15</pre>
+<p>Use <code>$(( ))</code> em scripts novos: é mais legível e mais rápido (não cria um processo).</p>
+
+<hr>
+
+<h2>Números aleatórios: <code>$RANDOM</code> e <code>$SRANDOM</code></h2>
+<p>Cada vez que você lê <code>$RANDOM</code>, ele vale um número inteiro diferente, de <code>0</code> a <code>32767</code>. Para um intervalo, use o resto da divisão:</p>
+
+<dl class="anatomy">
+  <dt>RANDOM</dt><dd>Um número de 0 a 32767.</dd>
+  <dt>% 6</dt><dd>O resto da divisão por 6: um número de 0 a 5.</dd>
+  <dt>+ 1</dt><dd>Desloca para 1 a 6: um dado.</dd>
+</dl>
+
+<pre class="term">$ echo $RANDOM
+30315
+$ echo $RANDOM
+32091                   « outro número a cada leitura
+$ echo $((RANDOM % 6 + 1))
+6</pre>
+<p>Os números da sua tela serão outros. Se você atribuir um valor a <code>RANDOM</code> (a "semente"), a sequência passa a se repetir, o que é útil para testes:</p>
+<pre class="term">$ RANDOM=42
+$ echo $RANDOM $RANDOM
+17772 26794
+$ RANDOM=42
+$ echo $RANDOM $RANDOM
+17772 26794             « mesma semente, mesma sequência</pre>
+
+<p><code>$SRANDOM</code> <span class="versao">bash 5.1+</span> dá números de 32 bits (até cerca de 4 bilhões) vindos do gerador do sistema, sem sequência previsível. Use-o para coisas que precisam ser difíceis de adivinhar. Nenhum dos dois serve para senhas e criptografia de verdade.</p>
+<pre class="term">$ echo $SRANDOM
+955208759</pre>
+
+<div class="tryscript" data-file="dado.sh">
+<p class="try-task"><strong>Brinque:</strong> rode várias vezes. Depois mude para um dado de 20 faces, ou sorteie um número de 10 a 20 (<code>RANDOM % 11 + 10</code>).</p>
+<pre class="script">#!/usr/bin/env bash
+dado=$((RANDOM % 6 + 1))
+echo "Você tirou $dado"
+</pre>
+</div>
+
+<div class="tryscript" data-file="idade.sh" data-args="1997" data-goal="out:Você tem 29 anos">
+<p class="try-task"><strong>Missão:</strong> o script recebe o ano de nascimento e deveria mostrar a idade em 2026, mas mostra <code>Você tem 2026-1997 anos</code>. Corrija a conta.</p>
+<pre class="script">#!/usr/bin/env bash
+idade=2026-$1
+echo "Você tem $idade anos"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+idade=$((2026 - $1))
+echo "Você tem $idade anos"
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"valor muito grande para esta base de numeração"</strong>
+<pre class="term">$ echo $((08))
+bash: 08: valor muito grande para esta base de numeração (token de erro é "08")
+$ echo $((2#102))
+bash: 2#102: valor muito grande para esta base de numeração (token de erro é "2#102")</pre>
+<p><strong>O que aconteceu:</strong> o número tem um dígito que não existe na base. Zero à esquerda = octal, e <code>8</code> não existe em octal. Em binário só existem <code>0</code> e <code>1</code>.</p>
+<p><strong>Como resolver:</strong> para valores com zero à esquerda (meses, dias, horas de <code>date</code>), use <code>$((10#$mes))</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe aritmética: esperava operando"</strong>
+<pre class="term">$ echo $((3 +))
+bash: 3 +: erro de sintaxe aritmética: esperava operando (token de erro é "+")</pre>
+<p><strong>O que aconteceu:</strong> faltou um número depois do operador. O caso mais comum é uma variável <strong>com valor vazio sendo usada com <code>$</code></strong>: <code>$((3 + $x))</code> com <code>x</code> vazio vira <code>3 +</code>. O "token de erro" mostra onde o Bash se perdeu.</p>
+<p><strong>Como resolver:</strong> escreva sem <code>$</code> (<code>$((3 + x))</code>, que trata vazio como 0) ou dê um padrão: <code>$((3 + ${x:-0}))</code> (veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"operador aritmético inválido" com decimais</strong>
+<pre class="term">$ echo $((3.5 + 1))
+bash: 3.5 + 1: erro de sintaxe aritmética: operador aritmético inválido (token de erro é ".5 + 1")</pre>
+<p><strong>Como resolver:</strong> o Bash só faz contas inteiras. Use <code>bc</code> (veja <a href="#decimais">Números com vírgula</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"divisão por 0"</strong>
+<pre class="term">$ echo $((10 / 0))
+bash: 10 / 0: divisão por 0 (token de erro é "0")
+$ echo $?
+1</pre>
+<p><strong>Como resolver:</strong> teste o divisor antes: <code>(( d != 0 )) &amp;&amp; echo $((10 / d))</code>. O mesmo erro aparece com <code>%</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A conta deu um número estranho e negativo</strong>
+<pre class="term">$ echo $(( 2**63 ))
+-9223372036854775808</pre>
+<p><strong>O que aconteceu:</strong> o Bash usa inteiros de 64 bits; o maior é <code>9223372036854775807</code>. Passou disso, o número "dá a volta" (<em>overflow</em>) sem nenhum aviso.</p>
+<p><strong>Como resolver:</strong> para números gigantes, use <code>bc</code>, que não tem limite.</p>
+</div>
+
+<div class="cenario">
+<strong>Uma palavra virou zero, sem erro</strong>
+<pre class="term">$ x=abc
+$ echo $((x + 1))
+1</pre>
+<p><strong>O que aconteceu:</strong> dentro de uma conta, <code>abc</code> é lido como o <strong>nome</strong> de outra variável; como ela não existe, vale 0. Valide a entrada antes de calcular (veja <a href="testes.html">Testes</a> e <a href="regex.html">Regex</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>$(( conta ))</code></td><td>Calcula e vira o resultado (texto)</td><td><code>echo $((a * 2))</code></td></tr>
+<tr><td><code>(( conta ))</code></td><td>Calcula como comando; código 0 se ≠ 0</td><td><code>((n++))</code>, <code>(( n &gt; 5 ))</code></td></tr>
+<tr><td><code>let "conta"</code></td><td>Como <code>(( ))</code>, forma antiga</td><td><code>let "n = n + 1"</code></td></tr>
+<tr><td><code>declare -i v</code></td><td>Atribuições de <code>v</code> viram contas</td><td><code>v+=5</code></td></tr>
+<tr><td><code>BASE#n</code>, <code>0x</code>, <code>0</code></td><td>Outras bases</td><td><code>$((16#ff))</code> → 255</td></tr>
+<tr><td><code>10#$v</code></td><td>Força decimal (zeros à esquerda)</td><td><code>$((10#08))</code> → 8</td></tr>
+<tr><td><code>bc</code></td><td>Decimais (<code>scale</code>), números grandes</td><td><code>echo "scale=2; 7/2" | bc</code></td></tr>
+<tr><td><code>awk</code></td><td>Decimais, contas em colunas</td><td><code>LC_ALL=C awk 'BEGIN{print 7/2}'</code></td></tr>
+<tr><td><code>printf "%.2f"</code></td><td>Arredonda para mostrar</td><td><code>LC_NUMERIC=C printf "%.2f\n" 3.14159</code></td></tr>
+<tr><td><code>expr</code></td><td>Forma antiga (evite)</td><td><code>expr 5 \* 3</code></td></tr>
+<tr><td><code>$RANDOM</code></td><td>Aleatório 0–32767</td><td><code>$((RANDOM % 6 + 1))</code></td></tr>
+<tr><td><code>$SRANDOM</code></td><td>Aleatório de 32 bits (bash 5.1+)</td><td><code>echo $SRANDOM</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Calcular e mostrar</h3>
+<p>Complete para mostrar o dobro de <code>n</code>:</p>
+<div class="ex-code">echo <input data-answer="$((n * 2))|$((n*2))|$(( n * 2 ))|$((2 * n))|$((2*n))" aria-label="expansão aritmética"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Contador</h3>
+<p>Complete para somar 1 à variável <code>tentativas</code> sem cair na pegadinha do zero:</p>
+<div class="ex-code"><input data-answer="((++tentativas))|(( ++tentativas ))|((tentativas += 1))|(( tentativas += 1 ))" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Mês com zero</h3>
+<p><code>mes=09</code>. Complete para calcular o mês seguinte sem erro de base:</p>
+<div class="ex-code">echo $(( <input data-answer="10#$mes" aria-label="valor em base 10"> + 1 ))</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Quanto vale <code>$((9 / 4))</code>?</p>
+<label><input type="radio" name="q4"> <code>2.25</code></label>
+<label><input type="radio" name="q4"> <code>2</code></label>
+<label><input type="radio" name="q4"> <code>3</code></label>
+<label><input type="radio" name="q4"> Dá erro.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Depois de <code>(( 10 - 10 ))</code>, quanto vale <code>$?</code>?</p>
+<label><input type="radio" name="q5"> <code>1</code>, porque o resultado da conta foi zero.</label>
+<label><input type="radio" name="q5"> <code>0</code>, porque a conta não deu erro.</label>
+<label><input type="radio" name="q5"> <code>10</code></label>
+<label><input type="radio" name="q5"> Não muda.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">6. Qual comando mostra <code>3.50</code>?</p>
+<label><input type="radio" name="q6"> <code>echo $((7 / 2))</code></label>
+<label><input type="radio" name="q6"> <code>echo "7 / 2" | bc</code></label>
+<label><input type="radio" name="q6"> <code>echo "scale=2; 7 / 2" | bc</code></label>
+<label><input type="radio" name="q6"> <code>expr 7 / 2</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>$(( ))</code> calcula e vira texto; <code>(( ))</code> calcula como comando. Dentro deles, variáveis dispensam o <code>$</code>.</li>
+  <li><code>(( ))</code> devolve código 0 quando o resultado é diferente de zero: serve de teste. Cuidado com <code>((x++))</code> quando <code>x</code> é 0.</li>
+  <li>Tudo é inteiro: <code>7/2</code> é <code>3</code>. Use <code>%</code> para o resto.</li>
+  <li>Zero à esquerda é octal: use <code>10#$var</code> para datas e horas.</li>
+  <li>Decimais: <code>bc</code> com <code>scale</code>; <code>awk</code> e <code>printf</code> seguem o idioma (use <code>LC_ALL=C</code>/<code>LC_NUMERIC=C</code>).</li>
+  <li><code>$((RANDOM % N + 1))</code> sorteia de 1 a N; <code>$SRANDOM</code> é a versão moderna.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
