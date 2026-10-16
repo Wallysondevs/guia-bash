@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Terminal Simulado — como usar o terminal e o editor de script do guia | Guia Bash</title>
+<meta name="description" content="Como usar o terminal simulado e o editor de script do Guia Bash: a máquina fictícia da Ana (arquivos e conteúdos), atalhos, botões Reiniciar, Ver solução, Rodar e Restaurar, o que o simulador faz igual ao Bash real e o que ele não faz, e uma trilha de missões.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Terminal Simulado</span></h1>
+
+<p class="intro">Este guia tem um terminal e um editor de script que rodam dentro da própria página. Eles imitam o Bash 5.3 de verdade numa máquina fictícia, com pastas, arquivos e uma usuária chamada Ana. Nada do que você digita sai do navegador, então pode errar à vontade: um clique em <strong>Reiniciar</strong> e tudo volta ao começo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como usar as caixas "Experimente": digitar, teclas, missões e botões.</li>
+  <li>Como usar o editor de script: <strong>Rodar</strong>, <strong>Restaurar</strong>, argumentos e entrada.</li>
+  <li>O que existe na máquina fictícia: usuária, pastas e o conteúdo de cada arquivo.</li>
+  <li>O que o simulador faz igual ao Bash e o que ele não faz.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Por que um terminal simulado?</h2>
+<p>O medo de "quebrar alguma coisa" é o que mais trava quem está começando. Aqui esse medo não existe: o simulador é um programa da página, não o seu sistema. Você pode apagar a pasta pessoal inteira, errar caminhos, criar mil arquivos. Ao clicar em <strong>Reiniciar</strong>, a máquina volta ao estado inicial.</p>
+<p>Ele não é um Linux de verdade: é um interpretador de Bash escrito em JavaScript, comparado automaticamente com o GNU Bash 5.3 real. Por isso as respostas devem ser as mesmas que você veria no terminal. Quando você quiser ir além do que ele sabe, use o terminal do seu computador (<a href="onde-tem-bash.html">Bash em Cada Sistema</a>).</p>
+
+<hr>
+
+<h2>O terminal: caixas "Experimente você mesmo"</h2>
+<ol class="passo">
+  <li>Clique dentro da janela escura do terminal.</li>
+  <li>Digite um comando, por exemplo <code>ls</code>, e aperte <kbd>Enter</kbd>.</li>
+  <li>Leia a resposta. Um prompt novo aparece quando o comando termina.</li>
+  <li>Se a caixa tiver uma <strong>missão</strong>, um aviso de missão cumprida aparece embaixo da janela quando você chegar ao objetivo.</li>
+</ol>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>No simulador</th></tr>
+<tr><td><kbd>Enter</kbd></td><td>Executa a linha. Se o comando estiver incompleto (aspa aberta, <code>for</code> sem <code>done</code>), aparece o <code>&gt; </code> de continuação, como no Bash (veja <a href="prompt.html">Lendo o Prompt</a>).</td></tr>
+<tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Navega pelos comandos já digitados naquela caixa.</td></tr>
+<tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Move o cursor dentro da linha.</td></tr>
+<tr><td><kbd>Tab</kbd></td><td>Completa nomes de comandos, pastas, arquivos e variáveis (<a href="completar.html">Completar com Tab</a>).</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Limpa a tela (o comando <code>clear</code> também).</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Desiste da linha atual, inclusive de um <code>&gt;</code> de continuação.</td></tr>
+</table>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Botão</th><th>Faz</th></tr>
+<tr><td><strong>Reiniciar</strong></td><td>Volta a máquina daquela caixa ao estado inicial: arquivos, variáveis, pasta atual e histórico.</td></tr>
+<tr><td><strong>Ver solução</strong></td><td>Mostra uma forma de cumprir a missão. Tente antes de abrir.</td></tr>
+</table>
+</div>
+
+<p>Cada caixa é uma máquina independente: o que você cria numa não aparece nas outras, nem em outra página.</p>
+
+<div class="try" data-goal="ran:^\s*ls,ran:^\s*cat" data-solucao="ls;;cat frutas.txt">
+<p class="try-task"><strong>Missão:</strong> explore à vontade. Comece por <code>ls</code>, depois <code>cat frutas.txt</code>. Experimente também <code>ls Documentos</code>, <code>pwd</code> e <code>echo $BASH_VERSION</code>.</p>
+</div>
+
+<hr>
+
+<h2>O editor de script: "Experimente: edite e rode o script"</h2>
+<p>Do Nível 2 em diante, você vai escrever scripts. Para isso, o guia tem um editor: um "Try it Yourself" do Bash. Ele funciona assim:</p>
+
+<ol class="passo">
+  <li>O código aparece num editor de verdade: clique e altere o que quiser.</li>
+  <li>Se o script usa argumentos (<code>$1</code>, <code>$2</code>…), eles ficam num campo acima ou abaixo do código; você pode mudá-los.</li>
+  <li>Clique em <strong>Rodar</strong>. O simulador grava o código num arquivo na pasta da Ana e executa <code>bash arquivo.sh argumentos</code>.</li>
+  <li>Aparecem a <strong>saída</strong> e o <strong>código de saída</strong> (<code>0</code> = deu certo).</li>
+</ol>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Botão / campo</th><th>Faz</th></tr>
+<tr><td><strong>Rodar</strong></td><td>Grava e executa o script, mostrando a saída e o código de saída.</td></tr>
+<tr><td><strong>Restaurar</strong></td><td>Volta o código ao original da aula (desfaz as suas mudanças).</td></tr>
+<tr><td><strong>Ver solução</strong></td><td>Mostra uma versão do script que cumpre a missão.</td></tr>
+<tr><td>Argumentos</td><td>O que vai depois do nome do script. Ex.: <code>Ana 29</code> vira <code>$1=Ana</code> e <code>$2=29</code>.</td></tr>
+<tr><td>Entrada</td><td>Quando o script usa <code>read</code>, o simulador abre um campo para você digitar a resposta (ou usa um texto já preparado pela aula).</td></tr>
+</table>
+</div>
+
+<p>Um exemplo sem missão, só para brincar. O script pergunta o seu nome com <code>read</code> (a aula <a href="read.html">Ler do Teclado</a> explica cada parte) e responde:</p>
+
+<div class="tryscript" data-file="ola.sh">
+<p class="try-task">Clique em <strong>Rodar</strong>, responda à pergunta e veja a saída. Depois mude a mensagem e rode de novo.</p>
+<pre class="script">#!/usr/bin/env bash
+read -p "Qual é o seu nome? " nome
+echo "Olá, $nome! Bem-vindo ao Guia Bash."
+</pre>
+</div>
+
+<p>No terminal de verdade, a mesma execução fica assim (a Ana digitou <code>Ana</code> e <kbd>Enter</kbd>):</p>
+<pre class="term">$ bash ola.sh
+Qual é o seu nome? Ana
+Olá, Ana! Bem-vindo ao Guia Bash.
+$ echo $?
+0</pre>
+
+<hr>
+
+<h2>A máquina fictícia</h2>
+<p>Todos os exemplos do guia, no texto e nos simuladores, acontecem na mesma máquina. Ela também existe de verdade, como um laboratório isolado onde cada saída do guia foi conferida.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Valor</th></tr>
+<tr><td>Usuária</td><td><code>ana</code> (número de usuário 1000), grupos <code>ana adm cdrom sudo dip plugdev users</code></td></tr>
+<tr><td>Nome da máquina</td><td><code>notebook</code></td></tr>
+<tr><td>Pasta pessoal</td><td><code>/home/ana</code> (<code>~</code>)</td></tr>
+<tr><td>Shell</td><td>GNU Bash 5.3.9, com ferramentas GNU (<code>ls</code>, <code>grep</code>, <code>sed</code>…)</td></tr>
+<tr><td>Idioma</td><td>Português do Brasil (<code>LANG=pt_BR.UTF-8</code>): as mensagens saem em português</td></tr>
+<tr><td>Data e hora</td><td>Sempre quinta-feira, 15 de outubro de 2026, 10:30</td></tr>
+<tr><td>Programas abertos</td><td><code>systemd</code> (1), <code>gnome-shell</code> (1534), <code>firefox</code> (2210), <code>gnome-terminal-</code> (2950) e o <code>bash</code> (3001) desta janela</td></tr>
+</table>
+</div>
+
+<h3>Pastas e arquivos</h3>
+<p>A pasta pessoal tem as pastas comuns de um desktop em português e alguns arquivos de exemplo:</p>
+
+<pre class="term">$ ls
+'Área de trabalho'   Downloads    Imagens   Música    Vídeos
+ Documentos          frutas.txt   Modelos   Público
+$ ls -R Documentos
+Documentos:
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+
+Documentos/projetos:
+backup.sh  site                    « backup.sh é um script executável
+
+Documentos/projetos/site:
+index.html  style.css
+$ ls Downloads Imagens
+Downloads:
+foto.jpg          manual.pdf  ubuntu-26.04-desktop-amd64.iso
+fotos-viagem.zip  musica.mp3
+
+Imagens:
+ferias.jpg  perfil.png</pre>
+
+<p>Há também arquivos escondidos (começam com ponto), que o <code>ls -a</code> mostra: <code>.bashrc</code>, <code>.profile</code> e <code>.bash_history</code>. As pastas <code>Área de trabalho</code>, <code>Modelos</code>, <code>Música</code>, <code>Público</code> e <code>Vídeos</code> estão vazias.</p>
+
+<h3>O conteúdo dos arquivos de texto</h3>
+<p>Estes são os arquivos que as aulas mais usam. Conhecer o conteúdo ajuda a prever o resultado dos comandos.</p>
+
+<pre class="term">$ cat frutas.txt
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana                             « 7 linhas, com repetições: ótimo para sort e uniq
+$ cat Documentos/notas.txt
+Comprar café
+Ligar para o João
+Estudar Bash
+Fazer backup das fotos</pre>
+
+<pre class="term">$ cat Documentos/alunos.csv
+nome,idade,cidade,nota             « cabeçalho: os nomes das colunas
+Ana,29,Recife,9.5
+Bruno,34,Curitiba,7.0
+Carla,22,Salvador,8.5
+Diego,41,Manaus,6.0
+Elisa,27,Porto Alegre,10.0         « uma cidade com espaço no nome, de propósito
+$ cat Documentos/acesso.log
+192.168.0.10 - - [15/Oct/2026:09:01:12] "GET / HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:01:40] "GET /contato HTTP/1.1" 200
+192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+192.168.0.10 - - [15/Oct/2026:09:06:44] "POST /login HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:07:02] "GET / HTTP/1.1" 200</pre>
+
+<p>O <code>alunos.csv</code> é uma planilha em texto (CSV = "valores separados por vírgula"), boa para <code>cut</code>, <code>sort</code> e <code>awk</code>. O <code>acesso.log</code> imita o registro de um servidor web: quem acessou (o IP), quando, o quê, e o código da resposta (200 = ok, 403 = proibido, 404 = não encontrado). Os arquivos de <code>Downloads</code> e <code>Imagens</code> não têm texto: servem para treinar curingas (<code>*.jpg</code>) e organização de arquivos.</p>
+
+<h3>O <code>.bashrc</code> da Ana</h3>
+<p>Quando o terminal abre, o Bash lê o arquivo <code>~/.bashrc</code>. O da Ana é parecido com o do Debian e do Ubuntu, e define:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Efeito</th><th>Aula</th></tr>
+<tr><td><code>HISTCONTROL=ignoreboth</code>, <code>HISTSIZE=1000</code>, <code>HISTFILESIZE=2000</code></td><td>Configuração do histórico</td><td><a href="historico.html">Histórico</a></td></tr>
+<tr><td><code>PS1='\u@\h:\w\$ '</code></td><td>O prompt <code>ana@notebook:~$</code></td><td><a href="prompt.html">Lendo o Prompt</a></td></tr>
+<tr><td><code>alias ls='ls --color=auto'</code>, <code>grep</code>, <code>ll</code>, <code>la</code>, <code>l</code></td><td>Apelidos</td><td><a href="alias.html">alias</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>O que funciona e o que não funciona</h2>
+<p>O simulador é grande: entende quase toda a linguagem do Bash e os programas de texto mais usados. Resumo:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Funciona</th><th>Exemplos</th></tr>
+<tr><td>A linguagem do Bash</td><td><code>;</code> <code>&amp;&amp;</code> <code>||</code>, pipes <code>|</code>, <code>if</code>, <code>case</code>, <code>for</code>, <code>while</code>, <code>until</code>, <code>select</code>, funções, <code>(( ))</code>, <code>[[ ]]</code>, <code>[ ]</code>, aliases, comentários</td></tr>
+<tr><td>Expansões</td><td>Chaves <code>{a,b}</code>, til <code>~</code>, variáveis e todas as formas <code>${…}</code>, contas <code>$(( ))</code>, <code>$( )</code>, curingas <code>* ? [ ]</code>, aspas e escapes</td></tr>
+<tr><td>Variáveis</td><td><code>export</code>, <code>declare</code>, <code>local</code>, <code>readonly</code>, arrays e arrays associativos, <code>$?</code>, <code>$#</code>, <code>$@</code>, <code>$$</code>, <code>RANDOM</code>, <code>BASH_VERSION</code>, <code>PIPESTATUS</code>…</td></tr>
+<tr><td>Redirecionamentos</td><td><code>&gt;</code> <code>&gt;&gt;</code> <code>&lt;</code> <code>2&gt;</code> <code>&amp;&gt;</code> <code>2&gt;&amp;1</code>, here-docs <code>&lt;&lt;</code>, here-strings <code>&lt;&lt;&lt;</code>, <code>/dev/null</code>, <code>&lt;( )</code></td></tr>
+<tr><td>Comandos internos</td><td><code>echo printf read cd pwd type help history set shopt alias source exit trap jobs</code> e quase todos os outros</td></tr>
+<tr><td>Programas de texto e arquivos</td><td><code>ls cat head tail wc sort uniq cut tr tee grep sed awk find xargs mkdir rm cp mv ln chmod touch date seq diff stat du df</code>, entre outros</td></tr>
+<tr><td>Scripts</td><td><code>bash script.sh</code>, <code>bash -x</code>, <code>bash -n</code>, <code>./script.sh</code> (com <code>#!</code> e permissão de execução)</td></tr>
+</table>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Não funciona</th><th>Por quê</th></tr>
+<tr><td><code>curl</code>, <code>wget</code>, <code>ssh</code>, <code>ping</code></td><td>Não há rede: tudo roda dentro da página.</td></tr>
+<tr><td><code>apt</code>, <code>dnf</code>, <code>brew</code>, <code>sudo</code></td><td>Não há pacotes para instalar nem administrador.</td></tr>
+<tr><td><code>nano</code>, <code>vim</code>, <code>man</code>, <code>top</code></td><td>São programas de tela cheia. <code>less</code> e <code>more</code> mostram tudo de uma vez.</td></tr>
+<tr><td><code>cron</code>, <code>systemctl</code></td><td>Não há serviços rodando.</td></tr>
+<tr><td>A maioria dos atalhos de edição</td><td><kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>W</kbd>, <kbd>Ctrl</kbd>+<kbd>A</kbd>… são do navegador ou não foram incluídos (veja <a href="editar-linha.html">Editar a Linha</a>).</td></tr>
+</table>
+</div>
+
+<p>Quando você tenta algo que o simulador não sabe fazer, ele avisa que é uma limitação dele, e não um erro do Bash. Já um comando que realmente não existe responde como o Bash real: <code>bash: xyz: comando não encontrado</code>.</p>
+
+<h3>Diferenças que você pode notar</h3>
+<ul>
+  <li><strong>Relógio parado</strong>: <code>date</code> sempre mostra 15/10/2026, 10:30, para os exemplos ficarem iguais aos do guia.</li>
+  <li><strong><code>sleep</code> instantâneo</strong>: <code>sleep 10</code> termina na hora, para você não ficar esperando.</li>
+  <li><strong>Sistema menor</strong>: fora da pasta da Ana, existem só as pastas principais do sistema.</li>
+  <li><strong>Cores fixas</strong>: <code>tput</code> só conhece cores básicas e um tamanho de tela fixo.</li>
+</ul>
+
+<hr>
+
+<h2>Trilha de missões</h2>
+<p>Cada caixa abaixo é uma máquina nova. Use o que você já viu nas aulas anteriores, ou espie as aulas indicadas. Se travar, abra a solução.</p>
+
+<h3>Missão 1: ir até Downloads</h3>
+<div class="try" data-goal="cwd:~/Downloads" data-solucao="pwd;;ls;;cd Downloads">
+<p class="try-task"><strong>Missão:</strong> descubra onde você está com <code>pwd</code>, veja o que existe com <code>ls</code> e entre na pasta <code>Downloads</code> com <code>cd</code>.</p>
+</div>
+
+<h3>Missão 2: ler as notas</h3>
+<div class="try" data-goal="out:Estudar Bash" data-solucao="cat Documentos/notas.txt">
+<p class="try-task"><strong>Missão:</strong> mostre o conteúdo do arquivo <code>notas.txt</code>, que está dentro de <code>Documentos</code>. Use <kbd>Tab</kbd> para completar os nomes.</p>
+</div>
+
+<h3>Missão 3: montar a pasta da viagem</h3>
+<div class="try" data-goal="dir:~/viagem,contains:~/viagem/roteiro.txt=Lisboa" data-solucao="mkdir viagem;;echo Lisboa &gt; viagem/roteiro.txt">
+<p class="try-task"><strong>Missão:</strong> crie a pasta <code>viagem</code> com <code>mkdir</code> e, dentro dela, um arquivo <code>roteiro.txt</code> com a palavra <code>Lisboa</code>. Dica: <code>echo Lisboa &gt; viagem/roteiro.txt</code> grava a saída do <code>echo</code> no arquivo (<a href="redirecionamento.html">Redirecionamento</a>). Confira com <code>cat</code>.</p>
+</div>
+
+<h3>Missão 4: uma variável</h3>
+<div class="try" data-goal="var:cidade=Recife" data-solucao="cidade=Recife;;echo $cidade">
+<p class="try-task"><strong>Missão:</strong> crie uma variável <code>cidade</code> com o valor <code>Recife</code> (escreva <code>cidade=Recife</code>, sem espaços em volta do <code>=</code>) e mostre-a com <code>echo $cidade</code>. Veja <a href="variaveis-intro.html">Variáveis: o Básico</a>.</p>
+</div>
+
+<h3>Missão 5: quantas frutas diferentes?</h3>
+<div class="try" data-goal="ran:sort,ran:wc,outre:^\s*4\s*$" data-solucao="sort -u frutas.txt | wc -l">
+<p class="try-task"><strong>Missão:</strong> o <code>frutas.txt</code> tem frutas repetidas. Descubra quantas são <strong>diferentes</strong>: <code>sort -u frutas.txt</code> mostra cada uma uma vez; ligue-o ao <code>wc -l</code> com um <code>|</code> para contar (<a href="pipes.html">Pipes</a>).</p>
+</div>
+
+<h3>Missão 6: melhorar um script</h3>
+<p>O script recebe o nome de um arquivo como argumento (o campo já vem com <code>frutas.txt</code>) e conta as linhas. Leia antes de mexer:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>arquivo=$1</code></td><td>Guarda o primeiro argumento na variável <code>arquivo</code>.</td></tr>
+<tr><td><code>echo "… $(wc -l &lt; "$arquivo") linhas."</code></td><td>Conta as linhas do arquivo e coloca o número no meio da frase.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="conta.sh" data-args="frutas.txt" data-goal="out:A primeira linha é: banana">
+<p class="try-task"><strong>Missão:</strong> acrescente uma linha que mostre a primeira linha do arquivo, no formato <code>A primeira linha é: banana</code>. Dica: <code>head -n 1 "$arquivo"</code> dá a primeira linha; use-o dentro de <code>$( )</code>, como o <code>wc</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+arquivo=$1
+echo "O arquivo $arquivo tem $(wc -l &lt; "$arquivo") linhas."
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+arquivo=$1
+echo "O arquivo $arquivo tem $(wc -l &lt; "$arquivo") linhas."
+echo "A primeira linha é: $(head -n 1 "$arquivo")"
+</pre>
+</div>
+
+<p>A solução, rodada no Bash real:</p>
+<pre class="term">$ bash conta.sh frutas.txt
+O arquivo frutas.txt tem 7 linhas.
+A primeira linha é: banana
+$ bash conta.sh Documentos/notas.txt
+O arquivo Documentos/notas.txt tem 4 linhas.
+A primeira linha é: Comprar café</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Digito e nada aparece</strong>
+<p><strong>O que aconteceu:</strong> o terminal não está selecionado.</p>
+<p><strong>Como resolver:</strong> clique dentro da janela escura antes de digitar.</p>
+</div>
+
+<div class="cenario">
+<strong>Apaguei tudo e agora os exemplos não funcionam</strong>
+<p><strong>O que aconteceu:</strong> os exemplos esperam a máquina no estado inicial.</p>
+<p><strong>Como resolver:</strong> clique em <strong>Reiniciar</strong> naquela caixa.</p>
+</div>
+
+<div class="cenario">
+<strong>A saída do meu computador é diferente da do simulador</strong>
+<p><strong>O que aconteceu:</strong> o seu sistema tem outra usuária, outros arquivos, outra data e talvez outra versão do Bash ou outro idioma. No macOS, as ferramentas (<code>ls</code>, <code>sed</code>…) são as versões BSD, com mensagens e opções diferentes.</p>
+<p><strong>Como resolver:</strong> compare a forma da resposta, não os nomes. Se for uma diferença de comportamento do Bash, confira a versão com <code>bash --version</code> e veja <a href="onde-tem-bash.html">Bash em Cada Sistema</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O editor de script ficou esperando</strong>
+<p><strong>O que aconteceu:</strong> o script tem um <code>read</code> e está esperando a sua resposta.</p>
+<p><strong>Como resolver:</strong> digite no campo de entrada que apareceu e aperte <kbd>Enter</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. Você apagou o <code>frutas.txt</code> numa caixa de missão. O que acontece com o seu computador?</p>
+<label><input type="radio" name="q1"> O arquivo é apagado do seu disco.</label>
+<label><input type="radio" name="q1"> O navegador fecha.</label>
+<label><input type="radio" name="q1"> Nada: o simulador só existe dentro da página; Reiniciar traz o arquivo de volta.</label>
+<label><input type="radio" name="q1"> O arquivo some de todas as caixas do guia.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. Quantas linhas tem o <code>alunos.csv</code> da Ana, contando o cabeçalho?</p>
+<label><input type="radio" name="q2"> 5</label>
+<label><input type="radio" name="q2"> 6</label>
+<label><input type="radio" name="q2"> 7</label>
+<label><input type="radio" name="q2"> 4</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">3. Qual destes comandos o simulador <strong>não</strong> roda?</p>
+<label><input type="radio" name="q3"> <code>grep banana frutas.txt</code></label>
+<label><input type="radio" name="q3"> <code>for i in 1 2 3; do echo $i; done</code></label>
+<label><input type="radio" name="q3"> <code>bash conta.sh frutas.txt</code></label>
+<label><input type="radio" name="q3"> <code>curl https://exemplo.com</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. No editor de script, para que serve o botão <strong>Restaurar</strong>?</p>
+<label><input type="radio" name="q4"> Volta o código ao original da aula.</label>
+<label><input type="radio" name="q4"> Roda o script de novo.</label>
+<label><input type="radio" name="q4"> Mostra a solução.</label>
+<label><input type="radio" name="q4"> Apaga a saída.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O simulador roda na página: nada afeta o seu computador; <strong>Reiniciar</strong> volta ao começo.</li>
+  <li>No terminal: <kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Tab</kbd>, <kbd>Ctrl</kbd>+<kbd>L</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd> e linhas <code>&gt;</code> de continuação.</li>
+  <li>No editor: <strong>Rodar</strong> mostra saída e código de saída; <strong>Restaurar</strong> desfaz; argumentos e entrada têm campos próprios.</li>
+  <li>A máquina é sempre a mesma: <code>ana@notebook</code>, 15/10/2026 10:30, com <code>frutas.txt</code>, <code>notas.txt</code>, <code>alunos.csv</code> e <code>acesso.log</code>.</li>
+  <li>Sem rede, pacotes, editores de tela cheia ou serviços: para esses, use o terminal do seu computador.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
