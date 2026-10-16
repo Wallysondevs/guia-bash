@@ -841,3 +841,4 @@ dl.glossario dd { margin: 4px 0 0; }
   .ts-run { flex-direction: column; align-items: stretch; }
   .ts-rodar { width: 100%; }
 }
+.sim-out > div { min-height: 1.5em; }

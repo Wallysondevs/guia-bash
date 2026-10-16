@@ -88,7 +88,7 @@ function rodarScript(codigo, arquivo, args, opt) {
   s.iniciarScript(arquivo, codigo, args || [], opt.stdin === undefined ? null : opt.stdin);
   s.k.rodarSync(function () { return entrada && entrada.length ? entrada.shift() : null; });
   var partes = s.k.tirarSaida(), out = "", err = "", texto = "";
-  partes.forEach(function (c) { var t = BashSim.semCor(c.t); texto += t; if (c.s === "err") err += t; else out += t; });
+  partes.forEach(function (c) { var t = BashSim.semCor(c.t); texto += t; if (c.s === "err" || c.s === "prompt") err += t; else out += t; });
   return { texto: texto, out: out, err: err, status: s.main ? s.main.status : 0, sessao: s };
 }
 

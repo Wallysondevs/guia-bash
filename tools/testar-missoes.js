@@ -75,7 +75,7 @@ function rodarComandos(s, cmds, stdinLinhas) {
   cmds.forEach(function (c) {
     var saida = s.rodarSync(c, function () { return fila.length ? fila.shift() : null; });
     ult = { out: "", err: "" };
-    saida.forEach(function (x) { var t = BashSim.semCor(x.t); if (x.s === "err") ult.err += t; else ult.out += t; });
+    saida.forEach(function (x) { var t = BashSim.semCor(x.t); if (x.s === "err" || x.s === "prompt") ult.err += t; else ult.out += t; });
   });
   return ult;
 }
@@ -86,7 +86,7 @@ function rodarScriptSim(m, codigo, tty) {
   s.iniciarScript(arq, codigo.replace(/\n?$/, "\n"), dividirArgs(m.at["data-args"] || ""), stdin);
   s.k.rodarSync(function () { return null; });
   var out = "", err = "", texto = "";
-  s.k.tirarSaida().forEach(function (c) { var t = BashSim.semCor(c.t); texto += t; if (c.s === "err") err += t; else out += t; });
+  s.k.tirarSaida().forEach(function (c) { var t = BashSim.semCor(c.t); texto += t; if (c.s === "err" || c.s === "prompt") err += t; else out += t; });
   return { s: s, out: out, err: err, texto: texto, status: s.main ? s.main.status : 0 };
 }
 function dividirArgs(s) {

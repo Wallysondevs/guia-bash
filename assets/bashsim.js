@@ -2159,6 +2159,12 @@
     return this.nome0 + ": linha " + this.lineno + ": ";
   };
   SP.erro = function (msg) { this.escrever(2, this.prefixo() + msg + "\n"); };
+  // texto de pergunta (read -p, select): vai para a saída de erro, mas a interface não pinta de vermelho
+  SP.escreverPrompt = function (s) {
+    var o = this.fds[2];
+    if (o && o.kind === "tty-out" && o.stream === "err") { this.k.saida("prompt", s); return true; }
+    return this.escrever(2, s);
+  };
   SP.escrever = function (fd, s) {
     var o = this.fds[fd];
     if (!o) return false;
@@ -3707,10 +3713,10 @@
         if (itens.length && mostrarMenu) {
           var larg = String(itens.length).length;
           var linhas = itens.map(function (x, i) { return pad(i + 1, larg) + ") " + x; });
-          this.escrever(2, linhas.join("\n") + "\n");
+          this.escreverPrompt(linhas.join("\n") + "\n");
         }
         var ps3 = this.valor("PS3"); if (ps3 === null) ps3 = "#? ";
-        this.escrever(2, ps3);
+        this.escreverPrompt(ps3);
         var o = this.fds[0];
         if (!o) { st = 1; break; }
         var r = yield* lerAte(this.k, o, "\n", null, { prompt: ps3 });
@@ -4546,7 +4552,7 @@
     var max = o.N !== undefined ? parseInt(o.N, 10) : (o.n !== undefined ? parseInt(o.n, 10) : null);
     if (o.N !== undefined) delim = null;
     var ehTty = isTTY(fonte);
-    if (o.p !== undefined && ehTty) this.escrever(2, o.p);
+    if (o.p !== undefined && ehTty) this.escreverPrompt(o.p);
     if (o.t !== undefined) {
       var tt = parseFloat(o.t);
       if (isNaN(tt)) { this.erro("read: " + o.t + ": especificação de tempo limite inválida"); return 1; }
@@ -10194,6 +10200,7 @@
       if (/\x1b\[H\x1b\[2J/.test(txt)) { out.innerHTML = ""; linhaAtual = null; txt = txt.split(/\x1b\[H\x1b\[2J(?:\x1b\[3J)?/).pop(); if (!txt) return; }
       var partes = txt.split("\n");
       partes.forEach(function (p, i) {
+        if (p === "" && i === partes.length - 1) return;
         if (!linhaAtual) { linhaAtual = el("div", { "class": classe || "" }); linhaAtual._txt = ""; out.appendChild(linhaAtual); }
         if (p.indexOf("\r") >= 0) { var seg = p.split("\r"); linhaAtual.innerHTML = ""; linhaAtual._txt = ""; p = seg[seg.length - 1]; }
         var r = ansiParaHtml(p, estAnsi); estAnsi = r.est;
@@ -10206,7 +10213,7 @@
     function escreverLinhaCmd(html) { linhaAtual = null; var d = el("div", { "class": "sim-cmd" }, html); out.appendChild(d); }
     function despejar() {
       s.k.tirarSaida().forEach(function (c) {
-        if (c.s === "err") erroCmd += semCor(c.t); else saidaCmd += semCor(c.t);
+        if (c.s === "err" || c.s === "prompt") erroCmd += semCor(c.t); else saidaCmd += semCor(c.t);
         escrever(c.t, c.s === "err" ? "sim-err" : "");
       });
     }
@@ -10265,9 +10272,10 @@
     function enviar(linha) {
       if (ocupado && lendo) {
         // entrada para um comando (read, cat…)
-        var vis = inp.type === "password" ? "" : linha;
-        if (linhaAtual) { linhaAtual.appendChild(el("span", { "class": "sim-digitado" }, escHtml(vis))); linhaAtual = null; }
-        else escreverLinhaCmd(escHtml(vis));
+        var silenc = inp.type === "password", vis = silenc ? "" : linha;
+        if (linhaAtual) { linhaAtual.appendChild(el("span", { "class": "sim-digitado" }, escHtml(vis))); if (!silenc) linhaAtual = null; }
+        else if (!silenc) escreverLinhaCmd(escHtml(vis));
+        else { linhaAtual = el("div"); out.appendChild(linhaAtual); }
         var proc = lendo.proc; lendo = null; inp.type = "text";
         s.k.darEntrada(proc, linha);
         bombear(); return;
@@ -10342,7 +10350,7 @@
         var antesC = v.slice(0, pos), depoisC = v.slice(pos);
         var c = completar(s.sh, antesC);
         var agora = Date.now();
-        if (c.linha !== antesC) { inp.value = c.linha + depoisC; inp.setSelectionRange(c.linha.length, c.linha.length); ultTab = 0; return; }
+        if (c.linha !== antesC) { inp.value = c.linha + depoisC; inp.setSelectionRange(c.linha.length, c.linha.length); ultTab = /[\s\/]$/.test(c.linha) ? 0 : agora; return; }
         if (c.lista.length && agora - ultTab < 800) {
           escreverLinhaCmd(promptHtml() + escHtml(v));
           escrever(colunasLs(c.lista.map(function (x) { return { txt: x, w: largura(x) }; }), 80, false).join("\n") + "\n", "");
@@ -10414,6 +10422,7 @@
       if (!txt) return;
       if (/\x1b\[H\x1b\[2J/.test(txt)) { out.innerHTML = ""; linhaAtual = null; txt = txt.split(/\x1b\[H\x1b\[2J(?:\x1b\[3J)?/).pop(); if (!txt) return; }
       txt.split("\n").forEach(function (p, i, arr) {
+        if (p === "" && i === arr.length - 1) return;
         if (!linhaAtual) { linhaAtual = el("div"); out.appendChild(linhaAtual); }
         if (p.indexOf("\r") >= 0) { linhaAtual.innerHTML = ""; p = p.split("\r").pop(); }
         var r = ansiParaHtml(p, estAnsi); estAnsi = r.est;
@@ -10421,7 +10430,7 @@
         if (i < arr.length - 1) linhaAtual = null;
       });
     }
-    function despejar() { s.k.tirarSaida().forEach(function (c) { if (c.s === "err") erroTxt += semCor(c.t); else saidaTxt += semCor(c.t); escrever(c.t, c.s === "err" ? "sim-err" : ""); }); tela.scrollTop = tela.scrollHeight; }
+    function despejar() { s.k.tirarSaida().forEach(function (c) { if (c.s === "err" || c.s === "prompt") erroTxt += semCor(c.t); else saidaTxt += semCor(c.t); escrever(c.t, c.s === "err" ? "sim-err" : ""); }); tela.scrollTop = tela.scrollHeight; }
     function fim() {
       rodando = false; btn.disabled = false; btn.textContent = "▶ Rodar";
       despejar();
@@ -10454,7 +10463,7 @@
             e.preventDefault();
             var eof = e.key !== "Enter", v = campo.value;
             var span = el("span", { "class": "sim-digitado" }, eof ? "" : escHtml(silencioso ? "" : v));
-            campo.parentNode.replaceChild(span, campo); campo = null; linhaAtual = null;
+            campo.parentNode.replaceChild(span, campo); campo = null; if (!silencioso || eof) linhaAtual = null;
             s.k.darEntrada(proc, eof ? null : v);
             bombear();
           } else if (e.ctrlKey && (e.key === "c" || e.key === "C")) { e.preventDefault(); s.k.ctrlC(); campo.parentNode.replaceChild(el("span", {}, "^C"), campo); campo = null; linhaAtual = null; s.k.darEntrada(proc, null); bombear(); }
