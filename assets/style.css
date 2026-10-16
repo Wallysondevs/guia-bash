@@ -649,7 +649,7 @@ dl.anatomy dd { margin: 0; }
 .trilha { padding: 18px; border-radius: 10px; border: 1px solid var(--border); border-top: 6px solid; }
 .trilha h3 { margin: 0 0 6px; }
 .trilha ul { margin: 8px 0 12px; padding-left: 18px; font-size: 15px; }
-.trilha.n1 { border-top-color: #2e8b57; } .trilha.n2 { border-top-color: #1f6fb2; } .trilha.n3 { border-top-color: #8e2a8e; } .trilha.proj { border-top-color: var(--accent); }
+.trilha.n1 { border-top-color: #2e8b57; } .trilha.n2 { border-top-color: #1f6fb2; } .trilha.n3 { border-top-color: #8e2a8e; } .trilha.proj { border-top-color: var(--accent); } .trilha.ref { border-top-color: #b8860b; }
 
 @media (max-width: 600px) {
   dl.anatomy { grid-template-columns: 1fr; gap: 2px; }
