@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Substituição de Processo — &lt;(cmd) e &gt;(cmd) | Guia Bash</title>
+<meta name="description" content="Substituição de processo no Bash: &lt;(cmd) e &gt;(cmd), /dev/fd/63, diff de duas saídas, while read com &lt; &lt;( ), tee para vários destinos, quando não funciona e a comparação com pipes e arquivos temporários.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Substituição de Processo</span></h1>
+
+<p class="intro">Alguns comandos só aceitam <strong>nomes de arquivo</strong>: o <code>diff</code> quer dois, o <code>paste</code> quer vários. Mas às vezes o que você quer comparar é a <strong>saída de dois comandos</strong>. A substituição de processo, <code>&lt;(comando)</code>, faz a saída de um comando parecer um arquivo. Sem arquivo temporário, sem faxina depois.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é <code>&lt;(comando)</code> e por que <code>echo &lt;(true)</code> mostra <code>/dev/fd/63</code>.</li>
+  <li>Comparar e juntar saídas de comandos com <code>diff</code>, <code>comm</code> e <code>paste</code>.</li>
+  <li>Ler linhas com <code>while read … done &lt; &lt;(comando)</code> sem perder as variáveis.</li>
+  <li>Mandar a mesma saída para vários comandos com <code>tee &gt;(…) &gt;(…)</code>.</li>
+  <li>Quando ela não funciona (<code>sh</code>, variáveis, ordem das saídas) e quando usar pipe ou arquivo temporário.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: comparar duas saídas</h2>
+<p>A professora da Ana tem a lista oficial da turma em <code>Documentos/alunos.csv</code> e uma lista de chamada que ela digitou, <code>chamada.txt</code>. Ela quer saber quem está numa lista e não está na outra. O <code>diff</code> compara <strong>dois arquivos</strong>. Só que a lista oficial precisa ser tratada antes: tirar o cabeçalho (<code>tail -n +2</code>), pegar só o nome (<code>cut -d, -f1</code>) e ordenar (<code>sort</code>).</p>
+
+<p>O jeito "à moda antiga" é gravar cada saída num arquivo temporário, comparar e apagar:</p>
+
+<p>Para acompanhar, crie a lista de chamada (ela tem um aluno a mais, o Fabio):</p>
+
+<pre class="term" data-cwd="~/Documentos">$ printf 'Ana\nBruno\nCarla\nDiego\nElisa\nFabio\n' &gt; chamada.txt
+$ tail -n +2 alunos.csv | cut -d, -f1 | sort &gt; /tmp/oficial.txt
+$ sort chamada.txt &gt; /tmp/chamada.txt
+$ diff /tmp/oficial.txt /tmp/chamada.txt
+5a6
+&gt; Fabio
+$ rm /tmp/oficial.txt /tmp/chamada.txt</pre>
+
+<p>Funciona, mas são quatro comandos, dois arquivos para inventar nome e um <code>rm</code> que é fácil esquecer. Com a substituição de processo, é uma linha só:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ diff &lt;(tail -n +2 alunos.csv | cut -d, -f1 | sort) &lt;(sort chamada.txt)
+5a6
+&gt; Fabio</pre>
+
+<p>Antes de entender essa linha, vamos ver o que o <code>&lt;( )</code> realmente é.</p>
+
+<hr>
+
+<h2>O que é <code>&lt;(comando)</code></h2>
+<p>O nome em inglês é <em>process substitution</em>: o Bash <strong>substitui</strong> o trecho <code>&lt;(comando)</code> por um <strong>nome de arquivo</strong>. Atrás desse nome há um cano (um <em>pipe</em>) ligado à saída do comando. Quem abrir esse "arquivo" e ler vai receber o que o comando escreveu.</p>
+
+<p>A melhor forma de ver isso é pedir ao <code>echo</code> para mostrar a palavra depois da substituição:</p>
+
+<pre class="term">$ echo &lt;(true)
+/dev/fd/63                          « o &lt;(true) virou um nome de arquivo
+$ echo &lt;(true) &lt;(true)
+/dev/fd/63 /dev/fd/62               « cada &lt;( ) ganha o seu
+$ ls -l &lt;(true)
+lr-x------ 1 ana ana 64 out 16 09:46 /dev/fd/63 -&gt; pipe:[115729]</pre>
+
+<p>Leia a saída assim:</p>
+<ul>
+  <li><code>/dev/fd/63</code> quer dizer "o descritor de arquivo número 63 deste processo". <em>fd</em> vem de <em>file descriptor</em>. Os números 0, 1 e 2 você já conhece (entrada, saída e erro); o Bash usa números altos, a partir de 63 e descendo, para não colidir com os seus. Veja <a href="descritores.html">Descritores de Arquivo</a>.</li>
+  <li>O <code>ls -l</code> mostra que esse "arquivo" é um link para <code>pipe:[115729]</code>: um cano anônimo, o mesmo tipo de cano que o <code>|</code> cria. O número entre colchetes muda a cada vez.</li>
+  <li>O <code>echo</code> não lê o arquivo, só imprime o nome. Para ver o conteúdo, alguém tem que <strong>abrir e ler</strong>:</li>
+</ul>
+
+<pre class="term">$ cat &lt;(echo "olá de dentro")
+olá de dentro</pre>
+
+<dl class="anatomy">
+  <dt>cat</dt><dd>Um comando que recebe <strong>nomes de arquivo</strong> como argumento.</dd>
+  <dt>&lt;(</dt><dd>Abre a substituição de processo. O <code>&lt;</code> e o <code>(</code> ficam <strong>colados</strong>, sem espaço.</dd>
+  <dt>echo "olá de dentro"</dt><dd>O comando que roda "por trás", em paralelo. A saída dele vai para o cano.</dd>
+  <dt>)</dt><dd>Fecha. No lugar de tudo isso, o <code>cat</code> recebe <code>/dev/fd/63</code>.</dd>
+</dl>
+
+<p>O <code>cat</code> nunca viu os parênteses: para ele, foi chamado como <code>cat /dev/fd/63</code>. O comando de dentro roda num <a href="subshell.html">subshell</a>, ao mesmo tempo que o <code>cat</code>.</p>
+
+<h3>Arquivo com nome × entrada sem nome</h3>
+<p>Repare na diferença entre passar o "arquivo" como argumento e redirecionar a entrada:</p>
+
+<pre class="term">$ wc -l &lt;(sort frutas.txt)
+7 /dev/fd/63                        « o wc recebeu um NOME (e mostra esse nome)
+$ wc -l &lt; &lt;(sort frutas.txt)
+7                                   « o wc recebeu só o conteúdo pela entrada</pre>
+
+<p>A segunda forma junta duas coisas: o <code>&lt;</code> de sempre (<a href="redirecionamento.html">redirecionar a entrada</a>) e, depois de um espaço, o <code>&lt;(…)</code>. Ela vai ser a chave do <code>while read</code>, mais abaixo.</p>
+
+<hr>
+
+<h2>Comparar saídas: <code>diff &lt;( ) &lt;( )</code></h2>
+<p>Agora a linha da professora, por partes:</p>
+
+<dl class="anatomy">
+  <dt>diff</dt><dd>Compara dois arquivos linha a linha e mostra o que muda do primeiro para o segundo.</dd>
+  <dt>&lt;(tail -n +2 alunos.csv | cut -d, -f1 | sort)</dt><dd>Primeiro "arquivo": os nomes da lista oficial, sem o cabeçalho, em ordem. Dentro do <code>&lt;( )</code> cabe um pipe inteiro.</dd>
+  <dt>&lt;(sort chamada.txt)</dt><dd>Segundo "arquivo": a chamada em ordem. O <code>diff</code> só funciona bem com as duas listas ordenadas do mesmo jeito.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ cat chamada.txt
+Ana
+Bruno
+Carla
+Diego
+Elisa
+Fabio
+$ diff &lt;(tail -n +2 alunos.csv | cut -d, -f1 | sort) &lt;(sort chamada.txt)
+5a6                                 « depois da linha 5 do 1º, acrescente (a) a linha 6 do 2º
+&gt; Fabio                             « &gt; = está só no segundo "arquivo"
+$ echo $?
+1                                   « 1 = os arquivos são diferentes</pre>
+
+<p>O <code>diff</code> não sabe que leu de comandos: ele simplesmente abriu <code>/dev/fd/63</code> e <code>/dev/fd/62</code>. Os códigos de saída do <code>diff</code> são: <strong>0</strong> iguais, <strong>1</strong> diferentes, <strong>2</strong> deu erro. Isso permite usar a comparação num <code>if</code> ou com <a href="operadores.html"><code>&amp;&amp;</code> e <code>||</code></a>:</p>
+
+<pre class="term">$ diff &lt;(sort frutas.txt) &lt;(sort -u frutas.txt) &gt; /dev/null &amp;&amp; echo iguais || echo diferentes
+diferentes
+$ cmp &lt;(sort frutas.txt) &lt;(sort frutas.txt) &amp;&amp; echo "mesmo conteúdo"
+mesmo conteúdo</pre>
+
+<p>No primeiro, a lista com repetições (<code>sort</code>) é comparada com a lista sem repetições (<code>sort -u</code>); o <code>&gt; /dev/null</code> esconde o relatório e só o código de saída importa. O <code>cmp</code> é um comparador mais simples: não diz <em>o que</em> mudou, só se mudou.</p>
+
+<h3>Só o que difere: <code>comm</code></h3>
+<p>O <code>comm</code> (de <em>common</em>, "em comum") também quer dois arquivos ordenados. Ele mostra três colunas: só no 1º, só no 2º, nos dois. A opção <code>-3</code> esconde a terceira coluna, a dos nomes em comum:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ comm -3 &lt;(tail -n +2 alunos.csv | cut -d, -f1 | sort) &lt;(sort chamada.txt)
+	Fabio                           « o TAB na frente = 2ª coluna (só na chamada)</pre>
+
+<h3>Juntar colunas: <code>paste &lt;( ) &lt;( )</code></h3>
+<p>O <code>paste</code> cola arquivos lado a lado, linha 1 com linha 1, linha 2 com linha 2. Com substituição de processo você monta uma tabela a partir de pedaços de outros comandos:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ paste &lt;(cut -d, -f1 alunos.csv) &lt;(cut -d, -f4 alunos.csv)
+nome	nota
+Ana	9.5
+Bruno	7.0
+Carla	8.5
+Diego	6.0
+Elisa	10.0
+$ paste -d' ' &lt;(seq 3) &lt;(printf 'a\nb\nc\n')
+1 a
+2 b
+3 c</pre>
+
+<p>A primeira tabela pegou a coluna 1 (nome) e a 4 (nota) e juntou com TAB, o separador padrão do <code>paste</code>. Na segunda, <code>-d' '</code> troca o separador por um espaço.</p>
+
+<hr>
+
+<h2>Ler linhas sem perder as variáveis: <code>done &lt; &lt;(comando)</code></h2>
+<p>Este é o uso mais comum em scripts. Quer contar quantas linhas um comando produz, guardando o total numa variável? A primeira ideia é um pipe para o <code>while</code>. Veja o que acontece:</p>
+
+<pre class="term">$ total=0
+$ cat frutas.txt | while read -r f; do total=$((total+1)); done
+$ echo "total: $total"
+total: 0                            « contou 7 vezes… e o total sumiu!</pre>
+
+<p><strong>Por quê?</strong> Cada lado de um pipe roda num <a href="subshell.html">subshell</a>, uma cópia do shell. O <code>while</code> somou na <strong>cópia</strong>, e a cópia morreu no fim do pipe. O <code>total</code> do seu shell continuou 0.</p>
+
+<p>Com a substituição de processo, quem roda em paralelo é o comando que <em>produz</em> as linhas; o <code>while</code> fica no shell atual:</p>
+
+<pre class="term">$ total=0
+$ while read -r f; do total=$((total+1)); done &lt; &lt;(cat frutas.txt)
+$ echo "total: $total"
+total: 7                            « agora sim</pre>
+
+<dl class="anatomy">
+  <dt>while read -r f; do …; done</dt><dd>O laço que lê uma linha por volta (veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>). Roda no shell atual.</dd>
+  <dt>&lt;</dt><dd>Redireciona a entrada do laço inteiro…</dd>
+  <dt>&lt;(cat frutas.txt)</dt><dd>…para o "arquivo" ligado à saída do comando. Entre os dois <code>&lt;</code> há <strong>um espaço obrigatório</strong>.</dd>
+</dl>
+
+<p>Para ler uma linha só, a mesma ideia funciona com <code>read</code> sozinho:</p>
+
+<pre class="term">$ read -r primeira &lt; &lt;(sort frutas.txt)
+$ echo "$primeira"
+banana</pre>
+
+<div class="tip">
+<strong>Outras saídas para o mesmo problema</strong>
+<p>Se a lista vem de um arquivo, basta <code>done &lt; arquivo</code>. Se vem de uma variável, use uma here-string: <code>done &lt;&lt;&lt; "$texto"</code> (veja <a href="heredoc.html">Here-docs e Here-strings</a>). E em scripts dá para pedir ao Bash que rode o último comando do pipe no shell atual, com <code>shopt -s lastpipe</code> (veja <a href="subshell.html">Subshells e Grupos</a>).</p>
+</div>
+
+<hr>
+
+<h2>O outro sentido: <code>&gt;(comando)</code></h2>
+<p>O <code>&gt;(comando)</code> também vira um nome de arquivo, mas ao contrário: quem <strong>escrever</strong> nele está mandando texto para a <strong>entrada</strong> do comando. Ele brilha com o <code>tee</code>, que copia a entrada para vários arquivos ao mesmo tempo (veja <a href="pipes.html">Pipes</a>).</p>
+
+<p>A Ana quer, numa passada só, guardar a lista ordenada compactada <strong>e</strong> saber quantas linhas ela tem:</p>
+
+<pre class="term">$ sort frutas.txt | tee &gt;(gzip &gt; frutas.gz) &gt;(wc -l) &gt; /dev/null
+7
+$ ls -l frutas.gz
+-rw-rw-r-- 1 ana ana 48 out 16 09:46 frutas.gz
+$ zcat frutas.gz
+banana
+banana
+banana
+laranja
+maçã
+maçã
+uva</pre>
+
+<dl class="anatomy">
+  <dt>sort frutas.txt |</dt><dd>Produz a lista ordenada e manda para o <code>tee</code>.</dd>
+  <dt>tee</dt><dd>Copia o que recebe para cada arquivo dado e também para a saída.</dd>
+  <dt>&gt;(gzip &gt; frutas.gz)</dt><dd>1º "arquivo": a entrada do <code>gzip</code>, que compacta e grava em <code>frutas.gz</code>.</dd>
+  <dt>&gt;(wc -l)</dt><dd>2º "arquivo": a entrada do <code>wc -l</code>, que conta e escreve <code>7</code> na tela.</dd>
+  <dt>&gt; /dev/null</dt><dd>A saída normal do <code>tee</code> não interessa aqui: vai para o lixo.</dd>
+</dl>
+
+<p>O <code>7</code> na tela veio do <code>wc -l</code>; o <code>frutas.gz</code> tem 48 bytes, e o <code>zcat</code> (o <code>cat</code> que descompacta) prova que a lista está lá dentro.</p>
+
+<hr>
+
+<h2>Cuidado: o comando de dentro corre em paralelo</h2>
+<p>O Bash <strong>não espera</strong> o comando de um <code>&gt;(…)</code> terminar. Ele dispara o processo e segue em frente. Num terminal de verdade, isso pode fazer a saída aparecer <strong>depois</strong> do prompt:</p>
+
+<pre class="term">$ echo "fim" &gt; &gt;(sleep 1; cat)
+$ fim                                « não é um comando: o prompt voltou e o "fim" chegou 1 s depois, grudado nele
+
+$ echo "fim" &gt; &gt;(sleep 1; cat); wait $!
+fim                                  « com wait $!, o Bash espera o processo
+$ echo pronto
+pronto</pre>
+
+<p>O <code>$!</code> guarda o número (PID) do último processo lançado em segundo plano, e uma substituição de processo conta como tal. O <code>wait $!</code> espera por ele (veja <a href="jobs.html">Jobs</a>). Em scripts, isso importa quando a linha seguinte <strong>usa o resultado</strong> do <code>&gt;( )</code>, por exemplo lendo o arquivo que ele gravou:</p>
+
+<pre class="term">$ seq 5 | tee &gt;(wc -l &gt; linhas.txt) | tail -n 1
+5
+$ cat linhas.txt
+5                                   « deu tempo aqui, mas não há garantia</pre>
+
+<p>Nesse caso o <code>wc</code> é rápido e o arquivo já estava pronto. Com um comando lento, o <code>cat linhas.txt</code> poderia ler o arquivo vazio. Na dúvida: <code>wait $!</code> antes de usar o resultado.</p>
+
+<hr>
+
+<h2>Formas diferentes de ligar comandos</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Vantagens</th><th>Limites</th></tr>
+<tr><td>Pipe <code>|</code></td><td><code>sort a | uniq -c</code></td><td>Simples, funciona em qualquer shell (POSIX).</td><td>Só uma entrada por comando; o lado direito roda em subshell (variáveis se perdem).</td></tr>
+<tr><td><code>&lt;(cmd)</code></td><td><code>diff &lt;(sort a) &lt;(sort b)</code></td><td>Várias "entradas" com nome; sem arquivo para apagar.</td><td>Só no Bash/zsh/ksh; o "arquivo" só pode ser lido uma vez, do começo ao fim.</td></tr>
+<tr><td><code>&lt; &lt;(cmd)</code></td><td><code>while read …; done &lt; &lt;(cmd)</code></td><td>O laço fica no shell atual: as variáveis sobrevivem.</td><td>Só no Bash; o código de saída de <code>cmd</code> se perde.</td></tr>
+<tr><td><code>&gt;(cmd)</code></td><td><code>tee &gt;(gzip &gt; x.gz) &gt;(wc -l)</code></td><td>Uma saída alimentando vários comandos.</td><td>Roda em paralelo: a ordem das saídas não é garantida.</td></tr>
+<tr><td>Arquivo temporário</td><td><code>t=$(mktemp); sort a &gt; "$t"</code></td><td>Pode ser lido várias vezes, em qualquer ordem; funciona no <code>sh</code>.</td><td>Precisa apagar (<code>rm</code>, de preferência num <a href="trap.html"><code>trap</code></a>); ocupa disco.</td></tr>
+</table>
+</div>
+
+<p><strong>Qual usar?</strong> Uma entrada só, de um comando para outro: <strong>pipe</strong>. O comando quer <strong>nomes de arquivo</strong> e você tem saídas de comandos: <strong><code>&lt;( )</code></strong>. Laço que precisa guardar variáveis: <strong><code>done &lt; &lt;( )</code></strong>. O programa precisa ler o arquivo mais de uma vez, ou o script tem que rodar no <code>sh</code>: <strong>arquivo temporário</strong>.</p>
+
+<hr>
+
+<h2>Experimente</h2>
+
+<div class="try" data-setup="printf 'uva\nbanana\nkiwi\n' &gt; feira.txt" data-goal="ran:diff.*&lt;\(.*&lt;\(,out:kiwi" data-solucao="diff &lt;(sort -u frutas.txt) &lt;(sort feira.txt)">
+<p class="try-task"><strong>Missão:</strong> a Ana anotou em <code>feira.txt</code> o que comprou hoje. Compare, com <strong>um único</strong> <code>diff</code> e duas substituições de processo, a lista <code>frutas.txt</code> <strong>sem repetições</strong> (<code>sort -u</code>) com a <code>feira.txt</code> ordenada. Qual fruta é novidade?</p>
+</div>
+
+<p>Resposta esperada: o <code>diff</code> mostra <code>laranja</code> e <code>maçã</code> com <code>&lt;</code> (só na lista antiga) e <code>kiwi</code> com <code>&gt;</code> (só na feira), e o código de saída é 1.</p>
+
+<div class="tryscript" data-file="conta.sh" data-goal="out:Total: 3,src:&lt; &lt;\(">
+<p class="try-task"><strong>Missão:</strong> este script conta as bananas, mas termina dizendo <code>Total: 0</code>. Reescreva para que o <code>while</code> leia de <code>&lt; &lt;(grep banana frutas.txt)</code> e o total certo (3) apareça.</p>
+<pre class="script">#!/usr/bin/env bash
+total=0
+grep banana frutas.txt | while read -r fruta; do
+  echo "achei: $fruta"
+  total=$((total + 1))
+done
+echo "Total: $total"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+total=0
+while read -r fruta; do
+  echo "achei: $fruta"
+  total=$((total + 1))
+done &lt; &lt;(grep banana frutas.txt)
+echo "Total: $total"
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Syntax error: "(" unexpected</strong>
+<pre class="term">$ sh compara.sh
+compara.sh: 2: Syntax error: "(" unexpected
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> o script usa <code>&lt;( )</code>, mas foi rodado com <code>sh</code>. No Debian e no Ubuntu, <code>sh</code> é o <code>dash</code>, que segue o padrão POSIX e não conhece substituição de processo. O formato da mensagem (<code>arquivo: linha: …</code>, em inglês) já entrega que não foi o Bash.</p>
+<p><strong>Como resolver:</strong> rode com <code>bash compara.sh</code>, ou dê permissão e rode <code>./compara.sh</code> com a primeira linha <code>#!/usr/bin/env bash</code> (veja <a href="executar.html">Formas de Executar</a>). Se o script <em>precisa</em> ser POSIX, troque por arquivos temporários (veja <a href="portabilidade.html">POSIX sh e Bashismos</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>erro de sintaxe próximo ao token inesperado</strong>
+<pre class="term">$ while read -r l; do echo "$l"; done &lt;&lt;(echo a)
+bash: erro de sintaxe próximo ao token inesperado `('
+$ while read -r l; do echo "$l"; done &lt; &lt; (echo a)
+bash: erro de sintaxe próximo ao token inesperado `&lt;'</pre>
+<p><strong>O que aconteceu:</strong> no primeiro, os dois <code>&lt;</code> colados viraram <code>&lt;&lt;</code>, o começo de um here-doc. No segundo, sobrou um espaço entre <code>&lt;</code> e <code>(</code>, então o <code>&lt;(</code> deixou de existir.</p>
+<p><strong>Como resolver:</strong> a regra é <strong>espaço entre os dois <code>&lt;</code>, nenhum espaço entre <code>&lt;</code> e <code>(</code></strong>: <code>done &lt; &lt;(echo a)</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"/dev/fd/63: Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ arq=&lt;(echo oi)
+$ echo $arq
+/dev/fd/63
+$ cat $arq
+cat: /dev/fd/63: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o cano só existe <strong>durante o comando</strong> em que o <code>&lt;( )</code> aparece. Guardado numa variável, sobrou só o nome; quando o <code>cat</code> rodou, o descritor 63 já tinha sido fechado.</p>
+<p><strong>Como resolver:</strong> use o <code>&lt;( )</code> direto no comando que vai ler: <code>cat &lt;(echo oi)</code>. Se precisa do conteúdo mais tarde, guarde o <strong>texto</strong> (<code>txt=$(echo oi)</code>, veja <a href="substituicao-comando.html">Substituição de Comando</a>) ou grave um arquivo de verdade.</p>
+</div>
+
+<div class="cenario">
+<strong>O comando de dentro falhou, mas <code>$?</code> é 0</strong>
+<pre class="term">$ cat &lt;(ls nada)
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+$ echo $?
+0                                   « é o código do cat, não do ls
+$ wait $!; echo $?
+2                                   « este sim é o código do ls</pre>
+<p><strong>O que aconteceu:</strong> o <code>$?</code> é sempre do comando de fora. O <code>cat</code> leu um "arquivo" vazio e terminou bem. Nem o <code>set -e</code> nem o <code>pipefail</code> enxergam o erro do comando de dentro.</p>
+<p><strong>Como confirmar e resolver:</strong> logo depois, <code>wait $!</code> devolve o código do último <code>&lt;( )</code>/<code>&gt;( )</code> lançado, como acima. Quando o erro importa de verdade, gere a saída antes (<code>lista=$(ls nada) || exit 1</code>) ou use um arquivo temporário e confira cada passo.</p>
+</div>
+
+<div class="cenario">
+<strong>A saída aparece embaralhada ou depois do prompt</strong>
+<p><strong>O que aconteceu:</strong> o comando dentro de <code>&gt;( )</code> roda em paralelo, e o Bash não o espera. Com vários <code>&gt;( )</code>, cada um escreve quando termina.</p>
+<p><strong>Como resolver:</strong> mande cada <code>&gt;( )</code> para um arquivo próprio (<code>&gt;(wc -l &gt; linhas.txt)</code>) e, antes de usar os resultados, <code>wait $!</code> (espera o último) ou um <code>sleep</code> curto só para testes. Para muitos processos em paralelo, veja <a href="paralelo.html">Rodar em Paralelo</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>&lt;(cmd)</code></td><td>Vira um nome de arquivo (<code>/dev/fd/N</code>) cuja leitura entrega a saída de <code>cmd</code></td><td><code>diff &lt;(sort a) &lt;(sort b)</code></td></tr>
+<tr><td><code>&gt;(cmd)</code></td><td>Vira um nome de arquivo cuja escrita vai para a entrada de <code>cmd</code></td><td><code>tee &gt;(wc -l) &gt; /dev/null</code></td></tr>
+<tr><td><code>&lt; &lt;(cmd)</code></td><td>Redireciona a entrada a partir da saída de <code>cmd</code>, sem pipe</td><td><code>while read -r l; do …; done &lt; &lt;(cmd)</code></td></tr>
+<tr><td><code>&gt; &gt;(cmd)</code></td><td>Redireciona a saída para a entrada de <code>cmd</code></td><td><code>echo oi &gt; &gt;(tr a-z A-Z)</code></td></tr>
+<tr><td><code>wait $!</code></td><td>Espera a última substituição de processo e devolve o código dela</td><td><code>cmd &gt; &gt;(lento); wait $!</code></td></tr>
+<tr><td><code>paste &lt;( ) &lt;( )</code></td><td>Cola saídas lado a lado</td><td><code>paste &lt;(seq 3) &lt;(seq 4 6)</code></td></tr>
+<tr><td><code>comm -3 &lt;( ) &lt;( )</code></td><td>Mostra só o que está em uma das listas (ordenadas)</td><td><code>comm -3 &lt;(sort a) &lt;(sort b)</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Comparar duas pastas</h3>
+<p>Complete para comparar a lista de arquivos de <code>Documentos</code> com a de <code>Downloads</code>, sem arquivos temporários:</p>
+<div class="ex-code">diff <input data-answer="&lt;(ls Documentos)" aria-label="primeira lista"> <input data-answer="&lt;(ls Downloads)" aria-label="segunda lista"></div>
+</div>
+
+<div class="exercise">
+<h3>2. O laço que guarda o total</h3>
+<p>Complete o final do laço para que ele leia a saída de <code>grep -v '^#' config</code> e as variáveis continuem valendo depois do <code>done</code>:</p>
+<div class="ex-code">while read -r linha; do n=$((n+1)); done <input data-answer="&lt; &lt;(grep -v '^#' config)|&lt; &lt;(grep -v &quot;^#&quot; config)" aria-label="redirecionamento"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. O que o comando <code>echo &lt;(true)</code> mostra?</p>
+<label><input type="radio" name="q3"> Nada, porque o <code>true</code> não escreve nada.</label>
+<label><input type="radio" name="q3"> <code>true</code></label>
+<label><input type="radio" name="q3"> Um nome de arquivo, como <code>/dev/fd/63</code>.</label>
+<label><input type="radio" name="q3"> Um erro de sintaxe.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Um script com <code>diff &lt;(sort a) &lt;(sort b)</code> funciona com <code>bash script.sh</code>, mas <code>sh script.sh</code> dá <code>Syntax error: "(" unexpected</code>. Por quê?</p>
+<label><input type="radio" name="q4"> Falta permissão de execução.</label>
+<label><input type="radio" name="q4"> O <code>sh</code> do Debian/Ubuntu é o <code>dash</code>, que não tem substituição de processo.</label>
+<label><input type="radio" name="q4"> O <code>diff</code> não aceita dois argumentos no <code>sh</code>.</label>
+<label><input type="radio" name="q4"> Os arquivos <code>a</code> e <code>b</code> não existem.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Depois de <code>cat arquivo | while read -r l; do n=$((n+1)); done</code>, o <code>n</code> continua vazio. Qual mudança resolve?</p>
+<label><input type="radio" name="q5"> Trocar para <code>while read -r l; do n=$((n+1)); done &lt; &lt;(cat arquivo)</code>.</label>
+<label><input type="radio" name="q5"> Trocar <code>read -r</code> por <code>read</code>.</label>
+<label><input type="radio" name="q5"> Colocar <code>export n</code> antes do laço.</label>
+<label><input type="radio" name="q5"> Trocar para <code>done &lt;&lt;(cat arquivo)</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>&lt;(cmd)</code> é trocado por um nome de arquivo (<code>/dev/fd/63</code>…) ligado à saída de <code>cmd</code>; <code>&gt;(cmd)</code>, a um arquivo que alimenta a entrada de <code>cmd</code>.</li>
+  <li>Use quando um comando quer <strong>nomes de arquivo</strong>: <code>diff</code>, <code>comm</code>, <code>paste</code>, <code>tee</code>.</li>
+  <li><code>while read …; done &lt; &lt;(cmd)</code> mantém o laço no shell atual, e as variáveis sobrevivem. Espaço entre os <code>&lt;</code>, nenhum antes do <code>(</code>.</li>
+  <li>O comando de dentro roda em paralelo: o <code>$?</code> não é dele, e a ordem das saídas não é garantida (<code>wait $!</code> ajuda).</li>
+  <li>É recurso do Bash: no <code>sh</code>/<code>dash</code> dá <code>Syntax error</code>. Lá, use arquivos temporários.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
