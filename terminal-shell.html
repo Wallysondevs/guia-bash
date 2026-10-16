@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Terminal, Shell e Console — qual é a diferença | Guia Bash</title>
+<meta name="description" content="Terminal, shell, console, TTY e prompt: o que é cada um, programas de terminal no Linux, macOS e Windows, como descobrir qual shell você está usando (echo $0, $SHELL, ps -p $$) e como trocar o shell padrão.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Terminal, Shell e Console</span></h1>
+
+<p class="intro">"Abra o terminal", "rode no shell", "digite no console", "olhe o prompt": tutoriais usam essas palavras como se fossem a mesma coisa. Não são. Nesta aula você vai separar cada uma, descobrir qual shell está usando e ver como trocar o shell padrão.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre <strong>terminal</strong>, <strong>shell</strong>, <strong>console</strong>, <strong>TTY</strong> e <strong>prompt</strong>.</li>
+  <li>Qual programa de terminal abrir no Linux, no macOS e no Windows.</li>
+  <li>Três formas de descobrir qual shell você está usando: <code>echo $0</code>, <code>echo $SHELL</code> e <code>ps -p $$</code>.</li>
+  <li>A ideia de shell de login e shell interativo.</li>
+  <li>Como trocar o shell padrão com <code>chsh</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Cinco nomes, cinco coisas</h2>
+<p>Pense num telefonema. O <strong>aparelho</strong> só leva a sua voz e traz a resposta: ele não entende nada. Quem entende é a <strong>pessoa</strong> do outro lado da linha. No computador é igual: o <strong>terminal</strong> é o aparelho e o <strong>shell</strong> é quem atende.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>O que é</th><th>Exemplo</th></tr>
+<tr><td><strong>Terminal</strong> (ou emulador de terminal)</td><td>O programa com a janela onde você digita. Ele desenha as letras, as cores e entrega o que você digitou ao shell.</td><td>GNOME Terminal, Konsole, Terminal do macOS, Windows Terminal</td></tr>
+<tr><td><strong>Shell</strong></td><td>O programa que <strong>entende</strong> os comandos e manda executar. Roda "dentro" do terminal.</td><td>Bash, zsh, fish, <code>sh</code></td></tr>
+<tr><td><strong>Console</strong></td><td>O terminal "de verdade" do computador, em tela cheia, sem interface gráfica. Hoje também se usa "console" como sinônimo de terminal.</td><td>A tela preta que aparece com <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> no Linux</td></tr>
+<tr><td><strong>TTY</strong></td><td>De <em>teletypewriter</em>, "teletipo": as máquinas de escrever ligadas a computadores nos anos 1970. Hoje é o nome do dispositivo que liga terminal e shell.</td><td><code>/dev/pts/0</code>, <code>/dev/tty3</code></td></tr>
+<tr><td><strong>Prompt</strong></td><td>O texto que o shell mostra quando está pronto para o próximo comando.</td><td><code>ana@notebook:~$</code></td></tr>
+</table>
+</div>
+
+<p>Então, quando você abre o "Terminal", na verdade abre <strong>dois</strong> programas: o terminal (a janela) e, dentro dele, um shell (quase sempre o Bash). Se você trocar o shell, a janela continua a mesma. Se trocar o programa de terminal, o Bash continua o mesmo.</p>
+
+<h3>O TTY da sua janela</h3>
+<p>Cada janela de terminal recebe um dispositivo próprio. O comando <code>tty</code> mostra qual é:</p>
+
+<pre class="term">$ tty
+/dev/pts/0                         « pts = pseudoterminal; 0 = a primeira janela aberta</pre>
+
+<p>"Pseudo" porque não existe uma máquina de escrever ligada ao computador: é um programa (o terminal) fingindo ser uma. Nos consoles de tela cheia do Linux, o nome seria <code>/dev/tty3</code>, <code>/dev/tty4</code>… O <code>tty</code> é um programa do GNU coreutils; o terminal simulado deste guia não o conhece.</p>
+
+<hr>
+
+<h2>Programas de terminal em cada sistema</h2>
+<p>O shell é quase sempre o Bash; o que muda de um sistema para outro é o programa de terminal e o jeito de abri-lo:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Programa de terminal</th><th>Como abrir</th><th>Shell que vem dentro</th></tr>
+<tr><td>Ubuntu, Debian, Fedora (GNOME)</td><td>Terminal (GNOME Terminal) ou Console (Ptyxis/kgx)</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>, ou procure "Terminal"</td><td>Bash</td></tr>
+<tr><td>Kubuntu, KDE</td><td>Konsole</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td><td>Bash</td></tr>
+<tr><td>Linux Mint, Xfce</td><td>Terminal do Xfce/Mint</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td><td>Bash</td></tr>
+<tr><td>macOS</td><td>Terminal (ou iTerm2)</td><td><kbd>Cmd</kbd>+<kbd>Espaço</kbd>, digite "Terminal"</td><td><strong>zsh</strong> (o Bash existe, mas é o antigo 3.2)</td></tr>
+<tr><td>Windows 10/11</td><td>Windows Terminal</td><td>Menu Iniciar → "Terminal"</td><td>PowerShell; abra uma aba "Ubuntu" (WSL) ou "Git Bash" para ter Bash</td></tr>
+<tr><td>Android</td><td>Termux</td><td>Instale pelo F-Droid</td><td>Bash</td></tr>
+</table>
+</div>
+
+<p>Há também terminais que você instala por gosto (Alacritty, Kitty, WezTerm, Tilix, Terminator): todos rodam o mesmo Bash. A aula <a href="onde-tem-bash.html">Bash em Cada Sistema</a> mostra como ter um Bash atualizado no macOS e no Windows.</p>
+
+<hr>
+
+<h2>Qual shell eu estou usando?</h2>
+<p>Antes de seguir um tutorial, vale confirmar que o shell é mesmo o Bash. Há três jeitos, e cada um responde uma pergunta um pouco diferente.</p>
+
+<h3>Forma 1: <code>echo $0</code></h3>
+<dl class="anatomy">
+  <dt>echo</dt><dd>Mostra na tela o que receber.</dd>
+  <dt>$0</dt><dd>Variável especial: o nome do programa que está rodando agora. Num terminal, é o nome do shell.</dd>
+</dl>
+
+<pre class="term">$ echo $0
+bash                               « o shell desta janela é o Bash</pre>
+
+<p>Em alguns sistemas a resposta é <code>-bash</code>, com um hífen na frente. O hífen é a marca de um <strong>shell de login</strong> (veja abaixo). Também é Bash. No zsh, a resposta seria <code>zsh</code> (ou <code>-zsh</code>).</p>
+
+<h3>Forma 2: <code>echo $SHELL</code></h3>
+<pre class="term">$ echo $SHELL
+/bin/bash                          « o shell PADRÃO da usuária, não necessariamente o atual</pre>
+
+<p>Cuidado: a variável <code>SHELL</code> não diz qual shell está rodando agora. Ela diz qual é o shell <strong>padrão</strong> da usuária, aquele que o sistema abre quando ela entra. Se a Ana rodar outro shell dentro do Bash, <code>$SHELL</code> continua dizendo <code>/bin/bash</code>. Veja, usando o <code>sh</code> para rodar dois comandos:</p>
+
+<pre class="term">$ sh -c 'echo $0; echo $SHELL'
+sh                                 « $0: quem está rodando é o sh
+/bin/bash                          « $SHELL: o padrão da Ana continua sendo o Bash</pre>
+
+<h3>Forma 3: <code>ps -p $$</code></h3>
+<p>A forma mais confiável é perguntar ao sistema qual programa está rodando com o número deste shell.</p>
+
+<dl class="anatomy">
+  <dt>ps</dt><dd>De <em>process status</em>: lista processos (programas em execução).</dd>
+  <dt>-p</dt><dd>Mostra só o processo com este número (<em>PID</em>, de <em>process ID</em>).</dd>
+  <dt>$$</dt><dd>Variável especial: o PID do shell atual.</dd>
+</dl>
+
+<pre class="term">$ ps -p $$
+    PID TTY          TIME CMD
+   3001 pts/0    00:00:00 bash     « CMD: o nome do programa; TTY: a janela dele</pre>
+
+<p>Leia as colunas: <code>PID</code> é o número do processo (no seu computador será outro), <code>TTY</code> é o mesmo <code>/dev/pts/0</code> que o <code>tty</code> mostrou, <code>TIME</code> é quanto tempo de processador ele já usou e <code>CMD</code> é o programa: <code>bash</code>.</p>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Responde</th><th>Melhor quando…</th></tr>
+<tr><td><code>echo $0</code></td><td>Nome do shell atual (como ele foi chamado)</td><td>Você quer uma resposta rápida.</td></tr>
+<tr><td><code>echo $SHELL</code></td><td>O shell <strong>padrão</strong> da conta</td><td>Você quer saber qual shell abre quando você entra, ou se o <code>chsh</code> funcionou.</td></tr>
+<tr><td><code>ps -p $$</code></td><td>O programa que realmente está rodando</td><td>Você quer ter certeza.</td></tr>
+<tr><td><code>echo $BASH_VERSION</code></td><td>A versão do Bash; vazio se não for Bash</td><td>Você quer saber se é Bash e qual versão.</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="ran:echo \$0,ran:\$SHELL,ran:ps -p" data-solucao="echo $0;;echo $SHELL;;ps -p $$">
+<p class="try-task"><strong>Missão:</strong> confirme, das três formas, que a Ana está usando o Bash: <code>echo $0</code>, <code>echo $SHELL</code> e <code>ps -p $$</code>.</p>
+</div>
+
+<hr>
+
+<h2>Shell dentro de shell</h2>
+<p>O Bash é um programa como outro qualquer, então você pode abrir um Bash dentro do Bash. A variável <code>SHLVL</code> (de <em>shell level</em>, "nível do shell") conta quantos estão empilhados:</p>
+
+<pre class="term">$ echo $SHLVL
+1                                  « o primeiro shell da janela
+$ bash                             « abre um Bash dentro do Bash (o prompt é igual!)
+$ echo $SHLVL
+2                                  « agora estamos um nível abaixo
+$ exit
+exit                               « sai do Bash de dentro e volta ao primeiro
+$ echo $SHLVL
+1</pre>
+
+<p>Repare que nada no prompt avisa que você entrou num segundo shell. Por isso, se um <code>exit</code> não fechar a janela, provavelmente havia um shell dentro do outro. O <code>exit</code> e o atalho <kbd>Ctrl</kbd>+<kbd>D</kbd> encerram o shell atual; veja <a href="primeiros-comandos.html">Primeiros Comandos</a>.</p>
+
+<hr>
+
+<h2>Shell de login e shell interativo</h2>
+<p>O Bash pode ser aberto de jeitos diferentes, e isso muda quais arquivos de configuração ele lê ao começar. Por enquanto, guarde só a ideia:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tipo</th><th>O que é</th><th>Quando acontece</th></tr>
+<tr><td><strong>Interativo</strong></td><td>Conversa com você: mostra prompt e espera comandos.</td><td>Toda janela de terminal.</td></tr>
+<tr><td><strong>Não interativo</strong></td><td>Só executa e termina, sem prompt.</td><td>Quando roda um script (<code>bash script.sh</code>).</td></tr>
+<tr><td><strong>De login</strong></td><td>O primeiro shell de uma sessão, aberto quando você "entra" no sistema.</td><td>Console de tela cheia, conexão por SSH, o Terminal do macOS.</td></tr>
+<tr><td><strong>Não de login</strong></td><td>Aberto quando você já estava dentro.</td><td>Uma janela nova do terminal no Linux, um <code>bash</code> digitado.</td></tr>
+</table>
+</div>
+
+<p>Dá para perguntar ao próprio Bash. O comando <code>shopt</code> mostra a opção <code>login_shell</code>, e a variável <code>$-</code> lista as opções ligadas; se tiver a letra <code>i</code>, o shell é interativo:</p>
+
+<pre class="term">$ shopt login_shell
+login_shell         	off          « esta janela não é shell de login
+$ echo $-
+himBHs                             « tem "i": é interativo
+$ bash -l -c "shopt login_shell"
+login_shell         	on           « -l pede um shell de login</pre>
+
+<p>Por que isso importa? Porque um shell de login lê o <code>~/.profile</code> (ou <code>~/.bash_profile</code>) e um interativo comum lê o <code>~/.bashrc</code>. É a explicação clássica para "coloquei no <code>.bashrc</code> e não funcionou pelo SSH". Os detalhes estão em <a href="inicializacao.html">Arquivos de Inicialização</a>.</p>
+
+<hr>
+
+<h2>Trocar o shell padrão: <code>chsh</code></h2>
+<p>O shell padrão de cada usuário fica anotado no arquivo <code>/etc/passwd</code>, no último campo da linha:</p>
+
+<pre class="term">$ grep ana /etc/passwd
+ana:x:1000:1000:Ana,,,:/home/ana:/bin/bash     « o último campo é o shell padrão</pre>
+
+<p>Só podem ser escolhidos os shells listados em <code>/etc/shells</code>:</p>
+
+<pre class="term">$ cat /etc/shells
+# /etc/shells: valid login shells
+/bin/sh
+/usr/bin/sh
+/bin/bash
+/usr/bin/bash
+/bin/rbash
+/usr/bin/rbash
+/usr/bin/dash
+/usr/bin/screen</pre>
+
+<p>Para trocar, use <code>chsh</code> (de <em>change shell</em>, "trocar o shell"). O exemplo abaixo é <strong>ilustrativo</strong>: ele pede a sua senha e só funciona se o zsh estiver instalado. O terminal simulado não tem <code>chsh</code>.</p>
+
+<dl class="anatomy">
+  <dt>chsh</dt><dd>Troca o shell padrão do usuário (grava no <code>/etc/passwd</code>).</dd>
+  <dt>-s</dt><dd>De <em>shell</em>: o caminho do novo shell vem a seguir.</dd>
+  <dt>/usr/bin/zsh</dt><dd>O shell escolhido. Precisa estar em <code>/etc/shells</code>.</dd>
+</dl>
+
+<pre class="term">$ chsh -s /usr/bin/zsh
+Senha:                             « a sua senha; nada aparece enquanto você digita
+$ echo $SHELL
+/bin/bash                          « ainda o antigo: a troca vale para o próximo login</pre>
+
+<p>A mudança só aparece quando você sair da sessão e entrar de novo. Para voltar ao Bash: <code>chsh -s /bin/bash</code>. No macOS, o mesmo comando troca o zsh pelo Bash; a aula <a href="onde-tem-bash.html">Bash em Cada Sistema</a> mostra como usar um Bash novo do Homebrew.</p>
+
+<div class="tip">
+<strong>Não precisa trocar o shell padrão para usar o Bash</strong>
+<p>Para experimentar, basta digitar <code>bash</code> dentro do shell atual (e <code>exit</code> para voltar). Para scripts, o que vale é a primeira linha do arquivo (<code>#!/usr/bin/env bash</code>), e não o seu shell padrão.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong><code>echo $SHELL</code> diz bash, mas os comandos não se comportam como no guia</strong>
+<pre class="term">$ echo $SHELL
+/bin/bash
+$ echo $0
+sh</pre>
+<p><strong>O que aconteceu:</strong> o shell padrão é o Bash, mas o que está rodando agora é outro (aqui, o <code>sh</code>). Uma pista: no <code>sh</code> o prompt costuma ser só <code>$ </code>, sem <code>ana@notebook:~</code> (o guia desenha todos os prompts do mesmo jeito). <code>$SHELL</code> não muda quando você abre outro shell.</p>
+<p><strong>Como confirmar:</strong> <code>ps -p $$</code> mostra o programa de verdade na coluna <code>CMD</code>.</p>
+<p><strong>Como resolver:</strong> digite <code>exit</code> para voltar ao shell anterior, ou <code>bash</code> para abrir um Bash.</p>
+</div>
+
+<div class="cenario">
+<strong><code>echo $BASH_VERSION</code> não mostra nada</strong>
+<pre class="term">$ echo $BASH_VERSION
+
+$ echo $?
+0                                  « o echo funcionou: só não havia nada para mostrar</pre>
+<p><strong>O que aconteceu:</strong> o <code>echo</code> mostrou uma linha vazia porque a variável não existe. Ela só existe dentro do Bash, então você está em outro shell (por exemplo, o zsh do macOS ou o <code>sh</code>). Repare que o código de saída é <code>0</code>: para o <code>echo</code>, mostrar uma linha vazia não é erro.</p>
+<p><strong>Como resolver:</strong> digite <code>bash</code> para entrar no Bash e repita.</p>
+</div>
+
+<div class="cenario">
+<strong>"is an invalid shell" no <code>chsh</code></strong>
+<p>Mensagem ilustrativa (o texto exato muda de sistema para sistema):</p>
+<pre class="term">$ chsh -s /usr/bin/fish
+chsh: /usr/bin/fish is an invalid shell</pre>
+<p><strong>O que aconteceu:</strong> o caminho não está em <code>/etc/shells</code>, ou o programa nem está instalado.</p>
+<p><strong>Como resolver:</strong> confira o caminho certo com <code>type -a fish</code> e se ele está em <code>cat /etc/shells</code>. Instalar pelo gerenciador de pacotes costuma acrescentar o shell à lista sozinho.</p>
+</div>
+
+<div class="cenario">
+<strong>Digitei <code>exit</code> e a janela não fechou</strong>
+<pre class="term">$ exit
+exit
+$                                  « ainda há um prompt</pre>
+<p><strong>O que aconteceu:</strong> havia um shell dentro de outro (você digitou <code>bash</code> antes). O <code>exit</code> fechou o de dentro.</p>
+<p><strong>Como confirmar:</strong> <code>echo $SHLVL</code> maior que 1 indica shells empilhados.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando / variável</th><th>O que mostra ou faz</th></tr>
+<tr><td><code>echo $0</code></td><td>Nome do shell atual (<code>-bash</code> = shell de login)</td></tr>
+<tr><td><code>echo $SHELL</code></td><td>Shell padrão da conta</td></tr>
+<tr><td><code>ps -p $$</code></td><td>O processo do shell atual; <code>$$</code> é o PID dele</td></tr>
+<tr><td><code>echo $BASH_VERSION</code></td><td>Versão do Bash (vazio em outro shell)</td></tr>
+<tr><td><code>echo $SHLVL</code></td><td>Quantos shells estão empilhados</td></tr>
+<tr><td><code>tty</code></td><td>O dispositivo do terminal (<code>/dev/pts/N</code>)</td></tr>
+<tr><td><code>shopt login_shell</code></td><td>Se o shell é de login (<code>on</code>/<code>off</code>)</td></tr>
+<tr><td><code>echo $-</code></td><td>Opções ligadas; <code>i</code> = interativo</td></tr>
+<tr><td><code>cat /etc/shells</code></td><td>Shells permitidos como padrão</td></tr>
+<tr><td><code>chsh -s CAMINHO</code></td><td>Troca o shell padrão (vale no próximo login)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. Você troca o GNOME Terminal pelo Konsole. O que muda?</p>
+<label><input type="radio" name="q1"> O shell deixa de ser o Bash.</label>
+<label><input type="radio" name="q1"> Só a janela (o programa de terminal); o shell continua o mesmo.</label>
+<label><input type="radio" name="q1"> Os comandos passam a ter outras opções.</label>
+<label><input type="radio" name="q1"> O <code>/etc/passwd</code> é alterado.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Qual comando responde com mais certeza qual programa de shell está rodando agora?</p>
+<label><input type="radio" name="q2"> <code>echo $SHELL</code></label>
+<label><input type="radio" name="q2"> <code>cat /etc/shells</code></label>
+<label><input type="radio" name="q2"> <code>ps -p $$</code></label>
+<label><input type="radio" name="q2"> <code>tty</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. <code>echo $0</code> respondeu <code>-bash</code>. O que o hífen quer dizer?</p>
+<label><input type="radio" name="q3"> Que é um shell de login.</label>
+<label><input type="radio" name="q3"> Que deu erro.</label>
+<label><input type="radio" name="q3"> Que não é o Bash.</label>
+<label><input type="radio" name="q3"> Que o Bash é antigo.</label>
+</div>
+
+<div class="exercise">
+<h3>4. O PID do shell</h3>
+<p>Complete para ver o processo do shell atual:</p>
+<div class="ex-code">ps -p <input data-answer="$$" aria-label="variável"></div>
+</div>
+
+<div class="exercise">
+<h3>5. Trocar o shell padrão</h3>
+<p>Complete para voltar o shell padrão para o Bash:</p>
+<div class="ex-code"><input data-answer="chsh" aria-label="comando"> -s /bin/bash</div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><strong>Terminal</strong> = a janela; <strong>shell</strong> = quem entende os comandos; <strong>console</strong> = o terminal de tela cheia; <strong>TTY</strong> = o dispositivo que liga os dois; <strong>prompt</strong> = o aviso de "pode digitar".</li>
+  <li><code>echo $0</code> mostra o shell atual, <code>echo $SHELL</code> o shell padrão, <code>ps -p $$</code> o processo de verdade.</li>
+  <li>Shells podem ficar um dentro do outro; <code>exit</code> fecha só o de dentro.</li>
+  <li>Shell de login e interativo leem arquivos de configuração diferentes (<a href="inicializacao.html">Inicialização</a>).</li>
+  <li><code>chsh -s</code> troca o shell padrão, que precisa estar em <code>/etc/shells</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

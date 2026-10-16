@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash em Cada Sistema — Linux, macOS, Windows (WSL, Git Bash) e Android | Guia Bash</title>
+<meta name="description" content="Onde tem Bash: Linux (já vem), macOS (Bash 3.2 antigo e zsh padrão; Bash novo pelo Homebrew), Windows (WSL, Git Bash, MSYS2) e Android (Termux). Como ver a versão com bash --version e tabela de versões por distribuição.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">em Cada Sistema</span></h1>
+
+<p class="intro">O Bash roda em quase todo lugar: em todo Linux, no macOS, no Windows e até no celular. Mas a versão muda, e às vezes muda muito. Nesta aula você vai descobrir como abrir o Bash no seu sistema, qual versão ele tem e o que fazer quando ela é antiga demais.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como ter o Bash no Linux, no macOS, no Windows (WSL, Git Bash, MSYS2) e no Android (Termux).</li>
+  <li>Por que o macOS traz um Bash de 2006 e usa o zsh como padrão.</li>
+  <li>Como ver a versão com <code>bash --version</code>, <code>$BASH_VERSION</code> e <code>BASH_VERSINFO</code>.</li>
+  <li>Qual versão vem em cada distribuição e o que o selo <span class="versao">bash 4.0+</span> deste guia quer dizer.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Qual versão eu tenho? <code>bash --version</code></h2>
+<p>Comece por aqui, em qualquer sistema. O próprio Bash informa a sua versão:</p>
+
+<dl class="anatomy">
+  <dt>bash</dt><dd>O programa Bash. Chamado assim, ele não abre um shell novo, porque recebe uma opção.</dd>
+  <dt>--version</dt><dd>Opção longa: "mostre a versão e saia".</dd>
+</dl>
+
+<pre class="term">$ bash --version
+GNU bash, versão 5.3.9(1)-release (x86_64-pc-linux-gnu)          « a linha que importa
+Copyright (C) 2025 Free Software Foundation, Inc.
+Licença GPLv3+: GNU GPL versão 3 ou posterior &lt;http://gnu.org/licenses/gpl.html&gt;
+
+Este é um software livre; você é livre para alterar e redistribuí-lo.
+Há NENHUMA GARANTIA, na extensão permitida pela lei.             « tradução literal de "There is NO WARRANTY"</pre>
+
+<p>Só a primeira linha interessa. Leia assim:</p>
+<dl class="anatomy">
+  <dt>5.3</dt><dd>A versão: 5 é a principal, 3 é a secundária. É o que o guia chama de "Bash 5.3".</dd>
+  <dt>.9</dt><dd>O número da correção (<em>patch</em>): consertos de erros, sem recursos novos.</dd>
+  <dt>(1)-release</dt><dd>Número de compilação e "versão de lançamento" (não é uma versão de teste).</dd>
+  <dt>x86_64-pc-linux-gnu</dt><dd>Para qual processador e sistema ele foi compilado. No Mac aparece <code>apple-darwin</code>; no Git Bash, <code>msys</code>.</dd>
+</dl>
+
+<h3>Outras formas: variáveis do próprio Bash</h3>
+<p>Dentro do Bash, a versão também está em duas variáveis. Elas dizem a versão do shell que está rodando <strong>agora</strong>, o que é útil se o computador tiver mais de um Bash instalado:</p>
+
+<pre class="term">$ echo $BASH_VERSION
+5.3.9(1)-release
+$ echo "${BASH_VERSINFO[@]}"
+5 3 9 1 release x86_64-pc-linux-gnu           « a mesma informação, separada em partes
+$ echo ${BASH_VERSINFO[0]}
+5                                             « só a versão principal</pre>
+
+<p><code>BASH_VERSINFO</code> é um <strong>array</strong> (uma variável com várias posições, numeradas a partir de 0; veja <a href="arrays.html">Arrays</a>). Scripts usam a posição 0 para recusar versões antigas:</p>
+
+<pre class="term">$ if (( BASH_VERSINFO[0] &gt;= 4 )); then echo "Bash novo o bastante"; fi
+Bash novo o bastante</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Mostra</th><th>Melhor quando…</th></tr>
+<tr><td><code>bash --version</code></td><td>A versão do <code>bash</code> que o sistema acha primeiro no <code>PATH</code></td><td>Você quer saber o que está instalado.</td></tr>
+<tr><td><code>echo $BASH_VERSION</code></td><td>A versão do shell em uso agora</td><td>Você quer saber em qual Bash está digitando.</td></tr>
+<tr><td><code>${BASH_VERSINFO[0]}</code></td><td>Só o número principal</td><td>Um script precisa decidir algo pela versão.</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="out:GNU bash" data-solucao="bash --version">
+<p class="try-task"><strong>Missão:</strong> descubra a versão do Bash da máquina da Ana com <code>bash --version</code>. Depois compare com <code>echo $BASH_VERSION</code>.</p>
+</div>
+
+<hr>
+
+<h2>Linux: já vem instalado</h2>
+<p>Em praticamente toda distribuição Linux de desktop ou servidor, o Bash já vem instalado e é o shell padrão. Abra o terminal (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> na maioria) e ele está lá. A única exceção comum é o <strong>Alpine Linux</strong> (muito usado em contêineres Docker), que vem só com o <code>ash</code> do BusyBox; lá, instale com <code>apk add bash</code>.</p>
+
+<h3>Versão por distribuição</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Bash</th><th>Observação</th></tr>
+<tr><td>Ubuntu 26.04 LTS</td><td><strong>5.3</strong></td><td>A versão deste guia.</td></tr>
+<tr><td>Fedora 43 ou mais novo</td><td><strong>5.3</strong></td><td></td></tr>
+<tr><td>Arch, Manjaro, openSUSE Tumbleweed</td><td><strong>5.3</strong></td><td>Sistemas "rolantes": sempre a mais nova.</td></tr>
+<tr><td>Debian 13 "trixie"</td><td>5.2</td><td>Quase tudo do guia funciona igual.</td></tr>
+<tr><td>Ubuntu 24.04 LTS</td><td>5.2</td><td>Também a do WSL instalado em 2024–2025.</td></tr>
+<tr><td>Debian 12, Ubuntu 22.04</td><td>5.2 / 5.1</td><td>Ainda muito comuns em servidores.</td></tr>
+<tr><td>RHEL, Rocky e AlmaLinux 9</td><td>5.1</td><td>Servidores corporativos.</td></tr>
+<tr><td>Alpine</td><td>não vem</td><td><code>apk add bash</code></td></tr>
+<tr><td>macOS (<code>/bin/bash</code>)</td><td><strong>3.2</strong></td><td>De 2006. O padrão do macOS é o zsh.</td></tr>
+<tr><td>Git Bash (Windows)</td><td>5.2</td><td>Acompanha as versões do Git for Windows.</td></tr>
+<tr><td>Termux (Android)</td><td>5.3</td><td>Atualizado pelo <code>pkg upgrade</code>.</td></tr>
+</table>
+</div>
+
+<p>Da 5.0 em diante, as diferenças são pequenas: o que você aprender aqui funciona em qualquer Bash 5. O salto grande é entre a <strong>3.2</strong> e a <strong>4.0</strong>, e é por isso que o macOS merece uma seção só dele.</p>
+
+<hr>
+
+<h2>macOS: o Bash antigo e o zsh</h2>
+<p>Desde o macOS Catalina (10.15, de 2019), o shell padrão do Terminal é o <strong>zsh</strong>. O Bash continua lá, em <code>/bin/bash</code>, mas parado na versão <strong>3.2</strong>, de 2006. O motivo é a licença: a partir da 4.0, o Bash passou a usar a GPLv3, que a Apple não aceita incluir no sistema.</p>
+
+<p>No Terminal do Mac, o resultado é este (saída <strong>ilustrativa</strong>, de um Mac com processador Apple):</p>
+<pre class="term" data-host="MacBook-da-Ana" data-cwd="~" data-title="Terminal — zsh">$ echo $0
+-zsh                               « o padrão é o zsh, como shell de login
+$ bash --version | head -1
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin24)     « em inglês e antigo
+$ bash
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.</pre>
+
+<p>O aviso aparece toda vez que você abre o Bash 3.2 do sistema; ele só sugere voltar ao zsh. Para estudar com este guia, o zsh serve para os comandos do dia a dia, mas os scripts e as aulas do Nível 3 pedem um Bash novo.</p>
+
+<h3>Instalar um Bash novo com o Homebrew</h3>
+<p>O <a href="https://brew.sh">Homebrew</a> é o gerenciador de pacotes mais usado no Mac. Com ele instalado, os passos abaixo trazem o Bash atual. Comandos <strong>ilustrativos</strong>, que não rodam no simulador:</p>
+
+<pre class="term" data-host="MacBook-da-Ana" data-title="Terminal — zsh">$ brew install bash                                « instala o Bash mais novo
+$ /opt/homebrew/bin/bash --version | head -1
+GNU bash, version 5.3.3(1)-release (aarch64-apple-darwin24)
+$ which -a bash
+/opt/homebrew/bin/bash             « o novo (vem primeiro no PATH)
+/bin/bash                          « o antigo continua lá, intocado</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Passo</th><th>Comando</th><th>Para quê</th></tr>
+<tr><td>1</td><td><code>brew install bash</code></td><td>Instala o Bash novo (em <code>/opt/homebrew/bin/bash</code> nos Macs com chip Apple; <code>/usr/local/bin/bash</code> nos Macs Intel).</td></tr>
+<tr><td>2</td><td><code>bash</code></td><td>Para só usar: abra o Bash novo dentro do zsh. <code>exit</code> volta.</td></tr>
+<tr><td>3 (opcional)</td><td><code>sudo sh -c 'echo /opt/homebrew/bin/bash &gt;&gt; /etc/shells'</code></td><td>Autoriza o Bash novo como shell padrão.</td></tr>
+<tr><td>4 (opcional)</td><td><code>chsh -s /opt/homebrew/bin/bash</code></td><td>Torna o Bash novo o padrão (vale ao abrir uma nova janela). Veja <a href="terminal-shell.html">Terminal e Shell</a>.</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Scripts no Mac: use <code>#!/usr/bin/env bash</code></strong>
+<p>Um script que começa com <code>#!/bin/bash</code> roda sempre no Bash 3.2 do sistema, mesmo com o Bash novo instalado. Com <code>#!/usr/bin/env bash</code>, ele usa o primeiro <code>bash</code> do <code>PATH</code>, que é o novo. Veja <a href="executar.html">Formas de Executar</a>.</p>
+</div>
+
+<div class="note">
+<strong>Não é só o Bash que muda no Mac</strong>
+<p>O macOS traz as versões BSD de <code>ls</code>, <code>sed</code>, <code>grep</code>, <code>date</code>… com opções diferentes das GNU usadas neste guia (por exemplo, <code>sed -i ''</code> em vez de <code>sed -i</code>). Se uma opção não funcionar, instale as versões GNU com <code>brew install coreutils gnu-sed grep</code>; elas ficam com o nome começando por <code>g</code> (<code>gsed</code>, <code>gls</code>).</p>
+</div>
+
+<hr>
+
+<h2>Windows: WSL, Git Bash ou MSYS2</h2>
+<p>O Windows não traz o Bash, mas há três formas populares de tê-lo:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>WSL</th><th>Git Bash</th><th>MSYS2</th></tr>
+<tr><td>O que é</td><td>Um Linux de verdade (Ubuntu, Debian…) rodando dentro do Windows</td><td>O Bash que vem com o Git for Windows</td><td>Um ambiente de ferramentas Unix para Windows, com gerenciador de pacotes</td></tr>
+<tr><td>Como instalar</td><td><code>wsl --install</code> no PowerShell como administrador, depois reiniciar</td><td>Instalar o Git for Windows</td><td>Instalador de msys2.org</td></tr>
+<tr><td>Comandos disponíveis</td><td>Todos os do Linux, <code>apt</code> incluído</td><td>Os básicos (<code>ls</code>, <code>grep</code>, <code>sed</code>, <code>awk</code>, <code>ssh</code>)</td><td>Os básicos + milhares pelo <code>pacman</code></td></tr>
+<tr><td>Seus arquivos do Windows</td><td><code>/mnt/c/Users/ana</code></td><td><code>/c/Users/ana</code></td><td><code>/c/Users/ana</code></td></tr>
+<tr><td>Fidelidade a este guia</td><td>Total: é Linux</td><td>Boa para o Nível 1 e 2; algumas diferenças</td><td>Boa</td></tr>
+<tr><td>Melhor para</td><td><strong>Estudar este guia</strong>, desenvolvimento, servidores</td><td>Quem já usa Git e quer só um terminal</td><td>Compilar programas para Windows</td></tr>
+</table>
+</div>
+
+<p>Depois do <code>wsl --install</code>, o Windows Terminal ganha uma aba "Ubuntu". Abrindo-a, o prompt fica igual ao deste guia, com o seu usuário e o nome do computador (saída <strong>ilustrativa</strong>):</p>
+
+<pre class="term" data-host="PC-DA-ANA" data-title="Ubuntu (WSL)">$ bash --version | head -1
+GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+$ cd /mnt/c/Users/ana/Downloads     « a pasta Downloads do Windows, vista do Linux</pre>
+
+<p>A versão é a da distribuição instalada (Ubuntu 24.04 → 5.2; Ubuntu 26.04 → 5.3) e a mensagem vem em inglês porque o Ubuntu do WSL é instalado em inglês. Para trazê-lo para o português, é preciso instalar o idioma, como num Ubuntu comum.</p>
+
+<div class="tip">
+<strong>Cuidado com arquivos editados no Windows</strong>
+<p>Programas do Windows terminam as linhas com dois caracteres (<code>\r\n</code>); o Bash espera um só (<code>\n</code>). Um script salvo no Bloco de Notas pode falhar com <code>$'\r': comando não encontrado</code>. Configure o editor para usar o fim de linha "LF" (no VS Code, canto inferior direito).</p>
+</div>
+
+<hr>
+
+<h2>Android: Termux</h2>
+<p>O <strong>Termux</strong> é um aplicativo de terminal para Android que traz o Bash e um gerenciador de pacotes (<code>pkg</code>), sem precisar de root. Instale pelo F-Droid (a versão da Play Store costuma estar desatualizada). Depois de abrir, rode <code>pkg upgrade</code> para atualizar tudo. A pasta pessoal fica dentro do aplicativo, e o comando <code>termux-setup-storage</code> dá acesso às fotos e downloads do celular. Para um iniciante, é uma ótima forma de praticar no ônibus; para os projetos, prefira um computador.</p>
+
+<hr>
+
+<h2>O selo de versão deste guia</h2>
+<p>Este guia ensina o Bash 5.3. Quando um recurso não existe em versões que você pode ter, ele aparece com um selo assim:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Selo</th><th>Significado</th><th>Quem fica de fora</th></tr>
+<tr><td><span class="versao">bash 4.0+</span></td><td>Existe a partir do Bash 4.0</td><td>Só o <code>/bin/bash</code> do macOS (3.2)</td></tr>
+<tr><td><span class="versao">bash 5.1+</span></td><td>Existe a partir do 5.1</td><td>Servidores bem antigos e o macOS</td></tr>
+<tr><td><span class="versao">bash 5.3+</span></td><td>Novo na 5.3</td><td>Debian 13, Ubuntu 24.04, Git Bash e outros com 5.2</td></tr>
+</table>
+</div>
+
+<p>Junto do selo, a aula sempre mostra uma alternativa que funciona nas versões anteriores. Sem selo, o recurso funciona em qualquer Bash razoavelmente atual (4.0 ou mais novo).</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"command not found" ou "invalid option" num recurso moderno (macOS)</strong>
+<p>Saídas <strong>ilustrativas</strong> do Bash 3.2 do macOS:</p>
+<pre class="term" data-host="MacBook-da-Ana">$ declare -A idades
+bash: declare: -A: invalid option
+$ mapfile linhas &lt; frutas.txt
+bash: mapfile: command not found
+$ nome=ANA; echo ${nome,,}
+bash: ${nome,,}: bad substitution</pre>
+<p><strong>O que aconteceu:</strong> arrays associativos, <code>mapfile</code> e <code>${x,,}</code> chegaram no Bash 4.0. O Bash 3.2 não os conhece.</p>
+<p><strong>Como confirmar:</strong> <code>echo $BASH_VERSION</code> mostra <code>3.2.57(1)-release</code>.</p>
+<p><strong>Como resolver:</strong> instale o Bash novo pelo Homebrew e rode o script com <code>#!/usr/bin/env bash</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>bash --version</code> diz 5.3, mas o script se comporta como 3.2</strong>
+<p><strong>O que aconteceu:</strong> há dois Bash no computador. O terminal acha o novo, mas o script começa com <code>#!/bin/bash</code> e usa o antigo.</p>
+<p><strong>Como confirmar:</strong> coloque <code>echo $BASH_VERSION</code> no começo do script e rode. Veja também <code>type -a bash</code>, que lista todos os <code>bash</code> do <code>PATH</code>:</p>
+<pre class="term">$ type -a bash
+bash é /usr/bin/bash
+bash é /bin/bash                   « no Linux, os dois são o mesmo arquivo (/bin aponta para /usr/bin)</pre>
+<p><strong>Como resolver:</strong> troque a primeira linha do script por <code>#!/usr/bin/env bash</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>$'\r': comando não encontrado</code> no WSL ou no Git Bash</strong>
+<pre class="term">$ bash script.sh
+script.sh: linha 2: $'\r': comando não encontrado        « a linha 2 estava vazia: sobrou só o \r
+script.sh: linha 3: $'ls\r': comando não encontrado      « o Bash procurou um comando chamado "ls\r"
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> o arquivo foi salvo com o fim de linha do Windows (<code>\r\n</code>). O Bash vê o <code>\r</code> como parte do comando: a linha <code>ls</code> virou o comando <code>ls\r</code>, que não existe.</p>
+<p><strong>Como resolver:</strong> salve com fim de linha "LF" no editor, ou converta: <code>sed -i 's/\r$//' script.sh</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>bash --version</code></td><td>Mostra a versão do Bash instalado</td></tr>
+<tr><td><code>echo $BASH_VERSION</code></td><td>Versão do Bash em uso agora</td></tr>
+<tr><td><code>echo ${BASH_VERSINFO[0]}</code></td><td>Só o número principal da versão</td></tr>
+<tr><td><code>type -a bash</code></td><td>Lista todos os <code>bash</code> encontrados no <code>PATH</code></td></tr>
+<tr><td><code>brew install bash</code></td><td>macOS: instala o Bash novo</td></tr>
+<tr><td><code>wsl --install</code></td><td>Windows (PowerShell como administrador): instala o WSL com Ubuntu</td></tr>
+<tr><td><code>apk add bash</code></td><td>Alpine: instala o Bash</td></tr>
+<tr><td><code>pkg upgrade</code></td><td>Termux: atualiza o Bash e os pacotes</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. Por que o <code>/bin/bash</code> do macOS é a versão 3.2?</p>
+<label><input type="radio" name="q1"> Porque o Bash 4 não roda em processadores Apple.</label>
+<label><input type="radio" name="q1"> Porque o Bash parou de ser atualizado em 2006.</label>
+<label><input type="radio" name="q1"> Por causa da licença: a partir da 4.0 o Bash usa a GPLv3.</label>
+<label><input type="radio" name="q1"> Porque o zsh é uma versão nova do Bash.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">2. Você usa Windows e quer seguir este guia com a maior fidelidade. O que instalar?</p>
+<label><input type="radio" name="q2"> O WSL, que roda um Linux de verdade.</label>
+<label><input type="radio" name="q2"> Nada: o PowerShell entende Bash.</label>
+<label><input type="radio" name="q2"> O zsh.</label>
+<label><input type="radio" name="q2"> O Termux.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Um recurso tem o selo <span class="versao">bash 5.3+</span>. Em qual destes sistemas ele <strong>não</strong> funciona sem atualizar o Bash?</p>
+<label><input type="radio" name="q3"> Ubuntu 26.04</label>
+<label><input type="radio" name="q3"> Debian 13</label>
+<label><input type="radio" name="q3"> Arch Linux</label>
+<label><input type="radio" name="q3"> Fedora 43</label>
+</div>
+
+<div class="exercise">
+<h3>4. Versão principal</h3>
+<p>Complete para mostrar só o número principal da versão (o <code>5</code> de <code>5.3.9</code>):</p>
+<div class="ex-code">echo ${BASH_VERSINFO[<input data-answer="0" aria-label="posição">]}</div>
+</div>
+
+<div class="exercise">
+<h3>5. A primeira linha certa</h3>
+<p>Complete a primeira linha de um script para ele usar o primeiro <code>bash</code> do <code>PATH</code> (o novo, no Mac):</p>
+<div class="ex-code">#!<input data-answer="/usr/bin/env bash" aria-label="caminho"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Linux: o Bash já vem (exceto Alpine). Ubuntu 26.04, Fedora e Arch têm o 5.3; Debian 13 e Ubuntu 24.04, o 5.2.</li>
+  <li>macOS: o padrão é o zsh e o <code>/bin/bash</code> é o 3.2; instale o novo com <code>brew install bash</code> e use <code>#!/usr/bin/env bash</code>.</li>
+  <li>Windows: WSL (Linux de verdade, o melhor para o guia), Git Bash ou MSYS2. Android: Termux.</li>
+  <li><code>bash --version</code>, <code>$BASH_VERSION</code> e <code>BASH_VERSINFO</code> mostram a versão.</li>
+  <li>O selo <span class="versao">bash 4.0+</span> marca recursos que não existem em versões anteriores.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
