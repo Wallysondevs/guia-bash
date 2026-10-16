@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Editar a Linha — atalhos do teclado (Ctrl+A, Ctrl+W, Ctrl+R…) | Guia Bash</title>
+<meta name="description" content="Atalhos de edição da linha de comando do Bash (readline): mover com Ctrl+A, Ctrl+E e Alt+B/F, apagar com Ctrl+W, Ctrl+U e Ctrl+K, colar com Ctrl+Y, desfazer com Ctrl+_, Ctrl+C x Ctrl+D x Ctrl+Z, abrir a linha no editor com Ctrl+X Ctrl+E e o modo vi.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Editar a Linha</span></h1>
+
+<p class="intro">Você digitou um comando comprido e percebeu um erro lá no começo. Segurar a seta <kbd>←</kbd> até chegar lá funciona, mas é lento. O Bash tem dezenas de atalhos para andar, apagar e corrigir a linha num piscar de olhos. Nesta aula você aprende os que valem a pena decorar.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A pular para o começo e o fim da linha e andar de palavra em palavra.</li>
+  <li>A apagar uma palavra, o começo ou o fim da linha, e colar de volta o que apagou.</li>
+  <li>A desfazer, trocar letras e limpar a tela sem perder o que está digitando.</li>
+  <li>A diferença entre <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>D</kbd> e <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</li>
+  <li>A editar a linha num editor de verdade (<kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd>) e a ligar o modo vi.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Quem cuida da linha: a readline</h2>
+<p>Enquanto você digita, quem controla o cursor, as setas e os atalhos é uma biblioteca do projeto GNU chamada <strong>readline</strong> ("ler linha"). Ela vem embutida no Bash e também é usada por outros programas, como o <code>python3</code> interativo e o <code>gdb</code>. Por isso, os mesmos atalhos funcionam em vários lugares.</p>
+<p>Os atalhos padrão vieram do editor de texto <strong>Emacs</strong>: é o "modo emacs", ligado de fábrica. No fim da aula você vai ver o "modo vi", para quem prefere o vim.</p>
+
+<h3>Como ler os atalhos</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrito assim</th><th>Faça assim</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Segure <kbd>Ctrl</kbd> e aperte <kbd>A</kbd>. Não precisa de maiúscula.</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>B</kbd></td><td>Segure <kbd>Alt</kbd> e aperte <kbd>B</kbd>. Se não funcionar, aperte e solte <kbd>Esc</kbd> e depois <kbd>B</kbd>: dá no mesmo. No macOS, ative "Usar Option como tecla Meta" nas preferências do Terminal.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Dois atalhos em sequência: primeiro um, depois o outro.</td></tr>
+</table>
+</div>
+
+<p>Nos exemplos abaixo, o <code>█</code> marca onde está o cursor.</p>
+
+<div class="note">
+<strong>No terminal simulado deste guia</strong>
+<p>O simulador entende <kbd>↑</kbd> <kbd>↓</kbd> (histórico), <kbd>←</kbd> <kbd>→</kbd>, <kbd>Tab</kbd>, <kbd>Ctrl</kbd>+<kbd>L</kbd> e <kbd>Ctrl</kbd>+<kbd>C</kbd>. Os outros atalhos desta aula são do Bash de verdade: pratique-os no terminal do seu computador. Vários deles (como <kbd>Ctrl</kbd>+<kbd>W</kbd>) fecham a aba no navegador, por isso não estão no simulador.</p>
+</div>
+
+<hr>
+
+<h2>Mover o cursor</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Vai para…</th><th>Origem do nome</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd> ou <kbd>Home</kbd></td><td>O começo da linha</td><td>A, primeira letra do alfabeto</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd> ou <kbd>End</kbd></td><td>O fim da linha</td><td><em>end</em>, fim</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>B</kbd> ou <kbd>Ctrl</kbd>+<kbd>←</kbd></td><td>Uma palavra para trás</td><td><em>back</em>, para trás</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>F</kbd> ou <kbd>Ctrl</kbd>+<kbd>→</kbd></td><td>Uma palavra para a frente</td><td><em>forward</em>, para a frente</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Uma letra para trás / para a frente (o mesmo que as setas)</td><td><em>back</em> / <em>forward</em></td></tr>
+</table>
+</div>
+
+<p>Exemplo: a Ana digitou um comando longo e esqueceu o <code>-l</code> no <code>wc</code>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Tecla</th></tr>
+<tr><td><code>wc frutas.txt Documentos/notas.txt█</code></td><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td></tr>
+<tr><td><code>█wc frutas.txt Documentos/notas.txt</code></td><td><kbd>Alt</kbd>+<kbd>F</kbd></td></tr>
+<tr><td><code>wc█ frutas.txt Documentos/notas.txt</code></td><td>digita <code> -l</code></td></tr>
+<tr><td><code>wc -l█ frutas.txt Documentos/notas.txt</code></td><td><kbd>Enter</kbd> (o cursor não precisa estar no fim)</td></tr>
+</table>
+</div>
+
+<p>Repare na última linha: o <kbd>Enter</kbd> executa a linha inteira, esteja o cursor onde estiver.</p>
+
+<hr>
+
+<h2>Apagar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Apaga…</th></tr>
+<tr><td><kbd>Backspace</kbd></td><td>A letra antes do cursor</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd> ou <kbd>Delete</kbd></td><td>A letra <strong>sob</strong> o cursor (cuidado: numa linha vazia, <kbd>Ctrl</kbd>+<kbd>D</kbd> fecha o shell)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>A palavra antes do cursor, até o espaço anterior (<em>word</em>)</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Backspace</kbd></td><td>A palavra antes do cursor, parando também em <code>/</code>, <code>.</code> e outros sinais</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>D</kbd></td><td>A palavra depois do cursor (<em>delete</em>)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Tudo do cursor até o <strong>começo</strong> da linha</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Tudo do cursor até o <strong>fim</strong> da linha (<em>kill</em>, "matar")</td></tr>
+</table>
+</div>
+
+<p>A diferença entre <kbd>Ctrl</kbd>+<kbd>W</kbd> e <kbd>Alt</kbd>+<kbd>Backspace</kbd> aparece em caminhos:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Antes</th><th>Tecla</th><th>Depois</th></tr>
+<tr><td><code>cat Documentos/projetos/backup.sh█</code></td><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td><code>cat █</code> (o caminho todo, até o espaço)</td></tr>
+<tr><td><code>cat Documentos/projetos/backup.sh█</code></td><td><kbd>Alt</kbd>+<kbd>Backspace</kbd></td><td><code>cat Documentos/projetos/backup.█</code> (só "sh")</td></tr>
+<tr><td><code>echo uma frase errada█</code></td><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td><code>█</code> (linha limpa)</td></tr>
+<tr><td><code>ls -l █--sort=size</code></td><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td><code>ls -l █</code></td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong><kbd>Ctrl</kbd>+<kbd>U</kbd> é o "apagar tudo" seguro</strong>
+<p>Digitou um comando perigoso e se arrependeu antes do <kbd>Enter</kbd>? <kbd>Ctrl</kbd>+<kbd>U</kbd> (com o cursor no fim) limpa a linha sem executar nada. <kbd>Ctrl</kbd>+<kbd>C</kbd> também, como você vai ver adiante.</p>
+</div>
+
+<hr>
+
+<h2>Colar o que você apagou: <kbd>Ctrl</kbd>+<kbd>Y</kbd></h2>
+<p>Os atalhos que apagam pedaços (<kbd>Ctrl</kbd>+<kbd>W</kbd>, <kbd>Ctrl</kbd>+<kbd>U</kbd>, <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>Alt</kbd>+<kbd>D</kbd>) não jogam o texto fora: guardam numa área chamada <em>kill ring</em> ("anel do que foi cortado"). <kbd>Ctrl</kbd>+<kbd>Y</kbd> (<em>yank</em>, "puxar") cola de volta onde está o cursor. É o recortar-e-colar do terminal.</p>
+
+<p>Um uso clássico: você começou a digitar um comando comprido e lembrou que precisa rodar outro antes.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Passo</th><th>Linha</th><th>Tecla</th></tr>
+<tr><td>1</td><td><code>cp Documentos/alunos.csv backup/alunos-15-10.csv█</code></td><td><kbd>Ctrl</kbd>+<kbd>U</kbd> (guarda a linha)</td></tr>
+<tr><td>2</td><td><code>█</code></td><td>digita <code>mkdir backup</code> e <kbd>Enter</kbd></td></tr>
+<tr><td>3</td><td><code>█</code></td><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
+<tr><td>4</td><td><code>cp Documentos/alunos.csv backup/alunos-15-10.csv█</code></td><td><kbd>Enter</kbd></td></tr>
+</table>
+</div>
+
+<p>Depois de um <kbd>Ctrl</kbd>+<kbd>Y</kbd>, <kbd>Alt</kbd>+<kbd>Y</kbd> troca o texto colado pelo que foi cortado antes, girando o "anel".</p>
+
+<div class="warning">
+<strong>Isto não é a área de transferência do sistema</strong>
+<p>O <kbd>Ctrl</kbd>+<kbd>Y</kbd> só conhece o que foi cortado dentro do Bash. Para copiar e colar com outros programas, use o menu do terminal ou <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> (no Linux) e <kbd>Cmd</kbd>+<kbd>C</kbd> / <kbd>Cmd</kbd>+<kbd>V</kbd> (no macOS). <kbd>Ctrl</kbd>+<kbd>C</kbd> sozinho, no terminal, <strong>não copia</strong>: ele interrompe.</p>
+</div>
+
+<hr>
+
+<h2>Desfazer, trocar e limpar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Faz</th><th>Exemplo</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>_</kbd> (ou <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>U</kbd>)</td><td>Desfaz a última edição. Pode repetir.</td><td>Apagou demais com <kbd>Ctrl</kbd>+<kbd>W</kbd>? Desfaça.</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>R</kbd></td><td>Desfaz todas as mudanças de uma linha trazida do histórico</td><td>Mexeu num comando antigo e quer o original.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td>Troca a letra antes do cursor com a letra sob ele (<em>transpose</em>)</td><td><code>sl█</code> → <code>ls█</code></td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>T</kbd></td><td>Troca a palavra atual com a anterior</td><td><code>cp b a█</code> → <code>cp a b█</code></td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>U</kbd> / <kbd>Alt</kbd>+<kbd>L</kbd> / <kbd>Alt</kbd>+<kbd>C</kbd></td><td>Palavra seguinte em MAIÚSCULAS / minúsculas / Com inicial maiúscula</td><td><code>█echo</code> + <kbd>Alt</kbd>+<kbd>U</kbd> → <code>ECHO█</code></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Limpa a tela e mantém o que você está digitando</td><td>Igual ao <code>clear</code>, sem perder a linha.</td></tr>
+</table>
+</div>
+
+<p>No teclado brasileiro, o <kbd>Ctrl</kbd>+<kbd>_</kbd> costuma ser <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>-</kbd>. Se não funcionar no seu terminal, use <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>U</kbd>.</p>
+
+<hr>
+
+<h2><kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>D</kbd> e <kbd>Ctrl</kbd>+<kbd>Z</kbd></h2>
+<p>Esses três parecem parecidos e são muito diferentes. Os dois primeiros você usa todo dia; o terceiro pega muita gente de surpresa.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Durante a digitação</th><th>Com um programa rodando</th><th>Código de saída</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Descarta a linha e mostra um prompt novo</td><td><strong>Interrompe</strong> o programa (manda o sinal SIGINT)</td><td>130</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Linha vazia: <strong>fecha o shell</strong>. Com texto: apaga a letra sob o cursor</td><td>Avisa "fim da entrada" a quem está lendo do teclado</td><td>—</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Nada</td><td><strong>Pausa</strong> o programa e devolve o prompt (ele continua na memória)</td><td>148</td></tr>
+</table>
+</div>
+
+<p>Veja os três numa sessão real. O <code>sleep 100</code> fica parado 100 segundos sem fazer nada, ótimo para treinar:</p>
+
+<pre class="term">$ sleep 100
+^Z                                       « Ctrl+Z: pausou
+[1]+  Parado                     sleep 100
+$ jobs
+[1]+  Parado                     sleep 100      « o sleep ainda existe, pausado
+$ fg
+sleep 100                                « fg (foreground) traz de volta e continua
+^C                                       « Ctrl+C: interrompeu de vez
+$ echo $?
+130                                      « 130 = terminou por Ctrl+C</pre>
+
+<p>O <code>^Z</code> e o <code>^C</code> são o jeito do terminal mostrar que você apertou <kbd>Ctrl</kbd>+<kbd>Z</kbd> e <kbd>Ctrl</kbd>+<kbd>C</kbd>. O <code>[1]+  Parado</code> diz que o programa virou o "trabalho 1" e está pausado. Pausar e retomar programas é o assunto de <a href="jobs.html">Jobs</a>.</p>
+
+<p>E o <kbd>Ctrl</kbd>+<kbd>D</kbd> numa linha vazia:</p>
+<pre class="term">$                                        « Ctrl+D com a linha vazia
+exit                                     « o Bash encerra, como se você digitasse exit</pre>
+
+<p>Os números da coluna "código de saída" seguem uma regra: 128 + o número do sinal (SIGINT é 2, SIGTSTP é 20). Isso aparece em <a href="codigo-saida.html">Código de Saída</a> e <a href="trap.html">trap e Sinais</a>.</p>
+
+<hr>
+
+<h2>Editar a linha num editor: <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd></h2>
+<p>Para um comando muito comprido (um <code>for</code> de várias linhas, um <code>find</code> cheio de opções), editar na linha é desconfortável. <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd> abre o que você digitou num editor de texto de verdade. Quando você salva e fecha o editor, o Bash <strong>executa</strong> o texto.</p>
+
+<ol class="passo">
+  <li>Digite o começo do comando (ou nada) e aperte <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd>.</li>
+  <li>O editor abre com a linha dentro. O editor escolhido é o da variável <code>VISUAL</code> ou <code>EDITOR</code>; sem elas, costuma ser o <code>nano</code> ou o <code>vi</code>.</li>
+  <li>Edite à vontade, com várias linhas se quiser.</li>
+  <li>Salve e saia (no <code>nano</code>: <kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd>). O Bash mostra o comando e o executa.</li>
+</ol>
+
+<p>Para desistir, apague todo o texto no editor antes de salvar: um arquivo vazio não executa nada. O comando interno <code>fc</code> faz o mesmo com o último comando do histórico (veja <a href="historico.html">Histórico</a>).</p>
+
+<hr>
+
+<h2>Modo vi</h2>
+<p>Quem usa o editor vim pode preferir editar a linha do mesmo jeito. O comando <code>set -o vi</code> troca os atalhos:</p>
+
+<dl class="anatomy">
+  <dt>set</dt><dd>Comando interno que liga e desliga opções do Bash.</dd>
+  <dt>-o</dt><dd>"Ligue a opção com este nome" (<em>option</em>).</dd>
+  <dt>vi</dt><dd>A opção: edição de linha no estilo do vi. <code>set -o emacs</code> volta ao padrão.</dd>
+</dl>
+
+<pre class="term">$ set -o | grep -E "^(vi|emacs)"
+emacs          	on                       « o padrão
+vi             	off
+$ set -o vi
+$ set -o | grep -E "^(vi|emacs)"
+emacs          	off
+vi             	on                       « agora é o modo vi
+$ set -o emacs                           « de volta ao padrão</pre>
+
+<p>No modo vi, você começa digitando normalmente (modo de inserção). <kbd>Esc</kbd> passa para o modo de comando, onde <kbd>h</kbd> <kbd>l</kbd> andam, <kbd>w</kbd> <kbd>b</kbd> pulam palavras, <kbd>0</kbd> e <kbd>$</kbd> vão ao começo e ao fim, <kbd>x</kbd> apaga uma letra, <kbd>dw</kbd> uma palavra, <kbd>i</kbd> e <kbd>a</kbd> voltam a inserir, <kbd>k</kbd> e <kbd>j</kbd> navegam no histórico e <kbd>v</kbd> abre o editor. Para deixar ligado sempre, coloque <code>set -o vi</code> no <code>~/.bashrc</code> (<a href="inicializacao.html">Arquivos de Inicialização</a>).</p>
+
+<hr>
+
+<h2>Descobrir e conferir os atalhos: <code>bind</code></h2>
+<p>Os atalhos são configuráveis, e cada sistema pode ter alguns diferentes. O comando interno <code>bind</code> mostra o que está valendo. Com <code>-q</code> (<em>query</em>, "consultar") e o nome de uma ação, ele diz quais teclas a fazem:</p>
+
+<pre class="term">$ bind -q unix-word-rubout
+unix-word-rubout pode ser chamado via "\C-w".
+$ bind -q yank
+yank pode ser chamado via "\C-y".
+$ bind -q undo
+undo pode ser chamado via "\C-x\C-u", "\C-_".
+$ bind -q edit-and-execute-command
+edit-and-execute-command pode ser chamado via "\C-x\C-e".</pre>
+
+<p>Leia <code>\C-w</code> como <kbd>Ctrl</kbd>+<kbd>W</kbd> e <code>\e</code> (ou <code>\M-</code>) como <kbd>Alt</kbd>/<kbd>Esc</kbd>. Os nomes das ações (<code>yank</code>, <code>undo</code>…) são os do manual da readline; <code>bind -P</code> lista todos. Mudar atalhos é feito no arquivo <code>~/.inputrc</code>.</p>
+
+<hr>
+
+<h2>Experimente</h2>
+<p>No simulador, a seta <kbd>↑</kbd> traz o comando anterior e <kbd>←</kbd> <kbd>→</kbd> movem o cursor dentro dele.</p>
+
+<div class="try" data-goal="out:Bash é muito legal" data-solucao="echo Bash é legal;;echo Bash é muito legal">
+<p class="try-task"><strong>Missão:</strong> rode <code>echo Bash é legal</code>. Depois, sem redigitar tudo: aperte <kbd>↑</kbd>, ande com <kbd>←</kbd> até antes de <code>legal</code>, acrescente <code>muito </code> e aperte <kbd>Enter</kbd>. A saída deve ser <code>Bash é muito legal</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O terminal "congelou" e não mostra o que eu digito</strong>
+<p><strong>O que aconteceu:</strong> provavelmente você apertou <kbd>Ctrl</kbd>+<kbd>S</kbd>, que é um atalho antigo de "pausar a tela" (controle de fluxo). Tudo o que você digita fica guardado, mas não aparece.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Ctrl</kbd>+<kbd>Q</kbd> para soltar. O que você digitou durante a pausa aparece de uma vez. Para desligar esse comportamento, coloque <code>stty -ixon</code> no <code>~/.bashrc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><kbd>Alt</kbd>+<kbd>B</kbd> ou <kbd>Alt</kbd>+<kbd>F</kbd> abre o menu do terminal</strong>
+<p><strong>O que aconteceu:</strong> o programa de terminal usa <kbd>Alt</kbd>+letra para abrir os menus (Arquivo, Editar…) e "rouba" o atalho.</p>
+<p><strong>Como resolver:</strong> use <kbd>Esc</kbd> e depois a letra, ou <kbd>Ctrl</kbd>+<kbd>←</kbd>/<kbd>→</kbd>. Nas preferências do terminal, desligue os "atalhos de menu". No macOS, ative "Usar Option como tecla Meta".</p>
+</div>
+
+<div class="cenario">
+<strong>Fechei o terminal sem querer</strong>
+<p><strong>O que aconteceu:</strong> <kbd>Ctrl</kbd>+<kbd>D</kbd> numa linha vazia encerra o shell, e a janela fecha junto.</p>
+<p><strong>Como evitar:</strong> <code>set -o ignoreeof</code> faz o Bash ignorar o <kbd>Ctrl</kbd>+<kbd>D</kbd> e mostrar <code>Use "exit" para sair do shell.</code>. Coloque no <code>~/.bashrc</code> se acontecer com frequência.</p>
+</div>
+
+<div class="cenario">
+<strong>Apertei <kbd>Ctrl</kbd>+<kbd>Z</kbd> no lugar de <kbd>Ctrl</kbd>+<kbd>C</kbd> e o programa "sumiu"</strong>
+<pre class="term">$ sleep 100
+^Z
+[1]+  Parado                     sleep 100</pre>
+<p><strong>O que aconteceu:</strong> o programa não terminou: está pausado em segundo plano. Se você tentar sair do terminal, o Bash avisa que há trabalhos parados.</p>
+<p><strong>Como resolver:</strong> <code>fg</code> traz o programa de volta; aí use <kbd>Ctrl</kbd>+<kbd>C</kbd>. Ou <code>kill %1</code> para encerrá-lo direto (<a href="jobs.html">Jobs</a>).</p>
+</div>
+
+<hr>
+
+<h2>Tabela-resumo</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Para…</th><th>Atalho</th><th>No simulador?</th></tr>
+<tr><td>Começo / fim da linha</td><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>não</td></tr>
+<tr><td>Palavra para trás / frente</td><td><kbd>Alt</kbd>+<kbd>B</kbd> / <kbd>Alt</kbd>+<kbd>F</kbd> (ou <kbd>Ctrl</kbd>+<kbd>←</kbd>/<kbd>→</kbd>)</td><td>não</td></tr>
+<tr><td>Letra para trás / frente</td><td><kbd>←</kbd> / <kbd>→</kbd></td><td>sim</td></tr>
+<tr><td>Apagar palavra anterior</td><td><kbd>Ctrl</kbd>+<kbd>W</kbd> (até espaço), <kbd>Alt</kbd>+<kbd>Backspace</kbd> (até sinal)</td><td>não</td></tr>
+<tr><td>Apagar palavra seguinte</td><td><kbd>Alt</kbd>+<kbd>D</kbd></td><td>não</td></tr>
+<tr><td>Apagar até o começo / fim</td><td><kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>não</td></tr>
+<tr><td>Colar o que foi apagado</td><td><kbd>Ctrl</kbd>+<kbd>Y</kbd> (e <kbd>Alt</kbd>+<kbd>Y</kbd>)</td><td>não</td></tr>
+<tr><td>Desfazer</td><td><kbd>Ctrl</kbd>+<kbd>_</kbd> ou <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>não</td></tr>
+<tr><td>Trocar letras / palavras</td><td><kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Alt</kbd>+<kbd>T</kbd></td><td>não</td></tr>
+<tr><td>Limpar a tela</td><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>sim</td></tr>
+<tr><td>Descartar a linha / interromper</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>sim</td></tr>
+<tr><td>Sair do shell (linha vazia)</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>não</td></tr>
+<tr><td>Pausar o programa</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>não</td></tr>
+<tr><td>Histórico anterior / seguinte</td><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>sim</td></tr>
+<tr><td>Buscar no histórico</td><td><kbd>Ctrl</kbd>+<kbd>R</kbd> (<a href="historico.html">Histórico</a>)</td><td>não</td></tr>
+<tr><td>Completar</td><td><kbd>Tab</kbd> (<a href="completar.html">Completar</a>)</td><td>sim</td></tr>
+<tr><td>Abrir a linha no editor</td><td><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>não</td></tr>
+<tr><td>Modo vi / emacs</td><td><code>set -o vi</code> / <code>set -o emacs</code></td><td>não</td></tr>
+</table>
+</div>
+<p>A lista completa de atalhos, para consulta, está em <a href="ref-atalhos.html">Atalhos do Teclado</a>.</p>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. O cursor está no fim de <code>rm -r Documentos/projetos</code> e você desistiu de apagar. Qual atalho limpa a linha sem executar?</p>
+<label><input type="radio" name="q1"> <kbd>Enter</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>U</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>Z</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>E</kbd></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Você apagou uma palavra com <kbd>Ctrl</kbd>+<kbd>W</kbd> e quer colá-la em outro ponto da linha. Qual atalho?</p>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>V</kbd></label>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>C</kbd></label>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>Y</kbd></label>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>P</kbd></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. Um programa está rodando e você quer <strong>encerrá-lo</strong>. Qual atalho?</p>
+<label><input type="radio" name="q3"> <kbd>Ctrl</kbd>+<kbd>C</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Ctrl</kbd>+<kbd>Z</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Ctrl</kbd>+<kbd>S</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Ctrl</kbd>+<kbd>L</kbd></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Você digitou <code>sl</code> em vez de <code>ls</code> e o cursor está no fim. Qual atalho corrige com uma tecla?</p>
+<label><input type="radio" name="q4"> <kbd>Ctrl</kbd>+<kbd>A</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Ctrl</kbd>+<kbd>K</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Ctrl</kbd>+<kbd>_</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Ctrl</kbd>+<kbd>T</kbd></label>
+</div>
+
+<div class="exercise">
+<h3>5. Modo vi</h3>
+<p>Complete para ligar a edição de linha no estilo do vi:</p>
+<div class="ex-code">set -o <input data-answer="vi" aria-label="opção"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>A edição da linha é feita pela readline, com atalhos do Emacs: <kbd>Ctrl</kbd>+<kbd>A</kbd>/<kbd>E</kbd> (começo/fim), <kbd>Alt</kbd>+<kbd>B</kbd>/<kbd>F</kbd> (palavras).</li>
+  <li><kbd>Ctrl</kbd>+<kbd>W</kbd>, <kbd>Ctrl</kbd>+<kbd>U</kbd> e <kbd>Ctrl</kbd>+<kbd>K</kbd> recortam; <kbd>Ctrl</kbd>+<kbd>Y</kbd> cola; <kbd>Ctrl</kbd>+<kbd>_</kbd> desfaz.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>C</kbd> interrompe, <kbd>Ctrl</kbd>+<kbd>D</kbd> fecha o shell (linha vazia), <kbd>Ctrl</kbd>+<kbd>Z</kbd> pausa.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>E</kbd> edita a linha num editor; <code>set -o vi</code> liga o modo vi.</li>
+  <li><code>bind -q ação</code> mostra quais teclas fazem cada ação.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
