@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash PS1 — personalizar o prompt com escapes e cores | Guia Bash</title>
+<meta name="description" content="Personalize o prompt do Bash: a variável PS1 e seus escapes (\u \h \w \W \$ \t \n…), cores com \[\e[…m\], o código de saída e o ramo do git no prompt, PROMPT_COMMAND, PS0, PS2 e PS4, e como deixar tudo permanente.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Personalizar o Prompt (PS1)</span></h1>
+
+<p class="intro">O texto <code>ana@notebook:~$</code> que aparece antes de cada comando não é fixo: ele vem de uma variável chamada <strong><code>PS1</code></strong>. Mudando essa variável, você escolhe o que o prompt mostra (a pasta, a hora, o resultado do último comando, o ramo do git) e com que cores.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é o <code>PS1</code> e os "escapes" que viram usuário, máquina, pasta, hora…</li>
+  <li>Como colocar cores com <code>\[\e[…m\]</code>, e por que o <code>\[ \]</code> é obrigatório.</li>
+  <li>Como mostrar o código de saída do último comando e o ramo do git.</li>
+  <li>Para que servem <code>PROMPT_COMMAND</code>, <code>PS0</code>, <code>PS2</code> e <code>PS4</code>.</li>
+  <li>Como deixar o prompt novo permanente no <code>~/.bashrc</code>.</li>
+</ul>
+</div>
+
+<p>Se você ainda não sabe ler cada parte do prompt, veja antes <a href="prompt.html">Lendo o Prompt</a>.</p>
+
+<hr>
+
+<h2>O prompt é uma variável</h2>
+<p>Peça para ver o valor do <code>PS1</code> (<em>Prompt String 1</em>, "texto do prompt número 1"):</p>
+
+<pre class="term">$ echo "$PS1"
+\u@\h:\w\$ </pre>
+
+<p>Esse é o valor que está no <code>~/.bashrc</code> da Ana. Cada sequência que começa com contrabarra é um <strong>escape</strong> do prompt: o Bash troca por uma informação na hora de desenhar o prompt.</p>
+
+<dl class="anatomy">
+  <dt>\u</dt><dd>O usuário (<em>user</em>): <code>ana</code>.</dd>
+  <dt>@</dt><dd>Texto comum, aparece como está.</dd>
+  <dt>\h</dt><dd>O nome da máquina (<em>host</em>), até o primeiro ponto: <code>notebook</code>.</dd>
+  <dt>:</dt><dd>Texto comum.</dd>
+  <dt>\w</dt><dd>A pasta atual (<em>working directory</em>), com <code>~</code> no lugar de <code>/home/ana</code>.</dd>
+  <dt>\$</dt><dd><code>$</code> para usuário comum, <code>#</code> para o root.</dd>
+  <dt>(espaço)</dt><dd>Um espaço no fim, para o comando não grudar no <code>$</code>.</dd>
+</dl>
+
+<h3>Mudar na hora</h3>
+<p>Como é uma variável, basta atribuir outro valor. A mudança vale na hora, só neste terminal. Use <strong>aspas simples</strong> (o porquê vem daqui a pouco):</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ PS1='\W\$ '
+~$ cd Documentos
+Documentos$ PS1='[\t] \u:\w\$ '
+[09:46:25] ana:~/Documentos$ PS1='\u@\h:\w\n\$ '
+ana@notebook:~/Documentos
+$ ls nada
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+ana@notebook:~/Documentos
+$ </pre></div>
+
+<p>O que aconteceu, linha por linha:</p>
+<ol>
+  <li><code>PS1='\W\$ '</code>: o prompt passou a mostrar só o <strong>nome</strong> da pasta atual (<code>\W</code>, maiúsculo), sem o caminho. Na pasta pessoal, o nome é <code>~</code>.</li>
+  <li>Depois do <code>cd Documentos</code>, o prompt virou <code>Documentos$</code>: ele é recalculado antes de cada comando.</li>
+  <li><code>[\t]</code> acrescentou a hora em que o prompt foi desenhado (o relógio do laboratório marcava 09:46).</li>
+  <li><code>\n</code> quebra a linha: informações em cima, o <code>$</code> embaixo, e o comando começa sempre na mesma coluna.</li>
+</ol>
+
+<div class="tip">
+<strong>Errou? Feche e abra o terminal</strong>
+<p>O <code>PS1</code> mudado assim vale só para este terminal, até você fechá-lo. Se o prompt ficou estranho, abra um terminal novo (ou rode <code>source ~/.bashrc</code>) e tudo volta ao normal.</p>
+</div>
+
+<div class="try" data-goal="ran:PS1=.*\\W" data-solucao="PS1='\W\$ ';;cd Documentos">
+<p class="try-task"><strong>Missão:</strong> mude o <code>PS1</code> para mostrar só o <strong>nome</strong> da pasta atual seguido de <code>$</code> e um espaço (<code>'\W\$ '</code>). Depois entre em <code>Documentos</code> e veja o prompt mudar.</p>
+</div>
+
+<hr>
+
+<h2>Testar sem trocar o prompt: <code>${PS1@P}</code></h2>
+<p>Dá para ver como um texto ficaria como prompt, sem mexer no seu. A transformação <code>@P</code> (de <em>prompt</em>) aplica os escapes a qualquer variável:</p>
+
+<pre class="term">$ cd Documentos/projetos
+$ p='\u@\h:\w\$ '
+$ echo "${p@P}"
+ana@notebook:~/Documentos/projetos$
+$ p='\W | \t | \d | \A | \v'
+$ echo "${p@P}"
+projetos | 09:56:17 | sex out 16 | 09:56 | 5.3
+$ p='linha 1\nlinha 2 \$ '
+$ echo "${p@P}"
+linha 1
+linha 2 $</pre>
+
+<p>Assim você experimenta à vontade. O <code>@P</code> existe desde o bash 4.4; outras transformações (<code>@Q</code>, <code>@U</code>…) estão em <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</p>
+
+<hr>
+
+<h2>Os escapes do prompt</h2>
+<p>A coluna "Exemplo" foi gerada no laboratório, com a Ana na pasta <code>~/Documentos/projetos</code>, às 09:46 de sexta, 16/10/2026.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escape</th><th>Vira</th><th>Exemplo</th></tr>
+<tr><td><code>\u</code></td><td>Usuário</td><td><code>ana</code></td></tr>
+<tr><td><code>\h</code></td><td>Nome da máquina até o primeiro ponto</td><td><code>notebook</code></td></tr>
+<tr><td><code>\H</code></td><td>Nome completo da máquina</td><td><code>notebook</code></td></tr>
+<tr><td><code>\w</code></td><td>Caminho da pasta atual (com <code>~</code>)</td><td><code>~/Documentos/projetos</code></td></tr>
+<tr><td><code>\W</code></td><td>Só o nome da pasta atual</td><td><code>projetos</code></td></tr>
+<tr><td><code>\$</code></td><td><code>#</code> se for root, <code>$</code> se não</td><td><code>$</code></td></tr>
+<tr><td><code>\t</code></td><td>Hora, 24h, <code>HH:MM:SS</code></td><td><code>09:46:12</code></td></tr>
+<tr><td><code>\T</code></td><td>Hora, 12h, <code>HH:MM:SS</code></td><td><code>09:46:12</code></td></tr>
+<tr><td><code>\A</code></td><td>Hora, 24h, <code>HH:MM</code></td><td><code>09:46</code></td></tr>
+<tr><td><code>\@</code></td><td>Hora, 12h, com AM/PM (vazio em português)</td><td><code>09:46 </code></td></tr>
+<tr><td><code>\d</code></td><td>Data: dia da semana, mês, dia</td><td><code>sex out 16</code></td></tr>
+<tr><td><code>\D{formato}</code></td><td>Data no formato do <code>date</code></td><td><code>\D{%d/%m/%Y}</code> → <code>16/10/2026</code></td></tr>
+<tr><td><code>\n</code></td><td>Quebra de linha</td><td></td></tr>
+<tr><td><code>\j</code></td><td>Quantos <a href="jobs.html">jobs</a> estão em segundo plano</td><td><code>0</code></td></tr>
+<tr><td><code>\!</code></td><td>Número deste comando no <a href="historico.html">histórico</a></td><td><code>7</code></td></tr>
+<tr><td><code>\#</code></td><td>Número do comando nesta sessão</td><td><code>8</code></td></tr>
+<tr><td><code>\s</code></td><td>Nome do shell</td><td><code>bash</code></td></tr>
+<tr><td><code>\v</code> / <code>\V</code></td><td>Versão do Bash / versão completa</td><td><code>5.3</code> / <code>5.3.9</code></td></tr>
+<tr><td><code>\l</code></td><td>Nome do terminal (o fim de <code>tty</code>)</td><td><code>tty</code></td></tr>
+<tr><td><code>\e</code></td><td>O caractere ESC, que inicia uma cor</td><td>(invisível)</td></tr>
+<tr><td><code>\[</code> … <code>\]</code></td><td>Marca um trecho que não ocupa espaço na tela</td><td>(veja "Cores")</td></tr>
+<tr><td><code>\\</code></td><td>Uma contrabarra</td><td><code>\</code></td></tr>
+</table>
+</div>
+
+<p>Não existe um escape para "código de saída": para isso usamos a variável <code>$?</code>, como você verá adiante.</p>
+
+<hr>
+
+<h2>Cores: <code>\[\e[…m\]</code></h2>
+<p>Os terminais entendem "códigos de cor" (chamados de sequências ANSI): um caractere invisível ESC, seguido de <code>[</code>, números e a letra <code>m</code>. Tudo o que vem depois sai colorido, até outro código mudar a cor.</p>
+
+<dl class="anatomy">
+  <dt>\[</dt><dd>"Começa um trecho invisível." Avisa o Bash que o que vem não ocupa espaço na tela.</dd>
+  <dt>\e</dt><dd>O caractere ESC (também se escreve <code>\033</code>).</dd>
+  <dt>[1;32m</dt><dd>O código: <code>1</code> = negrito, <code>;</code> separa, <code>32</code> = verde, <code>m</code> fecha.</dd>
+  <dt>\]</dt><dd>"Fim do trecho invisível."</dd>
+  <dt>\u@\h</dt><dd>O texto que vai sair em verde.</dd>
+  <dt>\[\e[0m\]</dt><dd><code>0</code> = volta ao normal (<em>reset</em>). Sem ele, o resto da tela fica verde.</dd>
+</dl>
+
+<p>Um prompt completo, com usuário e máquina em verde e a pasta em azul (é o prompt colorido que o Ubuntu e o Debian vêm usando há anos):</p>
+
+<pre class="syntax">PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '</pre>
+
+<p>Veja o resultado no terminal (cores conferidas no laboratório com um terminal de verdade):</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~/Documentos</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">[0] ~/Documentos$ PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
+<span class="c-u">ana@notebook</span>:<span class="c-d">~/Documentos</span>$ cd
+<span class="c-u">ana@notebook</span>:<span class="c-d">~</span>$ </pre></div>
+
+<h3>Tabela de cores</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Cor</th><th>Letra</th><th>Fundo</th><th>Versão clara (letra)</th></tr>
+<tr><td>Preto</td><td><code>30</code></td><td><code>40</code></td><td><code>90</code></td></tr>
+<tr><td>Vermelho</td><td><code>31</code></td><td><code>41</code></td><td><code>91</code></td></tr>
+<tr><td>Verde</td><td><code>32</code></td><td><code>42</code></td><td><code>92</code></td></tr>
+<tr><td>Amarelo</td><td><code>33</code></td><td><code>43</code></td><td><code>93</code></td></tr>
+<tr><td>Azul</td><td><code>34</code></td><td><code>44</code></td><td><code>94</code></td></tr>
+<tr><td>Magenta</td><td><code>35</code></td><td><code>45</code></td><td><code>95</code></td></tr>
+<tr><td>Ciano</td><td><code>36</code></td><td><code>46</code></td><td><code>96</code></td></tr>
+<tr><td>Branco</td><td><code>37</code></td><td><code>47</code></td><td><code>97</code></td></tr>
+</table>
+</div>
+
+<p>Estilos: <code>0</code> normal (zera tudo), <code>1</code> negrito, <code>2</code> fraco, <code>4</code> sublinhado, <code>7</code> invertido. Combine com <code>;</code>: <code>\e[1;4;33m</code> = negrito, sublinhado, amarelo. Terminais modernos aceitam 256 cores com <code>\e[38;5;Nm</code> (N de 0 a 255; <code>208</code> é laranja).</p>
+
+<h3>Por que o <code>\[ \]</code> é obrigatório</h3>
+<p>Para posicionar o cursor, o Bash precisa saber <strong>quantas colunas</strong> o prompt ocupa. Ele conta cada caractere do prompt pronto. Mas <code>\e[1;32m</code> não aparece na tela: são 7 caracteres que o terminal "come". Sem o <code>\[ \]</code>, o Bash acha que o prompt é mais comprido do que é.</p>
+<p>Enquanto você só digita comandos curtos, nada parece errado. O problema aparece ao <strong>editar</strong>:</p>
+<ul>
+  <li>um comando comprido não quebra para a linha de baixo no lugar certo e começa a escrever <strong>por cima</strong> do próprio prompt;</li>
+  <li>ao usar <kbd>↑</kbd> no histórico ou <kbd>Home</kbd>, o cursor para no lugar errado e sobram pedaços de comandos antigos na tela;</li>
+  <li>a linha "pula": o texto aparece deslocado algumas colunas.</li>
+</ul>
+<p>O comando digitado continua certo (é só a <strong>tela</strong> que fica bagunçada), mas trabalhar assim é um tormento. A regra: <strong>todo</strong> código de cor no <code>PS1</code> vai dentro de <code>\[</code> e <code>\]</code>. Texto visível nunca vai dentro deles.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrita</th><th>Resultado</th></tr>
+<tr><td><code>PS1='\e[32m\u\e[0m\$ '</code></td><td>Cor certa, mas a edição de linhas longas fica bagunçada.</td></tr>
+<tr><td><code>PS1='\[\e[32m\]\u\[\e[0m\]\$ '</code></td><td>Correto.</td></tr>
+<tr><td><code>PS1='\[\e[32m\u\]\[\e[0m\]\$ '</code></td><td>Errado ao contrário: o <code>\u</code> ficou dentro, o Bash acha que o prompt é <strong>mais curto</strong>.</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Cores mais legíveis com variáveis</strong>
+<p>Um prompt colorido fica ilegível rápido. Guarde as cores em variáveis e monte o <code>PS1</code> com elas:</p>
+<pre class="file" data-file="trecho do ~/.bashrc">verde='\[\e[1;32m\]'
+azul='\[\e[1;34m\]'
+normal='\[\e[0m\]'
+PS1="${verde}\u@\h${normal}:${azul}\w${normal}\\$ "
+unset verde azul normal</pre>
+<p>Aqui as aspas são duplas de propósito: queremos trocar <code>${verde}</code> pelo valor <strong>agora</strong>. Por isso o <code>\$</code> do fim virou <code>\\$</code>: dentro de aspas duplas, <code>\\</code> vira uma contrabarra só, e o <code>PS1</code> recebe <code>\$</code>. O <code>tput</code> é outra forma de obter as cores (veja <a href="interativo.html">Menus e Cores</a>).</p>
+</div>
+
+<hr>
+
+<h2>Mostrar o código de saída do último comando</h2>
+<p>O <a href="codigo-saida.html"><code>$?</code></a> guarda o código do último comando. Colocando-o no <code>PS1</code>, você vê na hora se algo falhou, mesmo quando o comando não mostra mensagem nenhuma. Mas atenção às aspas:</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ false
+ana@notebook:~$ PS1="[$?] \w\$ "
+[1] ~$ true
+[1] ~$ ls nada                        <span class="c-i">← aspas duplas: o 1 ficou congelado</span>
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+[1] ~$ PS1='[$?] \w\$ '
+[0] ~$ ls nada
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+[2] ~$                                <span class="c-i">← aspas simples: muda a cada comando</span></pre></div>
+
+<ul>
+  <li>Com <strong>aspas duplas</strong>, o <code>$?</code> foi trocado pelo valor <strong>no momento da atribuição</strong> (1, do <code>false</code>). O <code>PS1</code> ficou com o texto <code>[1]</code> fixo para sempre.</li>
+  <li>Com <strong>aspas simples</strong>, o <code>PS1</code> guarda o texto <code>$?</code> e o Bash o expande <strong>cada vez</strong> que desenha o prompt. O <code>ls nada</code> devolveu 2 (arquivo não encontrado), e o prompt mostrou isso.</li>
+</ul>
+
+<p>Essa é a regra geral: no <code>PS1</code>, variáveis e <code>$( )</code> entre aspas simples são recalculados a cada prompt (o Bash faz isso porque a opção <code>promptvars</code>, de <a href="shopt.html">shopt</a>, vem ligada).</p>
+
+<div class="try" data-goal="ran:PS1='[^']*\$\?,ran:ls nada" data-solucao="PS1='[$?] \w\$ ';;ls nada">
+<p class="try-task"><strong>Missão:</strong> crie um <code>PS1</code> que mostre o código de saída entre colchetes, a pasta e o <code>$</code> (<code>'[$?] \w\$ '</code>, com aspas simples). Depois rode <code>ls nada</code> e veja o número mudar.</p>
+</div>
+
+<h3>Só quando falhar, e em vermelho</h3>
+<p>Um zero em todo prompt cansa. Uma função que monta o <code>PS1</code> antes de cada prompt pode mostrar o código <strong>só</strong> quando ele não é zero, ou trocar a cor. Para rodar algo antes de cada prompt existe o <code>PROMPT_COMMAND</code> (próxima seção):</p>
+
+<pre class="file" data-file="trecho do ~/.bashrc">meu_prompt() {
+  local codigo=$?                       # guarde o $? ANTES de qualquer outro comando
+  local cor='\[\e[1;32m\]'              # verde
+  (( codigo != 0 )) &amp;&amp; cor='\[\e[1;31m\]'   # vermelho se falhou
+  PS1="$cor[$codigo]\[\e[0m\] \u:\W\\$ "
+}
+PROMPT_COMMAND=meu_prompt</pre>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ PROMPT_COMMAND=meu_prompt
+<span class="c-u">[0]</span> ana:~$ ls nada
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+<span class="c-r">[2]</span> ana:~$ cd Documentos
+<span class="c-u">[0]</span> ana:Documentos$ false
+<span class="c-r">[1]</span> ana:Documentos$ true
+<span class="c-u">[0]</span> ana:Documentos$ </pre></div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>local codigo=$?</code></td><td>Salva o código do último comando. Tem que ser a primeira linha: qualquer comando depois (até o <code>local</code> seguinte) troca o <code>$?</code>.</td></tr>
+<tr><td><code>local cor='\[\e[1;32m\]'</code></td><td>Começa com verde.</td></tr>
+<tr><td><code>(( codigo != 0 )) &amp;&amp; cor=…</code></td><td>Se o código não é zero, troca para vermelho (<code>31</code>).</td></tr>
+<tr><td><code>PS1="$cor[$codigo]…"</code></td><td>Monta o <code>PS1</code> com aspas duplas: aqui queremos os valores <strong>de agora</strong>, porque a função roda de novo antes de cada prompt.</td></tr>
+<tr><td><code>PROMPT_COMMAND=meu_prompt</code></td><td>Pede ao Bash para rodar a função antes de desenhar cada prompt.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2><code>PROMPT_COMMAND</code> e <code>PS0</code>: antes e depois</h2>
+<p>O <code>PROMPT_COMMAND</code> guarda um comando que o Bash executa <strong>antes de mostrar cada prompt</strong>. O <code>PS0</code> <span class="versao">bash 4.4+</span> é um texto mostrado <strong>depois que você aperta Enter</strong>, antes de o comando rodar.</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ PS0='&gt;&gt; \t\n'
+ana@notebook:~$ echo oi
+&gt;&gt; 09:56:01                          <span class="c-i">← PS0: depois do Enter</span>
+oi
+ana@notebook:~$ PS0=
+&gt;&gt; 09:56:01
+ana@notebook:~$ PROMPT_COMMAND=(date)
+sex 16 out 2026 09:56:01 -03         <span class="c-i">← PROMPT_COMMAND: antes do prompt</span>
+ana@notebook:~$ echo um
+um
+sex 16 out 2026 09:56:01 -03
+ana@notebook:~$ PROMPT_COMMAND+=('echo ---')
+sex 16 out 2026 09:56:01 -03
+---
+ana@notebook:~$ </pre></div>
+
+<ul>
+  <li>O <code>PS0</code> usa os mesmos escapes do <code>PS1</code>. Com <code>\t</code>, ele carimba a hora em que cada comando <strong>começou</strong>. Repare que o <code>PS0=</code> ainda mostrou o carimbo: a mudança só vale a partir do comando seguinte.</li>
+  <li>Desde o bash 5.1, o <code>PROMPT_COMMAND</code> pode ser um <a href="arrays.html">array</a>: cada item é um comando, executados em ordem. Assim, programas diferentes (o seu <code>.bashrc</code>, ferramentas instaladas) acrescentam os seus com <code>+=</code> sem apagar o dos outros. Em versões antigas, ele é um texto só: junte com <code>;</code>.</li>
+</ul>
+
+<div class="warning">
+<strong>Cuidado com o que roda no <code>PROMPT_COMMAND</code></strong>
+<p>Ele roda a cada Enter. Um comando lento ali (consultar a rede, varrer pastas grandes) deixa o terminal inteiro lento. Mantenha-o leve.</p>
+</div>
+
+<hr>
+
+<h2>O ramo do git no prompt</h2>
+<p>Quem usa git quer saber em que ramo (<em>branch</em>) está. O git traz uma função pronta, <code>__git_ps1</code>, que devolve o ramo da pasta atual (ou nada, fora de um repositório). Ela mora num arquivo que você carrega com <code>source</code>; o caminho varia:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Arquivo com a <code>__git_ps1</code></th></tr>
+<tr><td>Debian / Ubuntu</td><td><code>/usr/lib/git-core/git-sh-prompt</code> (já carregado se o pacote <code>bash-completion</code> estiver ativo)</td></tr>
+<tr><td>Fedora</td><td><code>/usr/share/git-core/contrib/completion/git-prompt.sh</code></td></tr>
+<tr><td>Arch</td><td><code>/usr/share/git/completion/git-prompt.sh</code></td></tr>
+<tr><td>macOS (git do Homebrew)</td><td><code>$(brew --prefix)/etc/bash_completion.d/git-prompt.sh</code></td></tr>
+</table>
+</div>
+
+<p>Uma sessão no laboratório (que tem o git de um Ubuntu), criando um repositório de teste na pasta <code>site</code>:</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~/site</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ source /usr/lib/git-core/git-sh-prompt
+ana@notebook:~$ mkdir site &amp;&amp; cd site
+ana@notebook:~/site$ git init -q -b main
+…
+ana@notebook:~/site$ PS1='\u@\h:\w$(__git_ps1 " (%s)")\$ '
+ana@notebook:~/site (main)$ echo oi &gt; a.txt; git add a.txt; git commit -qm um
+ana@notebook:~/site (main)$ git switch -qc teste
+ana@notebook:~/site (teste)$ GIT_PS1_SHOWDIRTYSTATE=1
+ana@notebook:~/site (teste)$ echo mais &gt;&gt; a.txt
+ana@notebook:~/site (teste *)$ cd ..
+ana@notebook:~$ </pre></div>
+
+<p>(Encurtamos na linha <code>…</code>: ali a Ana configurou nome e e-mail no git, o que não interessa aqui.) Repare que o prompt ganhou <code>(main)</code> logo depois do <code>PS1</code> novo, trocou para <code>(teste)</code> com o <code>git switch</code>, ganhou um <code>*</code> quando o arquivo mudou e sumiu ao sair da pasta.</p>
+
+<dl class="anatomy">
+  <dt>$(__git_ps1 " (%s)")</dt><dd>Chama a função a cada prompt. O <code>%s</code> é trocado pelo nome do ramo; fora de um repositório, sai vazio.</dd>
+  <dt>' … '</dt><dd>Aspas simples, de novo: a substituição de comando precisa rodar a cada prompt, não uma vez só.</dd>
+  <dt>GIT_PS1_SHOWDIRTYSTATE=1</dt><dd>Opção da função: mostra <code>*</code> quando há alterações não salvas no git.</dd>
+</dl>
+
+<p>O git não faz parte do Bash: este é só um exemplo de como uma função externa entra no prompt. O simulador desta página não tem git.</p>
+
+<hr>
+
+<h2>Os outros prompts: <code>PS2</code>, <code>PS3</code> e <code>PS4</code></h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Quando aparece</th><th>Padrão</th></tr>
+<tr><td><code>PS1</code></td><td>O prompt normal, esperando um comando</td><td>depende da distro</td></tr>
+<tr><td><code>PS2</code></td><td>Continuação: o comando ainda não terminou (um <code>for</code> aberto, aspas sem fechar, <code>\</code> no fim)</td><td><code>&gt; </code></td></tr>
+<tr><td><code>PS3</code></td><td>A pergunta do menu <code>select</code> (veja <a href="interativo.html">Menus e Cores</a>)</td><td><code>#? </code></td></tr>
+<tr><td><code>PS4</code></td><td>O começo de cada linha do rastreamento <code>set -x</code> (veja <a href="depuracao.html">Depurar</a>)</td><td><code>+ </code></td></tr>
+<tr><td><code>PS0</code></td><td>Depois do Enter, antes de o comando rodar</td><td>vazio</td></tr>
+</table>
+</div>
+
+<h3><code>PS2</code></h3>
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ for i in 1 2
+&gt; do echo $i
+&gt; done
+1
+2
+ana@notebook:~$ PS2='continua&gt; '
+ana@notebook:~$ for i in 1 2
+continua&gt; do echo $i
+continua&gt; done
+1
+2</pre></div>
+<p>Você raramente vai mudar o <code>PS2</code>, mas é bom reconhecê-lo: se o prompt virou <code>&gt;</code> e nada acontece, o Bash está esperando você terminar o comando (uma aspa aberta, por exemplo). <kbd>Ctrl</kbd>+<kbd>C</kbd> cancela.</p>
+
+<h3><code>PS4</code></h3>
+<p>No rastreamento de um script com <code>bash -x</code>, cada linha começa com o <code>PS4</code>. Colocar o número da linha ali ajuda muito a achar erros. Veja com este script de três linhas:</p>
+
+<pre class="file" data-file="ola.sh">#!/usr/bin/env bash
+nome=Ana
+echo "Olá, $nome"
+</pre>
+
+<pre class="term">$ bash -x ola.sh
++ nome=Ana
++ echo 'Olá, Ana'
+Olá, Ana
+$ PS4='+ linha $LINENO: ' bash -x ola.sh     « PS4 só para este comando
++ linha 2: nome=Ana
++ linha 3: echo 'Olá, Ana'
+Olá, Ana</pre>
+<p>O detalhe completo está em <a href="depuracao.html">Depurar (set -x, bash -n)</a>.</p>
+
+<hr>
+
+<h2>Deixar permanente</h2>
+<p>Tudo o que você fez até aqui some ao fechar o terminal. Para valer sempre, o <code>PS1</code> precisa estar no <code>~/.bashrc</code>, que o Bash lê a cada terminal novo (veja <a href="inicializacao.html">Arquivos de Inicialização</a>).</p>
+
+<ol class="passo">
+  <li><strong>Teste o prompt no terminal</strong> até gostar dele.</li>
+  <li><strong>Abra o <code>~/.bashrc</code></strong> num editor (<code>nano ~/.bashrc</code>) e procure a linha que começa com <code>PS1=</code>. No da Ana é <code>PS1='\u@\h:\w\$ '</code>.</li>
+  <li><strong>Troque essa linha</strong> pela sua (ou comente a antiga com <code>#</code> e escreva a nova embaixo). Se o seu <code>.bashrc</code> tiver vários <code>PS1=</code> (o do Ubuntu tem um bloco com <code>color_prompt</code>), vale o <strong>último</strong> que for executado.</li>
+  <li><strong>Recarregue</strong>: <code>source ~/.bashrc</code>, ou abra um terminal novo.</li>
+</ol>
+
+<p>Sem editor, dá para acrescentar a linha no fim do arquivo com <code>echo</code> e <code>&gt;&gt;</code>. Repare no <code>\\$</code>: dentro das aspas duplas do <code>echo</code>, <code>\\</code> vira uma contrabarra, e o arquivo recebe <code>\$</code>:</p>
+
+<div class="term-win"><div class="term-bar"><span class="sim-dots"><i></i><i></i><i></i></span><span class="term-title">ana@notebook: ~</span></div><pre style="margin:0;padding:12px 16px 14px;overflow-x:auto;background:transparent;color:#eeeeec;font-size:14.5px;line-height:1.5;white-space:pre">ana@notebook:~$ echo "PS1='[\t] \w\\$ '" &gt;&gt; ~/.bashrc
+ana@notebook:~$ tail -n 1 ~/.bashrc
+PS1='[\t] \w\$ '
+ana@notebook:~$ source ~/.bashrc
+[09:56:36] ~$ </pre></div>
+
+<p>Como a linha nova ficou <strong>depois</strong> do <code>PS1</code> original, é ela que vale. A partir de agora, todo terminal novo abre com esse prompt.</p>
+
+<div class="try" data-goal="contains:~/.bashrc=[\t] \w,ran:^(source|\.) +~/\.bashrc" data-solucao="echo &quot;PS1='[\t] \w\\$ '&quot; &gt;&gt; ~/.bashrc;;source ~/.bashrc">
+<p class="try-task"><strong>Missão:</strong> acrescente no fim do <code>~/.bashrc</code> a linha <code>PS1='[\t] \w\$ '</code> (como na sessão acima) e recarregue o arquivo com <code>source ~/.bashrc</code>. Confira com <code>tail -n 1 ~/.bashrc</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O prompt mostra <code>\u</code> e <code>\w</code> literalmente</strong>
+<p><strong>O que aconteceu:</strong> você colocou os escapes numa variável que não é prompt, ou usou <code>echo</code> para testar. Os escapes só valem dentro de <code>PS0</code>, <code>PS1</code>, <code>PS2</code> e <code>PS4</code> (e com <code>${var@P}</code>).</p>
+<p><strong>Como resolver:</strong> teste com <code>p='…'; echo "${p@P}"</code> ou atribua direto ao <code>PS1</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O código de saída (ou a hora feita com <code>$(date)</code>) não muda</strong>
+<p><strong>O que aconteceu:</strong> o <code>PS1</code> foi criado com aspas duplas, e o <code>$?</code> (ou o <code>$(date)</code>) foi trocado pelo valor uma vez só.</p>
+<p><strong>Como confirmar:</strong> <code>echo "$PS1"</code> mostra um número no lugar de <code>$?</code>.</p>
+<p><strong>Como resolver:</strong> use aspas simples: <code>PS1='[$?] \w\$ '</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Linhas longas escrevem por cima do prompt; o histórico deixa lixo na tela</strong>
+<p><strong>O que aconteceu:</strong> algum código de cor está fora de <code>\[ \]</code>, e o Bash calcula errado o tamanho do prompt.</p>
+<p><strong>Como confirmar:</strong> <code>echo "$PS1"</code> e procure cada <code>\e[</code>: todos devem estar logo depois de um <code>\[</code>, e o <code>m</code> de cada código logo antes de um <code>\]</code>.</p>
+<p><strong>Como resolver:</strong> envolva cada código: <code>\[\e[1;32m\]</code>. Para limpar a tela bagunçada agora, <kbd>Ctrl</kbd>+<kbd>L</kbd>.</p>
+</div>
+
+<div class="cenario">
+<strong>Tudo ficou colorido depois do prompt</strong>
+<p><strong>O que aconteceu:</strong> faltou o <code>\[\e[0m\]</code> no fim, que volta à cor normal. O que você digita e as saídas herdam a última cor.</p>
+<p><strong>Como resolver:</strong> termine cada trecho colorido com <code>\[\e[0m\]</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Mudei o <code>.bashrc</code> e nada mudou</strong>
+<p><strong>O que aconteceu:</strong> o <code>.bashrc</code> só é lido quando o terminal abre; ou existe outro <code>PS1=</code> mais abaixo no arquivo, que sobrescreve o seu; ou o <code>PROMPT_COMMAND</code> está remontando o <code>PS1</code> a cada prompt (como o <code>meu_prompt</code> acima).</p>
+<p><strong>Como confirmar:</strong> <code>grep -n 'PS1=' ~/.bashrc</code> mostra todas as atribuições; <code>echo "$PROMPT_COMMAND"</code> mostra se há algo rodando antes do prompt.</p>
+<p><strong>Como resolver:</strong> deixe a sua linha por último, rode <code>source ~/.bashrc</code> e, se precisar, <code>unset PROMPT_COMMAND</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"__git_ps1: comando não encontrado" a cada prompt</strong>
+<p><strong>O que aconteceu:</strong> o <code>PS1</code> chama a função, mas o arquivo que a define não foi carregado (ou o caminho é outro na sua distro).</p>
+<p><strong>Como resolver:</strong> coloque o <code>source</code> do arquivo certo (tabela acima) <strong>antes</strong> do <code>PS1</code> no <code>~/.bashrc</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Para que serve</th></tr>
+<tr><td><code>PS1='…'</code></td><td>Define o prompt (aspas simples para recalcular <code>$?</code>, <code>$( )</code> a cada vez)</td></tr>
+<tr><td><code>\u \h \w \W \$</code></td><td>Usuário, máquina, caminho, nome da pasta, <code>$</code>/<code>#</code></td></tr>
+<tr><td><code>\t \A \d \D{fmt}</code></td><td>Hora, hora curta, data, data formatada</td></tr>
+<tr><td><code>\n \j \! \#</code></td><td>Quebra de linha, jobs, número no histórico, número na sessão</td></tr>
+<tr><td><code>\[\e[1;32m\]</code></td><td>Começa uma cor (sempre dentro de <code>\[ \]</code>)</td></tr>
+<tr><td><code>\[\e[0m\]</code></td><td>Volta à cor normal</td></tr>
+<tr><td><code>${var@P}</code></td><td>Mostra como um texto ficaria como prompt</td></tr>
+<tr><td><code>PROMPT_COMMAND</code></td><td>Comando (ou array de comandos, 5.1+) executado antes de cada prompt</td></tr>
+<tr><td><code>PS0</code></td><td>Texto mostrado depois do Enter (4.4+)</td></tr>
+<tr><td><code>PS2</code> / <code>PS3</code> / <code>PS4</code></td><td>Continuação / menu <code>select</code> / <code>set -x</code></td></tr>
+<tr><td><code>$(__git_ps1 " (%s)")</code></td><td>Ramo do git (depois de carregar o <code>git-prompt</code>)</td></tr>
+<tr><td><code>source ~/.bashrc</code></td><td>Recarrega a configuração no terminal atual</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só o nome da pasta</h3>
+<p>Complete para o prompt mostrar apenas o nome da pasta atual (por exemplo, <code>projetos$</code>):</p>
+<div class="ex-code">PS1='<input data-answer="\W" aria-label="escape">\$ '</div>
+</div>
+
+<div class="exercise">
+<h3>2. Fechar a cor</h3>
+<p>Complete o fim do prompt, voltando à cor normal do jeito certo:</p>
+<div class="ex-code">PS1='\[\e[1;34m\]\w<input data-answer="\[\e[0m\]|\[\033[0m\]|\[\e[m\]" aria-label="volta ao normal">\$ '</div>
+</div>
+
+<div class="exercise">
+<h3>3. Hora no prompt</h3>
+<p>Complete para o prompt mostrar a hora no formato <code>HH:MM:SS</code> entre colchetes:</p>
+<div class="ex-code">PS1='[<input data-answer="\t" aria-label="escape da hora">] \w\$ '</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. A Ana escreveu <code>PS1="[$?] \$ "</code> e o número no prompt nunca muda. Por quê?</p>
+<label><input type="radio" name="q4"> Porque o <code>$?</code> não funciona no prompt.</label>
+<label><input type="radio" name="q4"> Porque as aspas duplas trocaram o <code>$?</code> pelo valor uma vez só, na atribuição.</label>
+<label><input type="radio" name="q4"> Porque faltou o <code>PROMPT_COMMAND</code>.</label>
+<label><input type="radio" name="q4"> Porque faltou o <code>\[ \]</code>.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Para que serve o <code>\[ \]</code> em volta dos códigos de cor?</p>
+<label><input type="radio" name="q5"> Para a cor funcionar; sem ele, não há cor.</label>
+<label><input type="radio" name="q5"> Para a cor valer só dentro dos colchetes.</label>
+<label><input type="radio" name="q5"> Para o Bash não contar esses caracteres invisíveis no tamanho do prompt.</label>
+<label><input type="radio" name="q5"> Para o prompt funcionar também como root.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Qual variável define o começo das linhas mostradas pelo <code>set -x</code>?</p>
+<label><input type="radio" name="q6"> <code>PS4</code></label>
+<label><input type="radio" name="q6"> <code>PS2</code></label>
+<label><input type="radio" name="q6"> <code>PS0</code></label>
+<label><input type="radio" name="q6"> <code>PROMPT_COMMAND</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O prompt vem da variável <code>PS1</code>; escapes como <code>\u \h \w \W \$ \t \n</code> viram informações a cada prompt. Teste com <code>echo "${p@P}"</code>.</li>
+  <li>Cores: <code>\[\e[1;32m\]</code> para começar e <code>\[\e[0m\]</code> para voltar ao normal. O <code>\[ \]</code> é obrigatório, senão a edição de linhas fica bagunçada.</li>
+  <li>Use aspas simples para que <code>$?</code> e <code>$( )</code> (como <code>__git_ps1</code>) sejam recalculados a cada prompt.</li>
+  <li><code>PROMPT_COMMAND</code> roda antes de cada prompt; <code>PS0</code> aparece depois do Enter; <code>PS2</code> é a continuação; <code>PS4</code> é o do <code>set -x</code>.</li>
+  <li>Para ficar permanente, coloque o <code>PS1</code> no fim do <code>~/.bashrc</code> e rode <code>source ~/.bashrc</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
