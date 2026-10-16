@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Aspas e Escapes — simples, duplas, \ e $'…' | Guia Bash</title>
+<meta name="description" content="A aula mais importante do Nível 1: aspas simples, aspas duplas, barra invertida e $'…' no Bash. O que cada uma protege, nomes com espaço, variáveis entre aspas, o prompt &gt; de aspas abertas e o erro event not found, com saídas reais e missões no simulador.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Aspas e Escapes</span></h1>
+
+<p class="intro">Antes de rodar qualquer comando, o Bash lê a linha que você digitou e decide o que é texto comum e o que é "especial": espaços, <code>$</code>, <code>*</code>, <code>~</code>, <code>!</code>… As <strong>aspas</strong> e a <strong>barra invertida</strong> são a forma de dizer ao Bash "isto aqui é só texto, não mexa". Esta é a aula mais importante do Nível 1: metade dos erros de quem começa no Bash é aspa faltando ou aspa errada.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que a barra invertida <code>\</code>, as aspas simples <code>'…'</code>, as aspas duplas <code>"…"</code> e o <code>$'…'</code> protegem, e o que deixam passar.</li>
+  <li>Como lidar com nomes com espaço, como <code>Área de trabalho</code>.</li>
+  <li>Por que toda variável deve ser escrita como <code>"$var"</code>.</li>
+  <li>Como colocar uma aspa simples dentro de aspas simples (e aspas duplas dentro de duplas).</li>
+  <li>O que fazer quando aparece o prompt <code>&gt;</code>, o "event not found" ou o "número excessivo de argumentos".</li>
+</ul>
+</div>
+
+<p>Todos os exemplos acontecem na máquina fictícia <strong>notebook</strong>, na pasta da usuária <strong>ana</strong>. Você pode repetir cada um no terminal simulado das missões.</p>
+
+<hr>
+
+<h2>O problema: o Bash "mexe" no que você digita</h2>
+<p>Quando você aperta <kbd>Enter</kbd>, o Bash não entrega a linha inteira para o comando. Ele primeiro faz um trabalho de preparação:</p>
+<ol>
+  <li><strong>Separa a linha em palavras</strong>, cortando nos espaços. A primeira palavra é o comando; as outras são os argumentos.</li>
+  <li><strong>Troca as partes especiais</strong>: <code>$HOME</code> vira <code>/home/ana</code>, <code>*.txt</code> vira a lista de arquivos <code>.txt</code>, <code>~</code> vira a sua pasta pessoal…</li>
+  <li>Só então <strong>chama o comando</strong> com as palavras prontas.</li>
+</ol>
+
+<p>Na maior parte do tempo, isso é exatamente o que você quer. O problema aparece quando o texto tem um desses caracteres especiais <strong>por acaso</strong>. O exemplo clássico é a pasta <code>Área de trabalho</code>, que vem em todo Linux em português:</p>
+
+<pre class="term">$ cd Área de trabalho
+bash: cd: número excessivo de argumentos</pre>
+
+<p>Para você, isso é o nome de <strong>uma</strong> pasta. Para o Bash, são três palavras: <code>Área</code>, <code>de</code> e <code>trabalho</code>. O <code>cd</code> recebeu três argumentos, mas só sabe ir para um lugar, e reclamou. As aspas resolvem:</p>
+
+<pre class="term">$ cd "Área de trabalho"
+$ pwd
+/home/ana/Área de trabalho          « funcionou: uma palavra só, com os espaços dentro</pre>
+
+<h3>Raio-x: vendo as palavras que o comando recebe</h3>
+<p>Para entender aspas, você precisa <strong>ver</strong> como o Bash cortou a linha. Vamos usar um truque com o <code>printf</code> que será o nosso "raio-x" durante toda a aula:</p>
+
+<dl class="anatomy">
+  <dt>printf</dt><dd>Comando que escreve texto seguindo um modelo (você vai estudá-lo em <a href="printf.html">printf e echo</a>).</dd>
+  <dt>'[%s]\n'</dt><dd>O modelo: <code>%s</code> é o lugar de uma palavra, <code>[ ]</code> são os colchetes em volta dela e <code>\n</code> pula a linha. O <code>printf</code> repete o modelo para cada argumento.</dd>
+  <dt>Área de trabalho</dt><dd>Os argumentos, do jeito que o Bash os entregar.</dd>
+</dl>
+
+<pre class="term">$ printf '[%s]\n' Área de trabalho
+[Área]                     « três argumentos separados
+[de]
+[trabalho]
+$ printf '[%s]\n' "Área de trabalho"
+[Área de trabalho]         « um argumento só, com os espaços dentro</pre>
+
+<p>Cada par de colchetes é <strong>um argumento</strong>. Sempre que estiver em dúvida sobre aspas, troque o seu comando por <code>printf '[%s]\n'</code> e veja o que chegaria a ele.</p>
+
+<h3>Os caracteres especiais</h3>
+<p>Estes são os caracteres que o Bash trata de forma especial quando estão <strong>fora de aspas</strong>. Você não precisa decorar: basta saber que eles existem e que as aspas os "desligam".</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Caractere</th><th>O que o Bash faz com ele</th><th>Aula</th></tr>
+<tr><td>espaço, tab</td><td>Separa as palavras</td><td>esta</td></tr>
+<tr><td><code>$</code></td><td>Começa uma variável (<code>$HOME</code>), uma conta <code>$(( ))</code> ou um comando <code>$( )</code></td><td><a href="variaveis-intro.html">Variáveis</a></td></tr>
+<tr><td><code>`</code> (crase)</td><td>Forma antiga de <code>$( )</code></td><td><a href="substituicao-comando.html">Substituição de comando</a></td></tr>
+<tr><td><code>* ? [ ]</code></td><td>Curingas: viram nomes de arquivos</td><td><a href="curingas.html">Curingas</a></td></tr>
+<tr><td><code>{ }</code></td><td>Gera listas: <code>{a,b}</code>, <code>{1..5}</code></td><td><a href="chaves.html">Chaves</a></td></tr>
+<tr><td><code>~</code></td><td>Vira a pasta pessoal</td><td><a href="navegar.html">Navegar</a></td></tr>
+<tr><td><code>!</code></td><td>Puxa um comando do histórico (no terminal)</td><td><a href="historico.html">Histórico</a></td></tr>
+<tr><td><code>; &amp; | &lt; &gt; ( )</code></td><td>Separam e ligam comandos, redirecionam</td><td><a href="operadores.html">; &amp;&amp; ||</a>, <a href="redirecionamento.html">Redirecionamento</a></td></tr>
+<tr><td><code>#</code></td><td>No começo de uma palavra, começa um comentário</td><td><a href="sintaxe.html">Anatomia de um comando</a></td></tr>
+<tr><td><code>' " \</code></td><td>As próprias aspas e a barra invertida</td><td>esta</td></tr>
+</table>
+</div>
+
+<p>Existem quatro formas de proteger texto. Vamos de uma em uma.</p>
+
+<hr>
+
+<h2>1. A barra invertida <code>\</code>: protege um caractere</h2>
+<p>A barra invertida (<em>backslash</em>, em inglês) é a forma mais simples: ela protege <strong>só o caractere que vem logo depois</strong>. Esse uso tem um nome técnico: <strong>escapar</strong> o caractere ("tirar o poder especial dele").</p>
+
+<dl class="anatomy">
+  <dt>cd</dt><dd>O comando.</dd>
+  <dt>Área\ de\ trabalho</dt><dd>Cada <code>\ </code> (barra + espaço) vira um espaço comum, que não separa palavras. O resultado é um argumento só.</dd>
+</dl>
+
+<pre class="term">$ cd Área\ de\ trabalho
+$ pwd
+/home/ana/Área de trabalho</pre>
+
+<p>É isso que a tecla <kbd>Tab</kbd> escreve quando completa um nome com espaço (veja <a href="completar.html">Completar com Tab</a>). Funciona com qualquer caractere especial:</p>
+
+<pre class="term">$ echo \$HOME
+$HOME                      « o $ protegido não começa variável
+$ echo \"oi\"
+"oi"                       « as aspas protegidas aparecem
+$ echo \\
+\                          « para ter uma barra, escreva duas</pre>
+
+<p>Repare: <strong>a barra some</strong> na saída. Ela é uma instrução para o Bash, não parte do texto. Esse passo, em que o Bash retira as aspas e barras que já cumpriram o papel, se chama <strong>remoção de aspas</strong> e é o último da lista de expansões (veja <a href="ordem-expansoes.html">A Ordem das Expansões</a>).</p>
+
+<h3>Barra no fim da linha: continuar na próxima</h3>
+<p>Uma barra invertida como <strong>último</strong> caractere da linha protege o <kbd>Enter</kbd>. O Bash entende "o comando continua" e mostra o prompt de continuação <code>&gt;</code>:</p>
+
+<pre class="term">$ ls -l Documentos/notas.txt \
+&gt;   frutas.txt
+-rw-rw-r-- 1 ana ana 69 out 14 17:40 Documentos/notas.txt
+-rw-rw-r-- 1 ana ana 47 out 14 16:05 frutas.txt</pre>
+
+<p>O <code>&gt;</code> não é digitado por você: é o Bash pedindo o resto do comando. Isso é muito usado em scripts para quebrar comandos compridos. Cuidado: nada pode vir depois da barra, nem um espaço.</p>
+
+<div class="try" data-goal="cwd:~/Área de trabalho" data-solucao="cd Área\ de\ trabalho">
+<p class="try-task"><strong>Missão:</strong> entre na pasta <code>Área de trabalho</code> usando <strong>barras invertidas</strong> (sem aspas). Confira com <code>pwd</code>. Dica: digite <code>cd Ár</code> e aperte <kbd>Tab</kbd> para ver o que o Bash escreve.</p>
+</div>
+
+<hr>
+
+<h2>2. Aspas simples <code>'…'</code>: tudo é literal</h2>
+<p>Entre aspas simples, <strong>nada é especial</strong>. Nenhum caractere: nem espaço, nem <code>$</code>, nem <code>*</code>, nem <code>\</code>, nem <code>!</code>. O que você escreveu é exatamente o que o comando recebe, sem as aspas das pontas.</p>
+
+<dl class="anatomy">
+  <dt>echo</dt><dd>Repete os argumentos na tela, separados por um espaço.</dd>
+  <dt>'</dt><dd>Abre as aspas simples: "a partir daqui, é tudo texto".</dd>
+  <dt>Olá, $nome</dt><dd>O texto. O <code>$nome</code> fica como está: não vira variável.</dd>
+  <dt>'</dt><dd>Fecha as aspas. Elas não aparecem na saída.</dd>
+</dl>
+
+<pre class="term">$ nome=Ana
+$ echo 'Olá, $nome'
+Olá, $nome                         « a variável NÃO foi trocada
+$ echo 'Olá     mundo'
+Olá     mundo                      « os espaços ficaram todos
+$ echo Olá     mundo
+Olá mundo                          « sem aspas: duas palavras, o echo junta com um espaço
+$ echo '*.txt'
+*.txt                              « o curinga não virou nome de arquivo
+$ echo 'Hoje: $(whoami) em $(pwd)'
+Hoje: $(whoami) em $(pwd)          « nenhum comando foi executado
+$ echo 'C:\Users e \n'
+C:\Users e \n                      « a barra também é só texto</pre>
+
+<p>Repare na terceira sessão: sem aspas, <code>Olá     mundo</code> virou dois argumentos (<code>Olá</code> e <code>mundo</code>), e o <code>echo</code> sempre separa os argumentos com <strong>um</strong> espaço. Os espaços extras se perderam no corte das palavras, antes de o <code>echo</code> rodar.</p>
+
+<p>Use aspas simples quando o texto deve chegar <strong>intacto</strong>: mensagens com <code>$</code>, padrões para o <code>grep</code>, programas para o <code>awk</code> e o <code>sed</code>, senhas de exemplo.</p>
+
+<div class="warning">
+<strong>A única coisa que não cabe: outra aspa simples</strong>
+<p>Como a barra invertida não funciona dentro de aspas simples, não existe "aspa simples escapada" ali dentro. A primeira <code>'</code> que aparecer fecha as aspas. Para escrever <code>copo d'água</code> há outras formas, que você vai ver na seção <a href="#aspa-dentro">Uma aspa dentro da outra</a>.</p>
+</div>
+
+<div class="try" data-goal="out:O preço é $5" data-solucao="echo 'O preço é $5'">
+<p class="try-task"><strong>Missão:</strong> mostre na tela, exatamente, a frase <code>O preço é $5</code>. Tente primeiro <code>echo O preço é $5</code> e veja o que acontece com o <code>$5</code> (ele é uma variável especial, vazia aqui). Depois corrija.</p>
+</div>
+
+<hr>
+
+<h2>3. Aspas duplas <code>"…"</code>: agrupam, mas deixam o <code>$</code> funcionar</h2>
+<p>As aspas duplas são as mais usadas. Elas protegem os <strong>espaços</strong> e os <strong>curingas</strong> (o texto continua sendo uma palavra só), mas deixam <strong>quatro</strong> caracteres com poder especial:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Dentro de "…"</th><th>Continua funcionando?</th><th>Exemplo</th></tr>
+<tr><td><code>$</code></td><td>Sim: variáveis, <code>$( )</code> e <code>$(( ))</code></td><td><code>"Olá, $nome"</code></td></tr>
+<tr><td><code>`</code> (crase)</td><td>Sim: executa o comando</td><td><code>"Usuário: `whoami`"</code></td></tr>
+<tr><td><code>\</code></td><td>Só antes de <code>$ ` " \</code> e do Enter</td><td><code>"Custa \$5"</code></td></tr>
+<tr><td><code>!</code></td><td>Sim, no terminal (histórico). Em scripts, não</td><td>veja <a href="#exclamacao">a armadilha do !</a></td></tr>
+<tr><td>espaço, <code>* ? [ ~ { ' ; | &amp; &lt; &gt; #</code></td><td>Não: viram texto comum</td><td><code>"*.txt"</code>, <code>"copo d'água"</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ nome=Ana
+$ echo "Olá, $nome"
+Olá, Ana                                « a variável foi trocada pelo valor
+$ echo "Pasta: $HOME e usuário: $USER"
+Pasta: /home/ana e usuário: ana
+$ echo "Hoje: $(whoami) em $(pwd)"
+Hoje: ana em /home/ana                  « $( ) roda o comando e põe a resposta no lugar
+$ echo "Crase: `whoami`"
+Crase: ana                              « a forma antiga, com crases
+$ echo "Olá     mundo"
+Olá     mundo                           « espaços protegidos, como nas simples</pre>
+
+<p>Compare lado a lado o mesmo texto nos dois tipos de aspas:</p>
+
+<pre class="term">$ echo 'Olá, $nome'
+Olá, $nome
+$ echo "Olá, $nome"
+Olá, Ana</pre>
+
+<p>Essa é a diferença mais importante da aula: <strong>simples = nada muda; duplas = o <code>$</code> funciona</strong>.</p>
+
+<h3>A barra invertida dentro das aspas duplas</h3>
+<p>Dentro de <code>"…"</code>, a barra só é especial antes de cinco coisas: <code>$</code>, <code>`</code>, <code>"</code>, <code>\</code> e a quebra de linha. Antes de qualquer outra letra, ela fica como está:</p>
+
+<pre class="term">$ echo "Custa \$5"
+Custa $5                         « \$ = um cifrão comum
+$ echo "Ele disse \"oi\""
+Ele disse "oi"                   « \" = aspa dupla dentro de aspas duplas
+$ echo "Barra: \\ e \n e \a"
+Barra: \ e \n e \a               « \\ virou uma barra; \n e \a ficaram como estavam
+$ echo "C:\Users"
+C:\Users</pre>
+
+<div class="tip">
+<strong><code>\n</code> entre aspas duplas não pula linha</strong>
+<p>Muita gente espera que <code>echo "a\nb"</code> mostre duas linhas. No Bash, ele mostra <code>a\nb</code>. Para pular linha, use <code>$'a\nb'</code> (a próxima seção), <code>printf 'a\nb\n'</code> ou <code>echo -e "a\nb"</code>. Veja a comparação em <a href="printf.html">printf e echo</a>.</p>
+</div>
+
+<div class="try" data-setup="nome=Bruno" data-goal="out:Bruno disse &quot;oi&quot; para ana,ran:\$nome,ran:\$USER" data-solucao="echo &quot;$nome disse \&quot;oi\&quot; para $USER&quot;">
+<p class="try-task"><strong>Missão:</strong> a variável <code>nome</code> já vale <code>Bruno</code>. Mostre a frase <code>Bruno disse "oi" para ana</code> usando <code>$nome</code> e <code>$USER</code> (nada de digitar "Bruno" ou "ana"). As aspas em volta de <code>oi</code> devem aparecer na tela.</p>
+</div>
+
+<h3 id="exclamacao">A armadilha do <code>!</code> no terminal</h3>
+<p>No terminal (o shell interativo), o <code>!</code> puxa comandos do <a href="historico.html">histórico</a>: <code>!!</code> é "o último comando", <code>!ls</code> é "o último comando que começou com ls". Isso se chama <strong>expansão de histórico</strong> e ela funciona até <strong>dentro de aspas duplas</strong>. O resultado surpreende:</p>
+
+<pre class="term">$ echo "Olá!amigo"
+bash: !amigo: event not found</pre>
+
+<p>O Bash leu <code>!amigo</code> como "o último comando que começou com <em>amigo</em>", não achou nenhum e cancelou a linha inteira. A mensagem vem em inglês mesmo: <em>event not found</em> = "evento não encontrado" (cada linha do histórico é um "evento"). O comando <strong>não</strong> rodou.</p>
+
+<p>Pior ainda é quando o Bash <strong>acha</strong> o que procura:</p>
+
+<pre class="term">$ ls Documentos
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+$ echo "Ufa!!"
+echo "Ufals Documentos"         « o Bash mostra a linha depois de trocar o !! pelo último comando
+Ufals Documentos</pre>
+
+<p>Quando há expansão de histórico, o Bash sempre mostra a linha nova antes de executá-la. É o sinal de que um <code>!</code> foi trocado.</p>
+
+<p>O <code>!</code> sozinho no fim do texto ou antes de um espaço não incomoda (<code>echo "Bom dia!"</code> funciona). Os problemas são <code>!</code> seguido de letras, números ou outro <code>!</code>. Como resolver:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td>Aspas simples</td><td><code>echo 'Olá!amigo'</code></td><td>O texto não tem variáveis. É a mais simples.</td></tr>
+<tr><td>Só o <code>!</code> em aspas simples</td><td><code>echo "Olá, $nome"'!'"amigo"</code></td><td>O texto tem variáveis <strong>e</strong> exclamação.</td></tr>
+<tr><td>Barra invertida, fora das aspas</td><td><code>echo Uau\!\!</code></td><td>Texto curto sem espaços.</td></tr>
+<tr><td>Desligar a expansão</td><td><code>set +H</code></td><td>Você nunca usa <code>!!</code>. Vale até fechar o terminal; para ser permanente, coloque no <code>~/.bashrc</code> (veja <a href="inicializacao.html">Arquivos de Inicialização</a>).</td></tr>
+</table>
+</div>
+
+<pre class="term">$ echo 'Olá!amigo'
+Olá!amigo
+$ set +H
+$ echo "Olá!amigo"
+Olá!amigo                       « com a expansão de histórico desligada, funciona</pre>
+
+<div class="note">
+<strong>Em scripts não existe esse problema</strong>
+<p>A expansão de histórico só vale no terminal. Dentro de um script, <code>echo "Olá!amigo"</code> funciona normalmente. Por isso o erro "event not found" aparece quando você testa um comando no terminal, mas não quando o mesmo comando está num script.</p>
+</div>
+
+<hr>
+
+<h2>4. <code>$'…'</code>: aspas com códigos de escape</h2>
+<p>Às vezes você quer o contrário: escrever caracteres "invisíveis", como uma quebra de linha ou um tab, dentro de um texto. A forma <code>$'…'</code> (um cifrão colado em aspas simples) funciona como as aspas simples, com uma diferença: a barra invertida volta a ter poder e entende os <strong>códigos de escape</strong> da linguagem C. Por isso o nome técnico é <em>ANSI-C quoting</em>.</p>
+
+<dl class="anatomy">
+  <dt>$'</dt><dd>Abre: "texto literal, mas entenda os códigos com barra".</dd>
+  <dt>linha 1\nlinha 2</dt><dd>O <code>\n</code> (de <em>new line</em>) vira uma quebra de linha de verdade.</dd>
+  <dt>'</dt><dd>Fecha.</dd>
+</dl>
+
+<pre class="term">$ echo $'linha 1\nlinha 2'
+linha 1
+linha 2
+$ echo $'col1\tcol2'
+col1	col2                         « \t virou um tab
+$ echo $'Ele disse: \'oi\''
+Ele disse: 'oi'                  « \' = aspa simples, que nas aspas simples comuns é impossível</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Vira</th><th>Origem do nome</th></tr>
+<tr><td><code>\n</code></td><td>Quebra de linha</td><td><em>new line</em></td></tr>
+<tr><td><code>\t</code></td><td>Tab</td><td><em>tab</em></td></tr>
+<tr><td><code>\\</code></td><td>Uma barra invertida</td><td></td></tr>
+<tr><td><code>\'</code></td><td>Uma aspa simples</td><td></td></tr>
+<tr><td><code>\"</code></td><td>Uma aspa dupla</td><td></td></tr>
+<tr><td><code>\e</code></td><td>O caractere <em>Escape</em>, usado em cores (veja <a href="interativo.html">Menus e Cores</a>)</td><td><em>escape</em></td></tr>
+<tr><td><code>\a</code></td><td>O "bip" do terminal</td><td><em>alert</em></td></tr>
+</table>
+</div>
+
+<p>O <code>$'…'</code> é muito útil para guardar textos com quebra de linha numa variável ou num arquivo:</p>
+
+<pre class="term">$ echo $'pão\nleite' &gt; lista.txt
+$ cat lista.txt
+pão
+leite</pre>
+
+<div class="warning">
+<strong>Não confunda <code>$'…'</code> com <code>"$…"</code></strong>
+<p><code>$'texto'</code> é um tipo de aspas. <code>"$texto"</code> é uma variável chamada <code>texto</code> dentro de aspas duplas. Existe ainda <code>$"…"</code> (cifrão + aspas duplas), usado para traduzir mensagens de programas; você quase nunca vai precisar dele.</p>
+</div>
+
+<div class="try" data-goal="contains:~/compras.txt=pão,contains:~/compras.txt=leite,contains:~/compras.txt=café,ran:\$'" data-solucao="echo $'pão\nleite\ncafé' &gt; compras.txt">
+<p class="try-task"><strong>Missão:</strong> crie o arquivo <code>compras.txt</code> com três linhas (<code>pão</code>, <code>leite</code> e <code>café</code>) usando <strong>um único</strong> <code>echo</code> com <code>$'…'</code>. Confira com <code>cat compras.txt</code>.</p>
+</div>
+
+<hr>
+
+<h2>Misturando aspas na mesma palavra</h2>
+<p>Uma palavra do Bash pode ser feita de pedaços com aspas diferentes, desde que <strong>não haja espaço</strong> entre eles. O Bash cola os pedaços e depois tira as aspas:</p>
+
+<pre class="term">$ printf '[%s]\n' "Ana""Bruno" "Ana" "Bruno"
+[AnaBruno]                « pedaços colados = uma palavra
+[Ana]                     « com espaço entre eles = palavras separadas
+[Bruno]
+$ printf '[%s]\n' "$USER"' mora em '"$HOME"
+[ana mora em /home/ana]   « três pedaços: duplas, simples, duplas</pre>
+
+<p>Na segunda linha, a palavra tem três pedaços: <code>"$USER"</code> (a variável é trocada), <code>' mora em '</code> (texto literal, com os espaços) e <code>"$HOME"</code>. Como não há espaço <strong>fora</strong> das aspas, é um argumento só.</p>
+
+<p>Isso parece estranho no começo, mas é a chave para resolver dois problemas: misturar variáveis com texto que tem <code>!</code> ou <code>$</code>, e colocar uma aspa simples dentro de aspas simples.</p>
+
+<pre class="term">$ echo "Olá"'!'"amigo"
+Olá!amigo
+$ echo "Preço: R\$ 10" 'e mais $2'
+Preço: R$ 10 e mais $2</pre>
+
+<hr>
+
+<h2 id="aspa-dentro">Uma aspa dentro da outra</h2>
+<p>A Ana quer guardar o texto <code>copo d'água</code> numa variável. A aspa simples do meio é o problema. Sem nenhuma aspa, o Bash acha que você abriu aspas simples e ficou esperando o fechamento:</p>
+
+<pre class="term">$ bebida=copo d'água
+&gt;                         « o Bash está esperando a aspa que fecha</pre>
+
+<p>Há quatro formas de resolver. Todas produzem o mesmo valor:</p>
+
+<pre class="term">$ echo "copo d'água"
+copo d'água               « 1. a aspa simples dentro de aspas duplas é comum
+$ echo 'copo d'\''água'
+copo d'água               « 2. fecha ', escapa \', abre ' de novo
+$ echo 'copo d'"'"'água'
+copo d'água               « 3. fecha ', põe "'", abre ' de novo
+$ echo $'copo d\'água'
+copo d'água               « 4. $'…' aceita \'</pre>
+
+<p>A forma 2 assusta, mas é só a mistura de aspas da seção anterior. Veja os pedaços:</p>
+
+<dl class="anatomy">
+  <dt>'copo d'</dt><dd>Aspas simples com <code>copo d</code>. A aspa logo depois do <code>d</code> <strong>fecha</strong> as aspas.</dd>
+  <dt>\'</dt><dd>Fora de aspas, a barra protege uma aspa simples. Ela vira texto.</dd>
+  <dt>'água'</dt><dd>Abre aspas simples de novo, com <code>água</code>.</dd>
+</dl>
+
+<p>Os três pedaços estão colados, então formam uma palavra: <code>copo d'água</code>. A forma 3 é igual, só que a aspa do meio é protegida por aspas duplas (<code>"'"</code>) em vez da barra.</p>
+
+<p>Para o caso contrário, <strong>aspa dupla dentro de texto</strong>, use aspas simples por fora ou escape com <code>\"</code>:</p>
+
+<pre class="term">$ echo 'Ele disse "oi"'
+Ele disse "oi"
+$ echo "Ele disse \"oi\""
+Ele disse "oi"
+$ x=Bash
+$ echo "Valor: '$x'"
+Valor: 'Bash'             « a aspa simples dentro das duplas não impede a variável</pre>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Forma recomendada</th></tr>
+<tr><td>Texto com <code>'</code> e sem <code>$</code> nem <code>!</code></td><td><code>"copo d'água"</code></td></tr>
+<tr><td>Texto com <code>'</code> <strong>e</strong> com <code>$</code> que deve ficar literal</td><td><code>'custa $5 no copo d'\''água'</code> ou <code>$'custa $5 no copo d\'água'</code></td></tr>
+<tr><td>Texto com <code>"</code> e sem variáveis</td><td><code>'Ele disse "oi"'</code></td></tr>
+<tr><td>Texto com <code>"</code> e com variáveis</td><td><code>"$nome disse \"oi\""</code></td></tr>
+<tr><td>Texto que precisa de quebras de linha ou tabs</td><td><code>$'a\nb'</code></td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="var:bebida=copo d'água,ran:\\'" data-solucao="bebida='copo d'\''água'">
+<p class="try-task"><strong>Missão:</strong> crie a variável <code>bebida</code> com o valor <code>copo d'água</code> usando a forma <strong>2</strong> (aspas simples + <code>\'</code>). Confira com <code>echo "$bebida"</code>. Se o Bash mostrar o prompt <code>&gt;</code>, aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> e tente de novo.</p>
+</div>
+
+<hr>
+
+<h2>Aspas e nomes com espaço</h2>
+<p>Voltemos ao problema do começo. Todo nome com espaço precisa ser protegido, senão o Bash corta. Às vezes o resultado é um erro; às vezes é pior: <strong>o comando funciona, mas faz outra coisa</strong>.</p>
+
+<pre class="term">$ mkdir Meus Projetos
+$ ls
+'Área de trabalho'   Downloads    Imagens   Modelos   Projetos   Vídeos
+ Documentos          frutas.txt   Meus      Música    Público</pre>
+
+<p>Nenhum erro, mas foram criadas <strong>duas</strong> pastas: <code>Meus</code> e <code>Projetos</code>. O <code>mkdir</code> recebeu dois argumentos e fez o que pediram. O jeito certo:</p>
+
+<pre class="term">$ rmdir Meus Projetos             « apaga as duas pastas vazias
+$ mkdir "Meus Projetos"
+$ touch "Copo d'água.txt" 'preço $5.txt'
+$ ls
+'Área de trabalho'   Downloads   'Meus Projetos'  'preço $5.txt'
+"Copo d'água.txt"    frutas.txt   Modelos          Público
+ Documentos          Imagens      Música           Vídeos</pre>
+
+<p>Repare como o <code>ls</code> mostra os nomes: ele <strong>coloca aspas</strong> nos que têm caracteres especiais, exatamente do jeito que você teria de digitá-los. <code>'Meus Projetos'</code> com aspas simples; <code>"Copo d'água.txt"</code> com duplas, porque tem uma aspa simples dentro; <code>'preço $5.txt'</code> com simples, por causa do <code>$</code>. Os nomes sem aspas ganham um espaço na frente só para ficarem alinhados. Essas aspas só aparecem quando o <code>ls</code> escreve na tela (veja <a href="ls.html">Listar</a>).</p>
+
+<p>O mesmo vale para qualquer comando. Este <code>grep</code> procura um texto com espaço no arquivo de notas:</p>
+
+<pre class="term">$ grep Ligar para Documentos/notas.txt
+grep: para: Arquivo ou diretório inexistente           « "para" virou o nome de um arquivo!
+Documentos/notas.txt:Ligar para o João
+$ grep "Ligar para" Documentos/notas.txt
+Ligar para o João</pre>
+
+<p>Sem aspas, o <code>grep</code> recebeu três argumentos: o padrão <code>Ligar</code> e <strong>dois</strong> arquivos, <code>para</code> e <code>Documentos/notas.txt</code>.</p>
+
+<div class="try" data-goal="file:~/Minhas notas.txt,dir:~/Meus Projetos,absent:~/Minhas,absent:~/Meus" data-solucao="touch &quot;Minhas notas.txt&quot;;;mkdir &quot;Meus Projetos&quot;">
+<p class="try-task"><strong>Missão:</strong> crie o arquivo <code>Minhas notas.txt</code> e a pasta <code>Meus Projetos</code>, cada um com <strong>um nome só</strong> (com o espaço dentro). Confira com <code>ls</code>: os dois devem aparecer entre aspas. Se criar pedaços soltos por engano, apague com <code>rm</code> ou <code>rmdir</code>.</p>
+</div>
+
+<hr>
+
+<h2>Aspas e curingas (e o <code>~</code>)</h2>
+<p>Os <a href="curingas.html">curingas</a> só funcionam <strong>fora de aspas</strong>. Dentro de qualquer tipo de aspas, <code>*</code> é só um asterisco:</p>
+
+<pre class="term">$ echo *.txt
+frutas.txt                         « o Bash trocou o padrão pelos nomes que casam
+$ echo "*.txt"
+*.txt                              « entre aspas: texto comum
+$ echo Documentos/*.csv
+Documentos/alunos.csv
+$ ls "Documentos/*.csv"
+ls: não foi possível acessar 'Documentos/*.csv': Arquivo ou diretório inexistente
+$ echo $?
+2                                  « o ls procurou um arquivo chamado, literalmente, *.csv</pre>
+
+<p>Isso é útil quando um comando precisa receber o padrão <strong>como texto</strong>, para ele mesmo procurar. É o caso do <code>find</code>: em <code>find . -name "*.txt"</code>, as aspas impedem o Bash de expandir o <code>*</code>, e o padrão chega inteiro ao <code>find</code>.</p>
+
+<p>O til <code>~</code> também perde o poder entre aspas:</p>
+
+<pre class="term">$ echo ~
+/home/ana
+$ echo "~"
+~
+$ cd "~/Documentos"
+bash: cd: ~/Documentos: Arquivo ou diretório inexistente     « procurou uma pasta chamada "~"
+$ cd ~/"Documentos"
+$ pwd
+/home/ana/Documentos                « o ~ fora das aspas, o resto dentro</pre>
+
+<p>Para caminhos com espaço a partir da pasta pessoal, deixe o <code>~</code> de fora: <code>cd ~/"Área de trabalho"</code>. Ou use a variável: <code>cd "$HOME/Área de trabalho"</code>.</p>
+
+<hr>
+
+<h2>Aspas em variáveis: <code>"$var"</code> sempre</h2>
+<p>Esta é a regra que mais evita bugs em scripts: <strong>quando usar uma variável, coloque-a entre aspas duplas</strong>. Veja por quê. A Ana guarda o nome da pasta numa <a href="variaveis-intro.html">variável</a>:</p>
+
+<pre class="term">$ pasta="Área de trabalho"
+$ echo $pasta
+Área de trabalho                « parece certo…
+$ ls $pasta
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente
+$ ls "$pasta"
+$ touch "$pasta/lembrete.txt"
+$ ls "$pasta"
+lembrete.txt</pre>
+
+<p>As aspas da <strong>criação</strong> (<code>pasta="Área de trabalho"</code>) guardaram o valor com os espaços. Mas, ao <strong>usar</strong> <code>$pasta</code> sem aspas, o Bash troca a variável pelo valor e <strong>corta de novo</strong> nos espaços. Esse corte depois da troca se chama <strong>separação de palavras</strong> (<em>word splitting</em>). O <code>echo</code> enganou: ele recebeu três palavras e as juntou com espaço, então pareceu certo.</p>
+
+<p>E não são só os espaços. O valor da variável também passa pelos curingas:</p>
+
+<pre class="term">$ frase="muitos     espaços   aqui"
+$ echo $frase
+muitos espaços aqui              « cortou nos espaços; o echo juntou com um só
+$ echo "$frase"
+muitos     espaços   aqui        « intacto
+$ padrao="*.txt"
+$ echo $padrao
+frutas.txt                       « o * dentro da variável virou nome de arquivo!
+$ echo "$padrao"
+*.txt</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrita</th><th>O Bash faz</th><th>Resultado</th></tr>
+<tr><td><code>$var</code></td><td>Troca pelo valor → corta nos espaços → expande curingas</td><td>Zero, uma ou várias palavras. Imprevisível.</td></tr>
+<tr><td><code>"$var"</code></td><td>Troca pelo valor e para</td><td>Sempre <strong>uma</strong> palavra, igual ao valor.</td></tr>
+<tr><td><code>'$var'</code></td><td>Nada</td><td>O texto <code>$var</code>, literal.</td></tr>
+</table>
+</div>
+
+<h3>Variável grudada em texto: <code>${var}</code></h3>
+<p>Dentro das aspas duplas, o nome da variável vai até onde houver letras, números e <code>_</code>. Se você quer colar texto logo depois, use chaves para marcar onde o nome acaba:</p>
+
+<pre class="term">$ echo "$USERs"
+                                 « procurou a variável USERs, que não existe: linha vazia
+$ echo "${USER}s"
+anas</pre>
+
+<div class="tip">
+<strong>Quando não precisa de aspas?</strong>
+<p>Em poucos lugares o Bash não corta a variável, como na criação de outra (<code>copia=$pasta</code>) e dentro de <code>[[ ]]</code>. Mas colocar as aspas ali não atrapalha. Por isso a regra prática é simples: <strong>na dúvida, <code>"$var"</code></strong>. Mais em <a href="boas-praticas.html">Boas Práticas</a> e no <a href="shellcheck.html">ShellCheck</a>, que avisa quando falta aspa.</p>
+</div>
+
+<div class="tryscript" data-file="mostra.sh" data-setup="touch &quot;Área de trabalho/lembrete.txt&quot;" data-goal="out:lembrete.txt,src:&quot;\$\{?pasta\}?&quot;">
+<p class="try-task"><strong>Missão:</strong> o script abaixo deveria listar a <code>Área de trabalho</code>, mas dá três erros. Clique em <strong>Rodar</strong>, leia os erros e corrija a terceira linha para aparecer <code>lembrete.txt</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+pasta="Área de trabalho"
+ls $pasta
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+pasta="Área de trabalho"
+ls "$pasta"
+</pre>
+</div>
+
+<p>Rodando o script sem a correção, o Bash real mostra:</p>
+
+<pre class="term">$ bash mostra.sh
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente
+$ echo $?
+2                                « o ls devolve 2 quando não acha o que pediram</pre>
+
+<p>Linha por linha: a linha 1 (o <em>shebang</em>) diz que o script é de Bash; a linha 2 guarda o nome com aspas, então o valor está certo; a linha 3 usa <code>$pasta</code> sem aspas, e é ali que o nome é cortado em três. Com <code>ls "$pasta"</code>, a saída é <code>lembrete.txt</code> e o código de saída é <code>0</code>.</p>
+
+<hr>
+
+<h2>Tabela-resumo: o que cada forma protege</h2>
+<p>"Protege" quer dizer: o caractere vira texto comum. "Funciona" quer dizer: o caractere mantém o poder especial.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Caractere</th><th>Sem aspas</th><th><code>\x</code></th><th><code>'…'</code></th><th><code>"…"</code></th><th><code>$'…'</code></th></tr>
+<tr><td>espaço</td><td>separa palavras</td><td>protege</td><td>protege</td><td>protege</td><td>protege</td></tr>
+<tr><td><code>$var</code>, <code>$( )</code></td><td>funciona</td><td>protege</td><td>protege</td><td><strong>funciona</strong></td><td>protege</td></tr>
+<tr><td><code>`…`</code></td><td>funciona</td><td>protege</td><td>protege</td><td><strong>funciona</strong></td><td>protege</td></tr>
+<tr><td><code>* ? [ ]</code></td><td>funciona</td><td>protege</td><td>protege</td><td>protege</td><td>protege</td></tr>
+<tr><td><code>~</code>, <code>{a,b}</code></td><td>funciona</td><td>protege</td><td>protege</td><td>protege</td><td>protege</td></tr>
+<tr><td><code>!</code> (no terminal)</td><td>funciona</td><td>protege</td><td>protege</td><td><strong>funciona</strong></td><td>protege</td></tr>
+<tr><td><code>\</code></td><td>escapa o próximo</td><td>—</td><td>texto</td><td>só antes de <code>$ ` " \</code></td><td>códigos <code>\n \t \'</code>…</td></tr>
+<tr><td><code>'</code></td><td>abre aspas</td><td>protege</td><td><strong>fecha</strong> (não cabe)</td><td>protege</td><td>com <code>\'</code></td></tr>
+<tr><td><code>"</code></td><td>abre aspas</td><td>protege</td><td>protege</td><td>com <code>\"</code></td><td>protege</td></tr>
+<tr><td><code>; | &amp; &lt; &gt; #</code></td><td>funciona</td><td>protege</td><td>protege</td><td>protege</td><td>protege</td></tr>
+</table>
+</div>
+
+<p>Em uma frase: <strong>aspas simples desligam tudo; aspas duplas desligam tudo menos <code>$</code>, crase, <code>\</code> e <code>!</code>; a barra desliga um caractere só.</strong></p>
+
+<h3>Qual usar no dia a dia?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer…</th><th>Use</th><th>Exemplo</th></tr>
+<tr><td>Texto fixo, sem variáveis</td><td>Aspas simples</td><td><code>grep 'Erro 404' acesso.log</code></td></tr>
+<tr><td>Texto com variáveis ou <code>$( )</code></td><td>Aspas duplas</td><td><code>echo "Olá, $nome"</code></td></tr>
+<tr><td>Usar uma variável</td><td>Aspas duplas</td><td><code>cp "$origem" "$destino"</code></td></tr>
+<tr><td>Um ou dois caracteres especiais soltos</td><td>Barra invertida</td><td><code>cd Área\ de\ trabalho</code></td></tr>
+<tr><td>Quebras de linha, tabs, aspa simples escapada</td><td><code>$'…'</code></td><td><code>echo $'a\tb'</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Apareceu um <code>&gt;</code> e o comando não roda</strong>
+<pre class="term">$ echo It's ok
+&gt; fim
+&gt; ^C
+$ echo $?
+130</pre>
+<p><strong>O que aconteceu:</strong> o apóstrofo de <code>It's</code> abriu aspas simples, e elas nunca foram fechadas. O Bash mostra o prompt de continuação <code>&gt;</code> e fica esperando a aspa que fecha. Tudo o que você digitar (como o <code>fim</code>) entra no texto. O mesmo acontece com uma <code>"</code> sem par e com <code>echo 'It\'s ok'</code>, porque a barra não funciona dentro de aspas simples.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para cancelar (o Bash mostra <code>^C</code> e volta ao prompt normal; o código <code>130</code> indica "interrompido por Ctrl+C"). Depois digite de novo com as aspas certas: <code>echo "It's ok"</code>. Se preferir, você também pode digitar a aspa que falta e apertar <kbd>Enter</kbd>, mas aí o texto já tem as linhas extras.</p>
+</div>
+
+<div class="cenario">
+<strong>"número excessivo de argumentos"</strong>
+<pre class="term">$ cd Área de trabalho
+bash: cd: número excessivo de argumentos
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> o nome tem espaços e foi cortado em várias palavras. O <code>cd</code> aceita só um destino.</p>
+<p><strong>Como confirmar:</strong> troque o comando por <code>printf '[%s]\n'</code> e veja quantos colchetes aparecem.</p>
+<p><strong>Como resolver:</strong> <code>cd "Área de trabalho"</code>, <code>cd 'Área de trabalho'</code> ou <code>cd Área\ de\ trabalho</code>. Se o nome estiver numa variável: <code>cd "$pasta"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"não foi possível acessar 'Área'" (vários erros, um por pedaço)</strong>
+<pre class="term">$ ls -d Área de trabalho
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o mesmo problema, num comando que aceita vários argumentos. Em vez de reclamar da quantidade, ele tentou cada pedaço como um arquivo. Quando os erros citam <strong>pedaços</strong> de um nome, é sempre aspa faltando, quase sempre numa variável (<code>$pasta</code> em vez de <code>"$pasta"</code>).</p>
+<p><strong>Como resolver:</strong> coloque o nome, ou a variável, entre aspas duplas.</p>
+</div>
+
+<div class="cenario">
+<strong>"event not found"</strong>
+<pre class="term">$ echo "Olá!amigo"
+bash: !amigo: event not found</pre>
+<p><strong>O que aconteceu:</strong> no terminal, <code>!</code> seguido de texto busca um comando no histórico, mesmo entre aspas duplas. Nada foi executado.</p>
+<p><strong>Como resolver:</strong> use aspas simples (<code>'Olá!amigo'</code>), coloque só o <code>!</code> em aspas simples (<code>"Olá"'!'"amigo"</code>) ou desligue a expansão com <code>set +H</code>. Veja <a href="#exclamacao">a armadilha do !</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>A variável apareceu com o nome, e não com o valor</strong>
+<pre class="term">$ nome=Ana
+$ echo 'Olá, $nome'
+Olá, $nome</pre>
+<p><strong>O que aconteceu:</strong> não é erro: aspas simples desligam o <code>$</code>. O código de saída é <code>0</code>, porque o <code>echo</code> fez exatamente o que recebeu.</p>
+<p><strong>Como resolver:</strong> troque por aspas duplas: <code>echo "Olá, $nome"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada (linha em branco)</strong>
+<pre class="term">$ echo "$USERs"
+</pre>
+<p><strong>O que aconteceu:</strong> o Bash procurou a variável <code>USERs</code>, que não existe. Variável inexistente vale vazio, e o <code>echo</code> mostrou uma linha vazia. Não há mensagem de erro e o código de saída é <code>0</code>.</p>
+<p><strong>Como resolver:</strong> marque o fim do nome com chaves: <code>echo "${USER}s"</code>. Para o Bash avisar quando você usa uma variável que não existe, veja <code>set -u</code> em <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Aspas "tortas" copiadas da internet</strong>
+<pre class="term">$ cd “Documentos”
+bash: cd: “Documentos”: Arquivo ou diretório inexistente
+$ echo “Olá”
+“Olá”</pre>
+<p><strong>O que aconteceu:</strong> editores de texto, sites e aplicativos de mensagem trocam <code>"</code> por aspas curvas, <code>“ ”</code> e <code>‘ ’</code>. Para o Bash, elas são letras comuns, não aspas. O <code>cd</code> procurou uma pasta cujo nome começa com <code>“</code>.</p>
+<p><strong>Como resolver:</strong> apague as aspas curvas e digite as retas do teclado (<kbd>"</kbd> e <kbd>'</kbd>). Ao copiar comandos, prefira o botão de copiar das páginas ou cole antes num editor de texto puro.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Nome</th><th>O que faz</th><th>Exemplo → resultado</th></tr>
+<tr><td><code>\x</code></td><td>Escape, barra invertida</td><td>Protege um caractere</td><td><code>echo \$HOME</code> → <code>$HOME</code></td></tr>
+<tr><td><code>\</code> + Enter</td><td>Continuação de linha</td><td>O comando continua na linha de baixo</td><td><code>ls \</code> ↵ <code>  -l</code></td></tr>
+<tr><td><code>'…'</code></td><td>Aspas simples</td><td>Tudo literal; não cabe <code>'</code></td><td><code>echo '$HOME'</code> → <code>$HOME</code></td></tr>
+<tr><td><code>"…"</code></td><td>Aspas duplas</td><td>Uma palavra; <code>$</code>, crase, <code>\</code> e <code>!</code> funcionam</td><td><code>echo "$HOME"</code> → <code>/home/ana</code></td></tr>
+<tr><td><code>$'…'</code></td><td>ANSI-C quoting</td><td>Literal, mas entende <code>\n \t \\ \' \e</code></td><td><code>echo $'a\tb'</code> → <code>a	b</code></td></tr>
+<tr><td><code>"…"'…'</code></td><td>Concatenação</td><td>Pedaços colados formam uma palavra</td><td><code>echo "Olá"'!'</code> → <code>Olá!</code></td></tr>
+<tr><td><code>'…'\''…'</code></td><td>Aspa simples "dentro" de simples</td><td>Fecha, põe <code>\'</code>, reabre</td><td><code>echo 'd'\''água'</code> → <code>d'água</code></td></tr>
+<tr><td><code>"$var"</code></td><td>Variável entre aspas</td><td>Valor intacto, sem corte nem curingas</td><td><code>ls "$pasta"</code></td></tr>
+<tr><td><code>"${var}texto"</code></td><td>Chaves no nome</td><td>Marca onde o nome acaba</td><td><code>echo "${USER}s"</code> → <code>anas</code></td></tr>
+<tr><td><code>set +H</code> / <code>set -H</code></td><td>Expansão de histórico</td><td>Desliga / liga o <code>!</code> no terminal</td><td><code>set +H</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Proteger o espaço</h3>
+<p>Complete para entrar na pasta <code>Área de trabalho</code> usando aspas:</p>
+<div class="ex-code">cd <input data-answer="&quot;Área de trabalho&quot;|'Área de trabalho'" aria-label="nome da pasta"></div>
+</div>
+
+<div class="exercise">
+<h3>2. A variável no lugar certo</h3>
+<p>A variável <code>arquivo</code> vale <code>Minhas notas.txt</code>. Complete para mostrar o conteúdo do arquivo sem erro:</p>
+<div class="ex-code">cat <input data-answer="&quot;$arquivo&quot;|&quot;${arquivo}&quot;" aria-label="variável"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Cifrão literal</h3>
+<p>Complete com o tipo de aspas certo para a tela mostrar exatamente <code>Total: $HOME</code> (o texto, não a pasta):</p>
+<div class="ex-code">echo <input data-answer="'Total: $HOME'|&quot;Total: \$HOME&quot;" aria-label="texto"></div>
+</div>
+
+<div class="exercise">
+<h3>4. Duas linhas com um echo</h3>
+<p>Complete para o <code>echo</code> mostrar <code>sim</code> numa linha e <code>não</code> na linha de baixo:</p>
+<div class="ex-code">echo <input data-answer="$'sim\nnão'" aria-label="texto com quebra"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. A variável <code>nome</code> vale <code>Ana</code>. O que <code>echo 'Oi, $nome' "e $nome"</code> mostra?</p>
+<label><input type="radio" name="q5"> <code>Oi, Ana e Ana</code></label>
+<label><input type="radio" name="q5"> <code>Oi, $nome e $nome</code></label>
+<label><input type="radio" name="q5"> <code>Oi, $nome e Ana</code></label>
+<label><input type="radio" name="q5"> <code>Oi, Ana e $nome</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">6. Quantos argumentos o comando recebe em <code>printf '[%s]\n' "a b"'c d' e</code>?</p>
+<label><input type="radio" name="q6"> 1</label>
+<label><input type="radio" name="q6"> 2</label>
+<label><input type="radio" name="q6"> 3</label>
+<label><input type="radio" name="q6"> 4</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">7. Você digitou <code>echo 'Bom dia</code>, apertou Enter e apareceu <code>&gt;</code>. O que aconteceu?</p>
+<label><input type="radio" name="q7"> O comando deu erro e o terminal travou.</label>
+<label><input type="radio" name="q7"> O <code>&gt;</code> vai gravar a saída num arquivo.</label>
+<label><input type="radio" name="q7"> O Bash virou root.</label>
+<label><input type="radio" name="q7"> As aspas simples ficaram abertas; o Bash espera o fechamento (ou <kbd>Ctrl</kbd>+<kbd>C</kbd>).</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">8. Qual destes comandos lista <strong>todos</strong> os arquivos <code>.txt</code> da pasta atual?</p>
+<label><input type="radio" name="q8"> <code>ls *.txt</code></label>
+<label><input type="radio" name="q8"> <code>ls "*.txt"</code></label>
+<label><input type="radio" name="q8"> <code>ls '*.txt'</code></label>
+<label><input type="radio" name="q8"> <code>ls \*.txt</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O Bash corta a linha em palavras nos espaços e troca os caracteres especiais <strong>antes</strong> de rodar o comando. Aspas e barra invertida desligam isso.</li>
+  <li><code>\</code> protege um caractere; no fim da linha, continua o comando na próxima.</li>
+  <li><code>'…'</code>: tudo literal, inclusive <code>$</code> e <code>\</code>. Não cabe outra <code>'</code> dentro.</li>
+  <li><code>"…"</code>: uma palavra só, mas <code>$</code>, crase, <code>\</code> e (no terminal) <code>!</code> continuam funcionando.</li>
+  <li><code>$'…'</code>: literal, com códigos <code>\n</code>, <code>\t</code>, <code>\'</code>.</li>
+  <li>Pedaços com aspas diferentes, colados, formam uma palavra: <code>'copo d'\''água'</code>.</li>
+  <li>Use variáveis sempre como <code>"$var"</code>. Sem aspas, o valor é cortado nos espaços e passa pelos curingas.</li>
+  <li>Viu <code>&gt;</code> do nada? Aspas abertas: <kbd>Ctrl</kbd>+<kbd>C</kbd> e digite de novo.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
