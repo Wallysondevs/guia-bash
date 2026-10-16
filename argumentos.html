@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Argumentos — $1, $#, "$@", shift e valores padrão | Guia Bash</title>
+<meta name="description" content="Como um script Bash recebe argumentos: $1 a $9, ${10}, $0, $#, a diferença entre &quot;$@&quot;, &quot;$*&quot; e $@ sem aspas, shift, valores padrão, mensagem de uso e como percorrer todos os argumentos.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Argumentos</span></h1>
+
+<p class="intro">Quando você digita <code>cp foto.jpg Imagens</code>, o <code>cp</code> recebe dois <strong>argumentos</strong>: o que copiar e para onde. Seus scripts podem receber argumentos do mesmo jeito. É isso que transforma um script que faz sempre a mesma coisa num comando de verdade, que trabalha com o arquivo, a pasta ou o nome que você passar.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Onde os argumentos chegam: <code>$1</code>, <code>$2</code>… <code>${10}</code>, e o que são <code>$0</code> e <code>$#</code>.</li>
+  <li>A diferença entre <code>"$@"</code>, <code>"$*"</code> e <code>$@</code> sem aspas, e por que <code>"$@"</code> é quase sempre a resposta.</li>
+  <li>Como andar pela lista com <code>shift</code> e percorrer todos os argumentos.</li>
+  <li>Como dar um valor padrão e como exigir um argumento, com mensagem de uso e código de saída 2.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Conceito: a fila de argumentos</h2>
+<p>Tudo o que você escreve depois do nome do script, separado por espaços, vira um argumento. O Bash guarda cada um numa variável numerada, na ordem em que chegaram. Elas se chamam <strong>parâmetros posicionais</strong>, porque o nome é a posição.</p>
+
+<pre class="syntax">  $ ./args.sh   banana   maçã   uva
+      │           │        │      │
+      $0          $1       $2     $3          $# = 3  (quantos)</pre>
+
+<p>Para ver isso acontecendo, um script que só mostra o que recebeu:</p>
+
+<pre class="file" data-file="args.sh">#!/usr/bin/env bash
+echo "Nome do script: $0"
+echo "Quantos argumentos: $#"
+echo "Primeiro: $1"
+echo "Segundo:  $2"
+echo "Terceiro: $3"
+</pre>
+
+<dl class="anatomy">
+  <dt>$0</dt><dd>Como o script foi chamado (o "argumento zero"). Veja mais em <a href="executar.html">Formas de Executar</a>.</dd>
+  <dt>$#</dt><dd>Quantos argumentos chegaram. Pense no <code>#</code> como "número de".</dd>
+  <dt>$1 $2 $3</dt><dd>O primeiro, o segundo e o terceiro argumento.</dd>
+</dl>
+
+<pre class="term">$ ./args.sh banana maçã
+Nome do script: ./args.sh
+Quantos argumentos: 2
+Primeiro: banana
+Segundo:  maçã
+Terceiro:                        « não veio terceiro: $3 está vazio, sem erro
+$ ./args.sh
+Nome do script: ./args.sh
+Quantos argumentos: 0            « nenhum argumento
+Primeiro:
+Segundo:
+Terceiro: </pre>
+
+<p>Repare que pedir um argumento que não veio <strong>não dá erro</strong>: a variável simplesmente está vazia. Isso é perigoso (imagine <code>rm -r "$1"/</code> com <code>$1</code> vazio), e mais adiante você vai aprender a exigir o argumento.</p>
+
+<h3>Espaços separam argumentos; aspas juntam</h3>
+
+<pre class="term">$ ./args.sh Área de trabalho
+Nome do script: ./args.sh
+Quantos argumentos: 3            « três palavras = três argumentos
+Primeiro: Área
+Segundo:  de
+Terceiro: trabalho
+$ ./args.sh 'Área de trabalho' Documentos
+Nome do script: ./args.sh
+Quantos argumentos: 2            « com aspas, o nome inteiro é um argumento só
+Primeiro: Área de trabalho
+Segundo:  Documentos
+Terceiro:
+$ ./args.sh '' x
+Nome do script: ./args.sh
+Quantos argumentos: 2            « um texto vazio entre aspas também conta
+Primeiro:
+Segundo:  x
+Terceiro: </pre>
+
+<p>Quem separa as palavras é o <strong>seu shell</strong>, antes de o script começar. O script recebe a lista pronta. Mais sobre aspas em <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<h3>Do décimo em diante: <code>${10}</code></h3>
+<p>Com um dígito só, <code>$1</code> a <code>$9</code> funcionam direto. A partir do décimo, use chaves. Sem elas, o Bash lê <code>$10</code> como <code>$1</code> seguido do texto <code>0</code>:</p>
+
+<pre class="file" data-file="dez.sh">#!/usr/bin/env bash
+echo "nono: $9"
+echo "décimo errado: $10"
+echo "décimo certo:  ${10}"
+</pre>
+
+<pre class="term">$ ./dez.sh a b c d e f g h i j
+nono: i
+décimo errado: a0                « $1 (a) + o texto "0"
+décimo certo:  j</pre>
+
+<hr>
+
+<h2>Todos de uma vez: <code>"$@"</code>, <code>"$*"</code> e <code>$@</code></h2>
+<p>Muitas vezes você quer <strong>todos</strong> os argumentos, sem saber quantos são: para repassar a outro comando ou para percorrer um por um. O Bash tem duas variáveis para isso, <code>$@</code> e <code>$*</code>, e elas se comportam de um jeito diferente com e sem aspas. Esta é a parte mais importante da aula.</p>
+
+<pre class="file" data-file="mostra.sh">#!/usr/bin/env bash
+echo "--- com \"\$@\" ---"
+for a in "$@"; do echo "[$a]"; done
+echo "--- com \"\$*\" ---"
+for a in "$*"; do echo "[$a]"; done
+echo "--- com \$@ sem aspas ---"
+for a in $@; do echo "[$a]"; done
+</pre>
+
+<p>Cada <code>for</code> mostra cada item entre colchetes, para você ver onde um termina e o outro começa (o <code>for</code> tem aula própria em <a href="for.html">for</a>). Vamos passar dois argumentos, sendo que o primeiro tem espaços:</p>
+
+<pre class="term">$ ./mostra.sh 'Área de trabalho' Downloads
+--- com "$@" ---
+[Área de trabalho]               « 2 itens, exatamente como chegaram
+[Downloads]
+--- com "$*" ---
+[Área de trabalho Downloads]     « 1 item: tudo colado num texto só
+--- com $@ sem aspas ---
+[Área]                           « 4 itens: o nome foi picado nos espaços
+[de]
+[trabalho]
+[Downloads]</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Vira</th><th>Quando usar</th></tr>
+<tr><td><code>"$@"</code></td><td>Um item para cada argumento, intacto: <code>"Área de trabalho" "Downloads"</code></td><td><strong>Quase sempre.</strong> Para percorrer e para repassar os argumentos a outro comando.</td></tr>
+<tr><td><code>"$*"</code></td><td>Um texto só, com os argumentos separados por espaço: <code>"Área de trabalho Downloads"</code></td><td>Para <strong>mostrar</strong> tudo numa mensagem: <code>echo "Recebi: $*"</code>.</td></tr>
+<tr><td><code>$@</code> ou <code>$*</code> sem aspas</td><td>Picado em cada espaço (e curingas como <code>*</code> são expandidos)</td><td>Praticamente nunca. É fonte de bugs.</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Curiosidade: o separador do <code>"$*"</code></strong>
+<p><code>"$*"</code> junta os argumentos com o primeiro caractere da variável <code>IFS</code>, que normalmente é o espaço. Com <code>IFS=,</code> no script, <code>echo "Com vírgulas: $*"</code> mostra <code>Com vírgulas: maçã,uva,banana</code>.</p>
+</div>
+
+<h3>Na prática: o bug do <code>$@</code> sem aspas</h3>
+<p>Um script que diz quantos itens tem cada pasta. A versão certa usa <code>"$@"</code>, e também coloca <code>"$pasta"</code> entre aspas:</p>
+
+<pre class="file" data-file="conta.sh">#!/usr/bin/env bash
+# conta.sh — diz quantos itens tem cada pasta recebida
+for pasta in "$@"; do
+  echo "$pasta: $(ls "$pasta" | wc -l) itens"
+done
+</pre>
+
+<pre class="term">$ ./conta.sh Documentos 'Área de trabalho' Imagens
+Documentos: 5 itens
+Área de trabalho: 0 itens
+Imagens: 2 itens
+$ ./conta-errado.sh Documentos 'Área de trabalho' Imagens     « igual, mas com $@ sem aspas
+Documentos: 5 itens
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+Área: 0 itens
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+de: 0 itens
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente
+trabalho: 0 itens
+Imagens: 2 itens</pre>
+
+<p>Sem aspas, <code>Área de trabalho</code> virou três "pastas" que não existem. Com nomes de pastas de verdade (que muitas vezes têm espaço), é o tipo de erro que só aparece no dia em que importa.</p>
+
+<div class="tryscript" data-file="conta.sh" data-args="'Área de trabalho' Imagens" data-goal="out:Área de trabalho: 0 itens,src:&quot;\$@&quot;">
+<p class="try-task"><strong>Missão:</strong> rode o script como está e veja os erros. Depois corrija o <code>for</code> para que <code>Área de trabalho</code> seja tratada como uma pasta só.</p>
+<pre class="script">#!/usr/bin/env bash
+# conta.sh — diz quantos itens tem cada pasta recebida
+for pasta in $@; do
+  echo "$pasta: $(ls "$pasta" | wc -l) itens"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+# conta.sh — diz quantos itens tem cada pasta recebida
+for pasta in "$@"; do
+  echo "$pasta: $(ls "$pasta" | wc -l) itens"
+done
+</pre>
+</div>
+
+<hr>
+
+<h2>Andar pela fila: <code>shift</code></h2>
+<p><code>shift</code> ("deslocar") tira o primeiro argumento da fila e puxa todos uma posição para a frente: o <code>$2</code> vira <code>$1</code>, o <code>$3</code> vira <code>$2</code>, e o <code>$#</code> diminui. O antigo <code>$1</code> some (se você precisar dele, guarde numa variável antes).</p>
+
+<dl class="anatomy">
+  <dt>shift</dt><dd>Descarta o primeiro argumento.</dd>
+  <dt>2</dt><dd>Opcional: quantos descartar de uma vez. Sem número, é 1.</dd>
+</dl>
+
+<pre class="file" data-file="fila.sh">#!/usr/bin/env bash
+echo "Antes:  \$#=$#  \$1=$1  todos: $*"
+shift
+echo "Depois: \$#=$#  \$1=$1  todos: $*"
+shift 2
+echo "Depois do shift 2: \$#=$#  \$1=$1  todos: $*"
+</pre>
+
+<pre class="term">$ ./fila.sh a b c d e
+Antes:  $#=5  $1=a  todos: a b c d e
+Depois: $#=4  $1=b  todos: b c d e           « o "a" saiu, todos andaram uma casa
+Depois do shift 2: $#=2  $1=d  todos: d e    « "b" e "c" saíram</pre>
+
+<p>E se não houver argumentos suficientes? O <code>shift</code> não mexe em nada e devolve o código <code>1</code>, sem mensagem:</p>
+
+<pre class="term">$ ./pula.sh a
+Tenho 1 argumentos: a
+Código do shift 2: 1                « falhou: só havia 1 para tirar 2
+Agora tenho 1: a                     « nada mudou</pre>
+
+<p>Um uso típico: o primeiro argumento é especial (por exemplo, a pasta de destino), e o resto é uma lista. Guarde o primeiro, dê <code>shift</code>, e o <code>"$@"</code> passa a ser só a lista.</p>
+
+<pre class="file" data-file="copiar-para.sh">#!/usr/bin/env bash
+# copiar-para.sh DESTINO ARQUIVO...
+destino=$1
+shift
+cp -- "$@" "$destino"
+</pre>
+
+<p>O <code>--</code> no <code>cp</code> avisa "acabaram as opções": assim, um arquivo chamado <code>-r</code> não é confundido com uma opção.</p>
+
+<h3>Você também pode criar argumentos no terminal: <code>set --</code></h3>
+<p>No terminal, <code>set -- a b c</code> define <code>$1</code>, <code>$2</code> e <code>$3</code> do seu shell. É ótimo para testar sem criar um script:</p>
+
+<pre class="term">$ set -- maçã uva
+$ echo "$# argumentos: $1 e $2"
+2 argumentos: maçã e uva
+$ shift
+$ echo "$# argumento: $1"
+1 argumento: uva</pre>
+
+<div class="try" data-goal="ran:\bshift\b,out:Manaus" data-solucao="set -- Recife Manaus Salvador;;shift;;echo &quot;$1&quot;">
+<p class="try-task"><strong>Missão:</strong> use <code>set --</code> para definir os argumentos <code>Recife Manaus Salvador</code>. Depois use <code>shift</code> e mostre o <code>$1</code> com <code>echo "$1"</code>. Qual cidade aparece?</p>
+</div>
+
+<hr>
+
+<h2>Percorrer todos os argumentos</h2>
+<p>Duas formas, e as duas estão certas.</p>
+
+<h3>Forma 1: <code>for arg</code></h3>
+<p>O <code>for</code> sem a parte <code>in …</code> percorre os argumentos automaticamente. <code>for arg</code> é o mesmo que <code>for arg in "$@"</code>:</p>
+
+<pre class="file" data-file="cada.sh">#!/usr/bin/env bash
+for arg; do
+  echo "recebi: $arg"
+done
+</pre>
+
+<h3>Forma 2: <code>while (( $# ))</code> + <code>shift</code></h3>
+<p>Enquanto ainda houver argumentos (<code>$#</code> diferente de zero), trate o <code>$1</code> e dê <code>shift</code>. É a base de quem processa opções na mão.</p>
+
+<pre class="file" data-file="lista.sh">#!/usr/bin/env bash
+n=1
+while (( $# )); do
+  echo "$n: $1"
+  shift
+  (( n++ ))
+done
+echo "Sobrou: $# argumentos"
+</pre>
+
+<dl class="anatomy">
+  <dt>while</dt><dd>"Enquanto…" (aula em <a href="while.html">while e until</a>).</dd>
+  <dt>(( $# ))</dt><dd>Conta aritmética: é verdadeira quando <code>$#</code> não é zero.</dd>
+  <dt>shift</dt><dd>Sem ele, o <code>$#</code> nunca diminui e o laço não termina.</dd>
+</dl>
+
+<pre class="term">$ ./lista.sh maçã 'pão de queijo' café
+1: maçã
+2: pão de queijo
+3: café
+Sobrou: 0 argumentos             « o while consumiu a fila toda</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Quando usar</th></tr>
+<tr><td><code>for arg; do …; done</code></td><td>Fazer a mesma coisa com cada argumento. A lista continua intacta depois.</td></tr>
+<tr><td><code>while (( $# )); do …; shift; done</code></td><td>Quando um argumento pode "comer" o seguinte (como <code>-o arquivo</code>) ou quando você quer parar no meio.</td></tr>
+</table>
+</div>
+
+<p>Para opções no estilo <code>-v</code>, <code>-o arquivo</code>, o Bash tem uma ferramenta própria: <a href="getopts.html">Opções com getopts</a>.</p>
+
+<hr>
+
+<h2>Valor padrão: <code>${1:-padrão}</code></h2>
+<p>Às vezes o argumento é opcional: se a pessoa não passar, use um valor razoável.</p>
+
+<dl class="anatomy">
+  <dt>${1</dt><dd>O primeiro argumento…</dd>
+  <dt>:-</dt><dd>…mas, se ele não veio ou está vazio, use…</dd>
+  <dt>visitante}</dt><dd>…este valor.</dd>
+</dl>
+
+<pre class="file" data-file="saudar.sh">#!/usr/bin/env bash
+nome=${1:-visitante}
+echo "Olá, $nome!"
+</pre>
+
+<pre class="term">$ ./saudar.sh
+Olá, visitante!
+$ ./saudar.sh Bruno
+Olá, Bruno!
+$ ./saudar.sh ''
+Olá, visitante!                  « vazio também conta como "não veio"</pre>
+
+<p>É uma das formas de <a href="expansao-parametros.html">Expansão de Parâmetros</a>, que tem muitas outras.</p>
+
+<hr>
+
+<h2>Exigir um argumento</h2>
+<p>Se o script não faz sentido sem o argumento (o arquivo a copiar, a pasta a limpar), ele deve parar logo, avisando o que faltou. Duas formas.</p>
+
+<h3>Forma 1, curta: <code>${1:?mensagem}</code></h3>
+
+<pre class="file" data-file="copia.sh">#!/usr/bin/env bash
+origem=${1:?informe o arquivo de origem}
+echo "Copiando $origem..."
+</pre>
+
+<pre class="term">$ ./copia.sh
+./copia.sh: linha 2: 1: informe o arquivo de origem
+$ echo $?
+1
+$ ./copia.sh frutas.txt
+Copiando frutas.txt...</pre>
+
+<p>Sem o argumento, o Bash mostra a mensagem na saída de erro, com o nome do script, a linha e o parâmetro (<code>1</code>), e encerra o script com código <code>1</code>. É prático, mas a mensagem é técnica.</p>
+
+<h3>Forma 2, amigável: <code>if</code> + mensagem de uso + <code>exit 2</code></h3>
+<p>Programas bem-educados respondem a um uso errado com uma <strong>mensagem de uso</strong> (<em>usage</em>): como chamar o programa e um exemplo. Três regras: a mensagem vai para a <strong>saída de erro</strong> (<code>&gt;&amp;2</code>), usa <code>$0</code> para mostrar o nome do script, e o script sai com código <strong>2</strong>, a convenção para "uso incorreto" (é o que o <code>ls</code> e o <code>grep</code> fazem).</p>
+
+<pre class="file" data-file="backup.sh">#!/usr/bin/env bash
+# backup.sh — copia arquivos para a pasta backup/
+if (( $# &lt; 1 )); then
+  echo "Uso: $0 ARQUIVO..." &gt;&amp;2
+  echo "Exemplo: $0 frutas.txt Documentos/notas.txt" &gt;&amp;2
+  exit 2
+fi
+mkdir -p backup
+for arq in "$@"; do
+  cp -- "$arq" backup/ &amp;&amp; echo "copiado: $arq"
+done
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>if (( $# &lt; 1 )); then</code></td><td>Se chegaram menos de 1 argumento… (<a href="if.html">if</a>; <code>(( ))</code> compara números).</td></tr>
+<tr><td><code>echo "Uso: $0 ARQUIVO..." &gt;&amp;2</code></td><td>Mostra como usar. <code>&gt;&amp;2</code> manda para a saída de erro (<a href="redirecionamento.html">Redirecionamento</a>). <code>ARQUIVO...</code> é a convenção para "um ou mais arquivos".</td></tr>
+<tr><td><code>exit 2</code></td><td>Encerra o script com código 2 (<a href="codigo-saida.html">Código de Saída</a>).</td></tr>
+<tr><td><code>for arq in "$@"</code></td><td>Para cada arquivo recebido…</td></tr>
+<tr><td><code>cp -- "$arq" backup/ &amp;&amp; echo …</code></td><td>…copia e, se deu certo, avisa.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./backup.sh
+Uso: ./backup.sh ARQUIVO...
+Exemplo: ./backup.sh frutas.txt Documentos/notas.txt
+$ echo $?
+2                                 « 2 = foi usado do jeito errado
+$ ./backup.sh 2&gt;/dev/null
+$                                 « a mensagem foi para o canal de erro, por isso sumiu
+$ ./backup.sh frutas.txt nada.txt
+copiado: frutas.txt
+cp: não foi possível obter estado de 'nada.txt': Arquivo ou diretório inexistente
+$ echo $?
+1                                 « o último comando (o cp de nada.txt) falhou</pre>
+
+<p>O último resultado mostra uma regra útil: sem <code>exit</code> no fim, o código do script é o do <strong>último comando</strong> que rodou.</p>
+
+<div class="tryscript" data-file="saudar.sh" data-args="" data-goal="err:Uso:,exit:2,src:exit +2">
+<p class="try-task"><strong>Missão:</strong> o script cumprimenta o nome recebido. Faça com que, <strong>sem argumento</strong>, ele mostre <code>Uso: saudar.sh NOME</code> na saída de erro e saia com o código 2. Rode com o campo de argumentos vazio. Depois teste com um nome.</p>
+<pre class="script">#!/usr/bin/env bash
+# saudar.sh — cumprimenta a pessoa do 1º argumento
+echo "Olá, $1!"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+# saudar.sh — cumprimenta a pessoa do 1º argumento
+if (( $# &lt; 1 )); then
+  echo "Uso: $0 NOME" &gt;&amp;2
+  exit 2
+fi
+echo "Olá, $1!"
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Um nome com espaço virou vários argumentos</strong>
+<pre class="term">$ ./args.sh Área de trabalho
+…
+Quantos argumentos: 3</pre>
+<p><strong>O que aconteceu:</strong> sem aspas, o seu shell separou o nome em três palavras antes de chamar o script.</p>
+<p><strong>Como resolver:</strong> quem chama põe aspas: <code>./args.sh 'Área de trabalho'</code>. Dentro do script, use sempre <code>"$1"</code>, <code>"$@"</code>, <code>"$arq"</code> entre aspas, senão o nome é picado de novo lá dentro.</p>
+</div>
+
+<div class="cenario">
+<strong>"ls: não foi possível acessar 'Área'"</strong>
+<pre class="term">$ ./conta-errado.sh 'Área de trabalho'
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o argumento chegou certo, mas o script usou <code>$@</code> (ou <code>$1</code>) sem aspas, e o nome foi picado nos espaços.</p>
+<p><strong>Como resolver:</strong> troque <code>$@</code> por <code>"$@"</code> e <code>$1</code> por <code>"$1"</code>. O <a href="shellcheck.html">ShellCheck</a> aponta esse erro automaticamente (aviso SC2068).</p>
+</div>
+
+<div class="cenario">
+<strong><code>$10</code> mostra o primeiro argumento com um 0 no fim</strong>
+<pre class="term">$ ./dez.sh a b c d e f g h i j
+…
+décimo errado: a0</pre>
+<p><strong>Como resolver:</strong> do décimo em diante, use chaves: <code>${10}</code>, <code>${11}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada no lugar do argumento</strong>
+<pre class="term">$ ./args.sh
+…
+Primeiro: </pre>
+<p><strong>O que aconteceu:</strong> o argumento não foi passado, e um parâmetro que não existe vale texto vazio, sem erro. Também acontece depois de <code>shift</code>, que já tirou aquele argumento da fila.</p>
+<p><strong>Como confirmar:</strong> mostre o <code>$#</code>. <strong>Como resolver:</strong> dê um padrão com <code>${1:-padrão}</code> ou exija o argumento com a mensagem de uso.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>while (( $# ))</code> nunca termina</strong>
+<p><strong>O que aconteceu:</strong> faltou o <code>shift</code> dentro do laço. O <code>$#</code> nunca diminui, e o mesmo <code>$1</code> é tratado para sempre.</p>
+<p><strong>Como resolver:</strong> <kbd>Ctrl</kbd>+<kbd>C</kbd> para parar; acrescente <code>shift</code> antes do <code>done</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que é</th><th>Exemplo</th></tr>
+<tr><td><code>$0</code></td><td>Como o script foi chamado</td><td><code>echo "Uso: $0 ARQ"</code></td></tr>
+<tr><td><code>$1</code> … <code>$9</code></td><td>Do primeiro ao nono argumento</td><td><code>cp -- "$1" "$2"</code></td></tr>
+<tr><td><code>${10}</code>, <code>${11}</code>…</td><td>Do décimo em diante (chaves obrigatórias)</td><td><code>echo "${10}"</code></td></tr>
+<tr><td><code>$#</code></td><td>Quantos argumentos</td><td><code>(( $# &lt; 1 ))</code></td></tr>
+<tr><td><code>"$@"</code></td><td>Todos, cada um intacto</td><td><code>for a in "$@"</code></td></tr>
+<tr><td><code>"$*"</code></td><td>Todos num texto só (separados pelo 1º caractere do <code>IFS</code>)</td><td><code>echo "Recebi: $*"</code></td></tr>
+<tr><td><code>shift</code> / <code>shift N</code></td><td>Tira 1 (ou N) da frente da fila</td><td><code>shift 2</code></td></tr>
+<tr><td><code>set -- a b</code></td><td>Define os argumentos do shell atual</td><td><code>set -- maçã uva</code></td></tr>
+<tr><td><code>${1:-padrão}</code></td><td>Valor padrão se vazio ou ausente</td><td><code>pasta=${1:-.}</code></td></tr>
+<tr><td><code>${1:?msg}</code></td><td>Erro e saída com código 1 se vazio ou ausente</td><td><code>${1:?informe o arquivo}</code></td></tr>
+<tr><td><code>for arg; do</code></td><td>Percorre todos (igual a <code>for arg in "$@"</code>)</td><td><code>for arg; do echo "$arg"; done</code></td></tr>
+<tr><td><code>while (( $# )); do … shift</code></td><td>Consome a fila um por um</td><td>(veja <code>lista.sh</code>)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Quantos?</h3>
+<p>Complete para mostrar quantos argumentos o script recebeu:</p>
+<div class="ex-code">echo "Recebi <input data-answer="$#" aria-label="variável"> argumentos"</div>
+</div>
+
+<div class="exercise">
+<h3>2. O décimo</h3>
+<p>Complete para mostrar o décimo argumento:</p>
+<div class="ex-code">echo "<input data-answer="${10}" aria-label="décimo argumento">"</div>
+</div>
+
+<div class="exercise">
+<h3>3. Pasta padrão</h3>
+<p>Complete para que <code>pasta</code> seja o primeiro argumento ou, se ele não vier, <code>.</code> (a pasta atual):</p>
+<div class="ex-code">pasta=<input data-answer="${1:-.}|&quot;${1:-.}&quot;" aria-label="expansão"></div>
+</div>
+
+<div class="exercise">
+<h3>4. Repassar tudo</h3>
+<p>Complete para o script repassar todos os argumentos ao <code>ls -l</code>, sem quebrar nomes com espaço:</p>
+<div class="ex-code">ls -l -- <input data-answer="&quot;$@&quot;" aria-label="argumentos"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. A Ana roda <code>./mostra.sh 'pão de queijo' café</code>. Quantos itens o laço <code>for a in "$*"</code> percorre?</p>
+<label><input type="radio" name="q5"> 2</label>
+<label><input type="radio" name="q5"> 1</label>
+<label><input type="radio" name="q5"> 4</label>
+<label><input type="radio" name="q5"> 0</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">6. Com os argumentos <code>a b c d</code>, o que vale <code>$1</code> depois de <code>shift 2</code>?</p>
+<label><input type="radio" name="q6"> <code>a</code></label>
+<label><input type="radio" name="q6"> <code>b</code></label>
+<label><input type="radio" name="q6"> <code>c</code></label>
+<label><input type="radio" name="q6"> Vazio.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">7. Qual é a forma recomendada de um script avisar que foi chamado sem o argumento obrigatório?</p>
+<label><input type="radio" name="q7"> <code>echo "faltou o arquivo"</code> e continuar.</label>
+<label><input type="radio" name="q7"> <code>echo "Uso: $0 ARQ"</code> na saída normal e <code>exit 0</code>.</label>
+<label><input type="radio" name="q7"> Não avisar: <code>$1</code> vazio não dá erro.</label>
+<label><input type="radio" name="q7"> <code>echo "Uso: $0 ARQ" &gt;&amp;2</code> e <code>exit 2</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Os argumentos chegam em <code>$1</code>, <code>$2</code>… (<code>${10}</code> em diante com chaves); <code>$#</code> diz quantos e <code>$0</code> é o nome do script.</li>
+  <li>Use <code>"$@"</code> (com aspas) para percorrer ou repassar todos; <code>"$*"</code> só para mostrar numa mensagem; <code>$@</code> sem aspas, nunca.</li>
+  <li><code>shift</code> tira o primeiro da fila; <code>for arg</code> e <code>while (( $# ))</code> percorrem todos.</li>
+  <li><code>${1:-padrão}</code> dá um valor padrão; <code>${1:?msg}</code> exige o argumento.</li>
+  <li>Mensagem de uso: para a saída de erro (<code>&gt;&amp;2</code>), com <code>$0</code>, e <code>exit 2</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

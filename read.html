@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash read — ler do teclado, de arquivos e pedir confirmação | Guia Bash</title>
+<meta name="description" content="O comando read do Bash explicado: -p, -r, -s para senha, -n 1, -t com tempo limite, -a para arrays, vários nomes, IFS=, REPLY, ler de arquivo e de pipe (e a pegadinha do echo | read) e a confirmação [s/N] com case.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">read</span></h1>
+
+<p class="intro">Argumentos são passados antes de o script começar. Às vezes, porém, o script precisa <strong>perguntar</strong> no meio do caminho: o nome do usuário, uma senha, "tem certeza?". O comando <code>read</code> ("ler") para o script, espera você digitar uma linha e guarda o que foi digitado numa variável.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como fazer uma pergunta e guardar a resposta: <code>read -p "Pergunta: " variavel</code>.</li>
+  <li>Por que usar <strong>sempre</strong> o <code>-r</code>, e quando usar <code>IFS=</code>.</li>
+  <li>As opções do dia a dia: <code>-s</code> (senha), <code>-n 1</code> (uma tecla), <code>-t</code> (tempo limite), <code>-a</code> (lista).</li>
+  <li>Como ler de um arquivo, e por que <code>echo "x" | read v</code> deixa <code>v</code> vazia.</li>
+  <li>Como fazer a confirmação "Tem certeza? [s/N]".</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A forma mais simples</h2>
+
+<dl class="anatomy">
+  <dt>read</dt><dd>Comando interno do Bash: espera uma linha da entrada (o teclado, normalmente).</dd>
+  <dt>nome</dt><dd>A variável onde a linha vai ser guardada. Sem <code>$</code>: aqui você está dando o nome da variável, não usando o valor dela.</dd>
+</dl>
+
+<pre class="term">$ read nome
+Ana                              « você digita e aperta Enter
+$ echo "Olá, $nome"
+Olá, Ana</pre>
+
+<p>Depois do <code>read nome</code>, o cursor fica parado numa linha vazia, sem prompt. O Bash está esperando. Você digita <code>Ana</code>, aperta <kbd>Enter</kbd>, e o texto (sem o Enter) vai para a variável <code>nome</code>.</p>
+
+<h3>Fazendo a pergunta: <code>-p</code></h3>
+<p>Um cursor piscando sem explicação confunde quem usa o script. A opção <code>-p</code> (<em>prompt</em>) mostra um texto antes de esperar. Termine o texto com um espaço, para a resposta não grudar na pergunta.</p>
+
+<dl class="anatomy">
+  <dt>read</dt><dd>O comando.</dd>
+  <dt>-p "Qual é a sua cidade? "</dt><dd>A pergunta, mostrada na mesma linha da resposta.</dd>
+  <dt>cidade</dt><dd>A variável que recebe a resposta.</dd>
+</dl>
+
+<pre class="term">$ read -p "Qual é a sua cidade? " cidade
+Qual é a sua cidade? Recife
+$ echo "Você mora em $cidade"
+Você mora em Recife</pre>
+
+<p>Num script, perguntas em sequência ficam assim:</p>
+
+<pre class="file" data-file="cadastro.sh">#!/usr/bin/env bash
+read -rp "Nome: " nome
+read -rp "Idade: " idade
+echo "Cadastro: $nome, $idade anos."
+</pre>
+
+<pre class="term">$ ./cadastro.sh
+Nome: Ana Souza
+Idade: 29
+Cadastro: Ana Souza, 29 anos.</pre>
+
+<p>O <code>-rp</code> é <code>-r</code> e <code>-p</code> juntos (o <code>p</code> tem que ser o último, porque o texto vem logo depois dele). O <code>-r</code> é o assunto da próxima seção.</p>
+
+<div class="tryscript" data-file="cadastro.sh" data-stdin="Carla\n22\n" data-goal="out:Carla\, 22 anos,src:read +-r?p?">
+<p class="try-task"><strong>Missão:</strong> o script só pergunta o nome. Acrescente uma pergunta <code>Idade: </code> guardando a resposta em <code>idade</code>, e faça a última linha mostrar <code>Cadastro: Carla, 22 anos.</code> (as respostas <code>Carla</code> e <code>22</code> já estão no campo de entrada).</p>
+<pre class="script">#!/usr/bin/env bash
+read -rp "Nome: " nome
+echo "Cadastro: $nome."
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+read -rp "Nome: " nome
+read -rp "Idade: " idade
+echo "Cadastro: $nome, $idade anos."
+</pre>
+</div>
+
+<hr>
+
+<h2>Use sempre <code>-r</code></h2>
+<p>Sem o <code>-r</code>, o <code>read</code> trata a barra invertida <code>\</code> como um caractere especial (de "escape") e a <strong>remove</strong>. Isso estraga caminhos do Windows, expressões regulares e qualquer texto com <code>\</code>:</p>
+
+<pre class="term">$ cat caminho.txt
+C:\Users\ana\novo
+$ read linha &lt; caminho.txt
+$ echo "$linha"
+C:Usersananovo                   « as barras sumiram
+$ read -r linha &lt; caminho.txt
+$ echo "$linha"
+C:\Users\ana\novo                « com -r, o texto chega intacto</pre>
+
+<p>O <code>-r</code> vem de <em>raw</em>, "cru": a linha chega exatamente como foi digitada. Não há quase nenhum caso em que você queira o comportamento sem <code>-r</code>; por isso, a regra é simples: <strong>escreva sempre <code>read -r</code></strong>. O <a href="shellcheck.html">ShellCheck</a> avisa quando falta (SC2162). Nos exemplos de terminal acima, com nomes simples, tanto faz; em scripts, nunca esqueça.</p>
+
+<p>(O <code>&lt; caminho.txt</code> faz o <code>read</code> ler a primeira linha do arquivo em vez do teclado. Mais sobre isso adiante.)</p>
+
+<hr>
+
+<h2>Vários nomes: <code>read a b resto</code></h2>
+<p>Com mais de uma variável, o <code>read</code> divide a linha em palavras (nos espaços) e distribui: uma palavra para cada nome, e <strong>tudo o que sobrar vai para o último</strong>.</p>
+
+<pre class="term">$ read a b resto
+um dois três quatro cinco
+$ echo "a=[$a] b=[$b] resto=[$resto]"
+a=[um] b=[dois] resto=[três quatro cinco]</pre>
+
+<p>Os colchetes só servem para você ver onde cada valor começa e termina. Se vierem menos palavras que nomes, as variáveis que sobrarem ficam vazias.</p>
+
+<h3>Mudando o separador: <code>IFS=,</code></h3>
+<p>Quem decide onde dividir é a variável <code>IFS</code> (<em>Internal Field Separator</em>, "separador interno de campos"), que normalmente vale espaço, tab e quebra de linha. Escrita na frente do comando, ela muda <strong>só para aquele <code>read</code></strong>. Assim dá para ler uma linha do <code>alunos.csv</code>, que separa os campos com vírgula:</p>
+
+<pre class="term">$ sed -n 2p Documentos/alunos.csv
+Ana,29,Recife,9.5
+$ IFS=, read -r nome idade cidade nota &lt; &lt;(sed -n 2p Documentos/alunos.csv)
+$ echo "$nome tem $idade anos e mora em $cidade"
+Ana tem 29 anos e mora em Recife</pre>
+
+<dl class="anatomy">
+  <dt>IFS=,</dt><dd>Para este comando, o separador é a vírgula.</dd>
+  <dt>read -r</dt><dd>Lê uma linha, sem mexer nas barras.</dd>
+  <dt>nome idade cidade nota</dt><dd>Quatro variáveis, uma por campo.</dd>
+  <dt>&lt; &lt;(sed -n 2p …)</dt><dd>A entrada vem da saída do <code>sed</code>, que mostra só a linha 2 (<a href="substituicao-processo.html">substituição de processo</a>; por que não um pipe, você vê mais abaixo).</dd>
+</dl>
+
+<h3>Preservar os espaços: <code>IFS= read -r</code></h3>
+<p>Com uma variável só, o <code>read</code> ainda <strong>apara</strong> os espaços do começo e do fim da linha. Na maioria das vezes isso ajuda (a pessoa digitou um espaço sem querer). Quando você quer a linha exatamente como é, esvazie o <code>IFS</code>:</p>
+
+<pre class="term">$ printf '   Estudar Bash   \n' &gt; recuo.txt
+$ read -r linha &lt; recuo.txt
+$ echo "[$linha]"
+[Estudar Bash]                   « espaços das pontas removidos
+$ IFS= read -r linha &lt; recuo.txt
+$ echo "[$linha]"
+[   Estudar Bash   ]             « linha intacta</pre>
+
+<p><code>IFS= read -r linha</code> é a forma "linha intacta" que você vai usar para ler arquivos linha a linha, em <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a> (com <code>while</code>).</p>
+
+<h3>Sem nome nenhum: <code>REPLY</code></h3>
+<p>Se você não der nome de variável, o <code>read</code> guarda a linha em <code>REPLY</code> ("resposta"), sem aparar os espaços:</p>
+
+<pre class="term">$ read
+texto livre
+$ echo "REPLY=$REPLY"
+REPLY=texto livre</pre>
+
+<p>Prefira sempre dar um nome: o script fica mais fácil de ler.</p>
+
+<hr>
+
+<h2>Opções do dia a dia</h2>
+
+<h3>Senha: <code>-s</code></h3>
+<p><code>-s</code> (<em>silent</em>, "silencioso") não mostra o que é digitado. Repare num detalhe: como o Enter também não aparece, o próximo texto gruda na pergunta.</p>
+
+<pre class="term">$ read -sp "Senha: " senha
+Senha: ana@notebook:~$ echo                    « o prompt grudou: o Enter não foi mostrado
+                                 « o echo vazio só pula uma linha
+$ echo "A senha tem ${#senha} letras"
+A senha tem 10 letras</pre>
+
+<p>Por isso, em scripts, coloque um <code>echo</code> logo depois: <code>read -rsp "Senha: " senha; echo</code>. (<code>${#senha}</code> é o tamanho do texto, de <a href="expansao-parametros.html">Expansão de Parâmetros</a>.)</p>
+
+<div class="warning">
+<strong>Senha em variável não é cofre</strong>
+<p>O <code>-s</code> só evita que alguém veja por cima do seu ombro. A senha fica em texto puro na memória do script. Nunca a mostre com <code>echo</code>, nem a passe como argumento para outro programa (argumentos aparecem para qualquer usuário no <code>ps</code>).</p>
+</div>
+
+<h3>Uma tecla só: <code>-n 1</code></h3>
+<p><code>-n 1</code> ("<em>n</em> caracteres") volta assim que <strong>uma</strong> tecla é apertada, sem esperar o Enter. Ótimo para "aperte uma tecla" e menus. Aqui também o prompt gruda, porque não houve Enter:</p>
+
+<pre class="term">$ read -n 1 -p "Continuar? [s/n] " resp
+Continuar? [s/n] sana@notebook:~$ echo "resp=$resp"      « o "s" e o próximo prompt ficaram na mesma linha
+resp=s</pre>
+
+<p>Em scripts: <code>read -rn 1 -p "Continuar? [s/n] " resp; echo</code>.</p>
+
+<h3>Tempo limite: <code>-t</code></h3>
+<p><code>-t 3</code> (<em>timeout</em>) espera no máximo 3 segundos. Se ninguém responder, o <code>read</code> desiste e devolve um código de saída <strong>maior que 128</strong> (142 no Linux). Junto com <code>||</code> (que roda o segundo comando se o primeiro falhar), vira um valor padrão:</p>
+
+<pre class="term">$ read -t 3 -p "Seu nome (3 s): " nome || nome=anônimo
+Seu nome (3 s): ana@notebook:~$ echo "Olá, $nome"           « ninguém respondeu em 3 segundos
+Olá, anônimo
+$ read -t 3 -p "Rápido: " x
+Rápido: ana@notebook:~$ echo $?
+142                                         « 142 = tempo esgotado</pre>
+
+<p>Se a pessoa responder a tempo, o código é <code>0</code>. O operador <code>||</code> é explicado em <a href="operadores.html">; &amp;&amp; ||</a>, e os códigos em <a href="codigo-saida.html">Código de Saída</a>.</p>
+
+<h3>Uma lista: <code>-a</code></h3>
+<p><code>-a</code> (<em>array</em>) guarda cada palavra numa posição de uma lista, começando do 0:</p>
+
+<pre class="term">$ read -ra frutas &lt;&lt;&lt; "banana maçã uva"
+$ echo "${frutas[1]}"
+maçã                             « a posição 0 é banana, a 1 é maçã
+$ echo "${#frutas[@]} frutas"
+3 frutas</pre>
+
+<p>O <code>&lt;&lt;&lt;</code> (here-string) entrega o texto como se fosse digitado; veja <a href="heredoc.html">Here-docs e Here-strings</a>. Arrays têm aula própria em <a href="arrays.html">Arrays</a>.</p>
+
+<hr>
+
+<h2>O que o <code>read</code> devolve</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Código</th><th>A variável…</th></tr>
+<tr><td>Leu uma linha (com Enter)</td><td><code>0</code></td><td>…recebe a linha.</td></tr>
+<tr><td>Fim da entrada: <kbd>Ctrl</kbd>+<kbd>D</kbd>, arquivo vazio ou acabou</td><td><code>1</code></td><td>…fica vazia.</td></tr>
+<tr><td>A última linha não tinha Enter no fim</td><td><code>1</code></td><td>…recebe o texto mesmo assim.</td></tr>
+<tr><td>Tempo esgotado (<code>-t</code>)</td><td>maior que 128 (142)</td><td>…fica vazia.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ read x &lt; /dev/null
+$ echo $?
+1                                « /dev/null está sempre vazio: fim da entrada
+$ printf "sem quebra" | { read -r t; echo "código $? t=[$t]"; }
+código 1 t=[sem quebra]          « leu o texto, mas avisou que faltou o Enter</pre>
+
+<p>É esse código que permite usar o <code>read</code> como condição de um <code>while</code>, para ler um arquivo inteiro: assunto de <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</p>
+
+<hr>
+
+<h2>Ler de um arquivo ou de outro comando</h2>
+<p>O <code>read</code> lê da entrada padrão. Com <code>&lt;</code>, a entrada passa a ser um arquivo, e o <code>read</code> pega a <strong>primeira linha</strong>:</p>
+
+<pre class="term">$ read -r &lt; Documentos/notas.txt
+$ echo "$REPLY"
+Comprar café</pre>
+
+<h3>A pegadinha: <code>echo "Bruno" | read quem</code></h3>
+<p>O natural seria mandar o texto por um pipe. Parece funcionar, mas a variável fica vazia:</p>
+
+<pre class="term">$ echo "Bruno" | read quem
+$ echo "quem=[$quem]"
+quem=[]                          « vazia!</pre>
+
+<p><strong>Por quê?</strong> Cada lado de um pipe roda num <strong>subshell</strong>, uma cópia separada do shell. O <code>read</code> rodou na cópia, guardou <code>Bruno</code> na variável da cópia, e a cópia terminou levando a variável junto. É a mesma história do <code>cd</code> dentro de um script, em <a href="executar.html">Formas de Executar</a>. Os detalhes estão em <a href="subshell.html">Subshells e Grupos</a>.</p>
+
+<p>Três formas de resolver:</p>
+
+<pre class="term">$ read -r quem &lt;&lt;&lt; "Bruno"
+$ echo "quem=[$quem]"
+quem=[Bruno]                                   « here-string: sem pipe, sem subshell
+$ head -n 1 Documentos/alunos.csv | { read -r cab; echo "Dentro: $cab"; }
+Dentro: nome,idade,cidade,nota                « usar a variável dentro do mesmo grupo { }</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td>Here-string <code>&lt;&lt;&lt;</code></td><td><code>read -r v &lt;&lt;&lt; "$texto"</code></td><td>O texto já está numa variável ou é curto.</td></tr>
+<tr><td>Substituição de processo <code>&lt; &lt;( )</code></td><td><code>read -r v &lt; &lt;(comando)</code></td><td>O texto vem de um comando, e você quer a variável depois.</td></tr>
+<tr><td>Grupo <code>{ }</code> no fim do pipe</td><td><code>comando | { read -r v; echo "$v"; }</code></td><td>Você só precisa da variável ali dentro.</td></tr>
+<tr><td>Arquivo <code>&lt;</code></td><td><code>read -r v &lt; arquivo</code></td><td>O texto está num arquivo.</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="var:quem=Bruno,ran:\bread\b" data-solucao="read -r quem &lt;&lt;&lt; &quot;Bruno&quot;">
+<p class="try-task"><strong>Missão:</strong> rode <code>echo "Bruno" | read quem</code> e confira que <code>echo "$quem"</code> não mostra nada. Depois use o <code>read</code> de um jeito que deixe <code>quem</code> valendo <code>Bruno</code> no seu shell.</p>
+</div>
+
+<hr>
+
+<h2>Confirmação: "Tem certeza? [s/N]"</h2>
+<p>Antes de algo que não tem volta (apagar, sobrescrever), um bom script pergunta. A convenção <code>[s/N]</code> diz duas coisas: as respostas possíveis são "s" e "n", e a letra <strong>maiúscula é o padrão</strong>, o que acontece se a pessoa só apertar Enter. Para ações perigosas, o padrão é sempre "não".</p>
+
+<pre class="file" data-file="apagar.sh">#!/usr/bin/env bash
+# apagar.sh — pede confirmação antes de apagar
+arquivo=${1:?informe o arquivo}
+read -rp "Apagar \"$arquivo\"? Tem certeza? [s/N] " resp
+case $resp in
+  [sS] | [sS][iI][mM])
+    rm -- "$arquivo" &amp;&amp; echo "Apagado."
+    ;;
+  *)
+    echo "Nada foi apagado."
+    ;;
+esac
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>arquivo=${1:?informe o arquivo}</code></td><td>Pega o arquivo do 1º argumento, ou para com erro se não veio (<a href="argumentos.html">Argumentos</a>).</td></tr>
+<tr><td><code>read -rp "… [s/N] " resp</code></td><td>Pergunta e guarda a resposta em <code>resp</code>. O <code>\"</code> põe aspas na pergunta.</td></tr>
+<tr><td><code>case $resp in</code></td><td>Compara a resposta com padrões, de cima para baixo (<a href="case.html">case</a>).</td></tr>
+<tr><td><code>[sS] | [sS][iI][mM])</code></td><td>Aceita <code>s</code>, <code>S</code>, <code>sim</code>, <code>Sim</code>, <code>SIM</code>… O <code>|</code> separa alternativas.</td></tr>
+<tr><td><code>rm -- "$arquivo" &amp;&amp; echo "Apagado."</code></td><td>Apaga e, se deu certo, avisa.</td></tr>
+<tr><td><code>*)</code></td><td>Qualquer outra coisa, inclusive só Enter (texto vazio): não apaga.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ touch rascunho.txt
+$ ./apagar.sh rascunho.txt
+Apagar "rascunho.txt"? Tem certeza? [s/N]      « só Enter
+Nada foi apagado.
+$ ./apagar.sh rascunho.txt
+Apagar "rascunho.txt"? Tem certeza? [s/N] sim
+Apagado.
+$ ls rascunho.txt
+ls: não foi possível acessar 'rascunho.txt': Arquivo ou diretório inexistente</pre>
+
+<div class="tryscript" data-file="confirma.sh" data-stdin="sim\n" data-goal="out:Confirmado">
+<p class="try-task"><strong>Missão:</strong> o script só aceita <code>s</code> como confirmação. A resposta no campo de entrada é <code>sim</code>, e ele diz "Cancelado". Mude o <code>case</code> para aceitar também <code>S</code>, <code>sim</code> e <code>Sim</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+read -rp "Continuar? [s/N] " resp
+case $resp in
+  s) echo "Confirmado." ;;
+  *) echo "Cancelado." ;;
+esac
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+read -rp "Continuar? [s/N] " resp
+case $resp in
+  [sS] | [sS][iI][mM]) echo "Confirmado." ;;
+  *) echo "Cancelado." ;;
+esac
+</pre>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de receber um dado</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td>Argumento</td><td><code>./backup.sh fotos</code></td><td>O dado é conhecido antes de rodar. Funciona em automação (cron) e no histórico. <strong>Prefira este.</strong></td></tr>
+<tr><td><code>read</code></td><td><code>read -rp "Pasta: " pasta</code></td><td>O script é interativo, ou a pergunta depende do que aconteceu antes (confirmação).</td></tr>
+<tr><td><code>read -s</code></td><td><code>read -rsp "Senha: " s; echo</code></td><td>Senhas e segredos.</td></tr>
+<tr><td>Argumento com <code>read</code> de reserva</td><td><code>pasta=$1; [[ -z $pasta ]] &amp;&amp; read -rp "Pasta: " pasta</code></td><td>Quer as duas coisas: automatizável e amigável.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>A variável ficou vazia depois de <code>… | read v</code></strong>
+<pre class="term">$ echo "Bruno" | read quem
+$ echo "quem=[$quem]"
+quem=[]</pre>
+<p><strong>O que aconteceu:</strong> o <code>read</code> rodou num subshell, do outro lado do pipe.</p>
+<p><strong>Como resolver:</strong> <code>read -r quem &lt;&lt;&lt; "Bruno"</code> ou <code>read -r quem &lt; &lt;(comando)</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>As barras invertidas sumiram</strong>
+<pre class="term">$ read linha &lt; caminho.txt
+$ echo "$linha"
+C:Usersananovo</pre>
+<p><strong>Como resolver:</strong> faltou o <code>-r</code>. Use <code>read -r</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O prompt grudou na pergunta</strong>
+<pre class="term">$ read -sp "Senha: " senha
+Senha: ana@notebook:~$ </pre>
+<p><strong>O que aconteceu:</strong> com <code>-s</code>, <code>-n</code> ou quando o tempo do <code>-t</code> acaba, nenhuma quebra de linha é mostrada.</p>
+<p><strong>Como resolver:</strong> coloque um <code>echo</code> logo depois do <code>read</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O script "travou" e não mostrou nada</strong>
+<p><strong>O que aconteceu:</strong> provavelmente ele está parado num <code>read</code> sem <code>-p</code>, esperando você digitar. Ou a pergunta existe, mas a entrada do script vem de um pipe ou arquivo: nesse caso o <code>read</code> <strong>não mostra</strong> o texto do <code>-p</code> (ele só aparece quando a entrada é um terminal):</p>
+<pre class="term">$ printf "Bruno\n34\n" | ./cadastro.sh
+Cadastro: Bruno, 34 anos.        « as perguntas "Nome:" e "Idade:" não apareceram</pre>
+<p><strong>Como resolver:</strong> digite a resposta e aperte Enter, ou <kbd>Ctrl</kbd>+<kbd>C</kbd> para cancelar. No script, use sempre <code>-p</code> com uma pergunta clara.</p>
+</div>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente" no <code>read … &lt; arquivo</code></strong>
+<pre class="term">$ read -r &lt; notas.txt
+bash: notas.txt: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não está na pasta atual (o <code>notas.txt</code> da Ana fica em <code>Documentos</code>). Quem reclama é o shell, ao abrir o arquivo, antes do <code>read</code> rodar.</p>
+<p><strong>Como resolver:</strong> use o caminho certo: <code>read -r &lt; Documentos/notas.txt</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>read v</code></td><td>Lê uma linha para <code>v</code></td><td><code>read nome</code></td></tr>
+<tr><td><code>-p "texto"</code></td><td>Mostra uma pergunta (só no terminal)</td><td><code>read -rp "Nome: " nome</code></td></tr>
+<tr><td><code>-r</code></td><td>Não trata <code>\</code> como escape. <strong>Use sempre.</strong></td><td><code>read -r linha</code></td></tr>
+<tr><td><code>-s</code></td><td>Não mostra o que é digitado</td><td><code>read -rsp "Senha: " s; echo</code></td></tr>
+<tr><td><code>-n N</code></td><td>Volta depois de N caracteres, sem Enter</td><td><code>read -rn 1 tecla</code></td></tr>
+<tr><td><code>-t S</code></td><td>Espera no máximo S segundos (código &gt; 128 se esgotar)</td><td><code>read -rt 5 v || v=padrão</code></td></tr>
+<tr><td><code>-a arr</code></td><td>Guarda as palavras num array</td><td><code>read -ra frutas</code></td></tr>
+<tr><td><code>read a b resto</code></td><td>Uma palavra por nome; o resto vai para o último</td><td><code>read -r cmd args</code></td></tr>
+<tr><td><code>IFS=, read …</code></td><td>Separa os campos pela vírgula</td><td><code>IFS=, read -r n i c</code></td></tr>
+<tr><td><code>IFS= read -r v</code></td><td>Linha intacta (com os espaços das pontas)</td><td><code>IFS= read -r linha</code></td></tr>
+<tr><td><code>REPLY</code></td><td>Recebe a linha quando não há nome</td><td><code>read; echo "$REPLY"</code></td></tr>
+<tr><td><code>read v &lt; arq</code></td><td>Lê a primeira linha do arquivo</td><td><code>read -r v &lt; notas.txt</code></td></tr>
+<tr><td><code>read v &lt;&lt;&lt; "$x"</code></td><td>Lê de um texto (sem subshell)</td><td><code>read -r a b &lt;&lt;&lt; "1 2"</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Pergunta com resposta intacta</h3>
+<p>Complete para perguntar "Arquivo: " e guardar a resposta em <code>arq</code>, sem estragar barras invertidas:</p>
+<div class="ex-code">read <input data-answer="-rp|-r -p" aria-label="opções"> "Arquivo: " arq</div>
+</div>
+
+<div class="exercise">
+<h3>2. Senha</h3>
+<p>Complete para ler a senha sem mostrar o que é digitado:</p>
+<div class="ex-code">read -r<input data-answer="sp|s -p" aria-label="opções"> "Senha: " senha; echo</div>
+</div>
+
+<div class="exercise">
+<h3>3. Campos de um CSV</h3>
+<p>Complete para dividir a linha <code>Bruno,34,Curitiba</code> pela vírgula:</p>
+<div class="ex-code"><input data-answer="IFS=," aria-label="separador"> read -r nome idade cidade &lt;&lt;&lt; "Bruno,34,Curitiba"</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. A Ana roda <code>read a b</code> e digita <code>um dois três</code>. Quanto vale <code>b</code>?</p>
+<label><input type="radio" name="q4"> <code>dois</code></label>
+<label><input type="radio" name="q4"> <code>três</code></label>
+<label><input type="radio" name="q4"> <code>dois três</code></label>
+<label><input type="radio" name="q4"> Vazio.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Depois de <code>echo "oi" | read msg</code>, por que <code>$msg</code> está vazia?</p>
+<label><input type="radio" name="q5"> Porque faltou o <code>-r</code>.</label>
+<label><input type="radio" name="q5"> Porque o <code>read</code> rodou num subshell, do outro lado do pipe, e a variável sumiu com ele.</label>
+<label><input type="radio" name="q5"> Porque o <code>echo</code> não manda texto para pipes.</label>
+<label><input type="radio" name="q5"> Porque <code>msg</code> é um nome reservado.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Num <code>[s/N]</code>, o que deve acontecer se a pessoa só apertar Enter?</p>
+<label><input type="radio" name="q6"> Vale o "N", a letra maiúscula: a ação não é feita.</label>
+<label><input type="radio" name="q6"> Vale o "s": a ação é feita.</label>
+<label><input type="radio" name="q6"> O script pergunta de novo para sempre.</label>
+<label><input type="radio" name="q6"> O <code>read</code> dá erro e o script para.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>read -rp "Pergunta: " var</code> pergunta e guarda a resposta. Use <strong>sempre</strong> o <code>-r</code>.</li>
+  <li>Com vários nomes, cada um recebe uma palavra e o último leva o resto; <code>IFS=,</code> muda o separador; <code>IFS= read -r</code> preserva a linha intacta.</li>
+  <li><code>-s</code> para senha, <code>-n 1</code> para uma tecla, <code>-t</code> para tempo limite (código &gt; 128), <code>-a</code> para array. Depois de <code>-s</code> e <code>-n</code>, um <code>echo</code>.</li>
+  <li><code>read v &lt; arquivo</code> lê a primeira linha; <code>… | read v</code> perde a variável (subshell): use <code>&lt;&lt;&lt;</code> ou <code>&lt; &lt;( )</code>.</li>
+  <li>Confirmação: <code>read -rp "… [s/N] " r</code> + <code>case</code>, com "não" como padrão.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
