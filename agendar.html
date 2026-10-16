@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Agendar Scripts — cron, systemd timers, at e flock | Guia Bash</title>
+<meta name="description" content="Aprenda a rodar scripts Bash sozinhos: cron (crontab -e, os 5 campos, @reboot, @daily), o ambiente mínimo do cron (PATH, %, ~), logs, flock para não rodar duas vezes, systemd timers (.service + .timer, OnCalendar, systemctl --user, systemd-run), at e por que não usar sleep em laço.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Agendar Scripts</span></h1>
+
+<p class="intro">Um script de backup só é útil se rodar <strong>todo dia</strong>, inclusive quando você esquece. O Linux tem dois "despertadores" para isso: o veterano <strong>cron</strong>, presente em todo Unix, e os <strong>timers do systemd</strong>, nas distribuições modernas. Nesta aula você vai aprender os dois, e principalmente o que muda para um script quando ninguém está olhando: outro ambiente, nenhum terminal, nenhuma tela para mostrar erros.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A agendar com <code>crontab -e</code>: os 5 campos de tempo, <code>@daily</code>, <code>@reboot</code>.</li>
+  <li>Por que um script que funciona no terminal falha no cron (<code>PATH</code> curto, sem <code>.bashrc</code>, o <code>%</code>) e como testar com <code>env -i</code>.</li>
+  <li>A guardar a saída num log e a impedir duas execuções ao mesmo tempo com <code>flock</code>.</li>
+  <li>A criar um timer do systemd (<code>.service</code> + <code>.timer</code>, <code>OnCalendar=</code>) e a usar <code>systemd-run</code> e <code>at</code>.</li>
+</ul>
+</div>
+
+<div class="warning">
+<strong>Sobre as saídas desta página</strong>
+<p>O laboratório onde as saídas do guia são conferidas não tem os serviços <code>cron</code>, <code>systemd</code> e <code>atd</code> rodando, e o simulador também não. Por isso, as sessões com <code>crontab</code>, <code>systemctl</code>, <code>journalctl</code> e <code>at</code> são <strong>ilustrativas</strong> (estão marcadas). Tudo o que dá para rodar de verdade foi conferido: o <code>flock</code>, o ambiente mínimo com <code>env -i</code>, as datas do <code>systemd-analyze calendar</code> e a sintaxe dos arquivos do timer com <code>systemd-analyze verify</code>.</p>
+</div>
+
+<hr>
+
+<h2>O cron</h2>
+<p>O <strong>cron</strong> (do grego <em>chronos</em>, tempo) é um serviço que acorda a cada minuto, lê as tabelas de agendamento e roda o que estiver marcado para aquele minuto. Cada usuário tem a sua tabela, a <strong>crontab</strong> (<em>cron table</em>). Você não edita o arquivo diretamente: usa o comando <code>crontab</code>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>crontab -e</code></td><td>Abre a sua tabela no editor (<em>edit</em>). Ao salvar e sair, o cron confere a sintaxe e passa a usá-la.</td></tr>
+<tr><td><code>crontab -l</code></td><td>Mostra a tabela (<em>list</em>).</td></tr>
+<tr><td><code>crontab -r</code></td><td>Apaga a tabela inteira (<em>remove</em>), <strong>sem perguntar</strong>. Cuidado: o <code>r</code> fica ao lado do <code>e</code> no teclado.</td></tr>
+<tr><td><code>crontab arquivo</code></td><td>Substitui a tabela pelo conteúdo do arquivo.</td></tr>
+</table>
+</div>
+
+<p>Sessão ilustrativa, na máquina da Ana, depois de agendar um backup:</p>
+
+<pre class="term">$ crontab -l
+no crontab for ana                             « (ilustrativo) ainda não há tabela
+$ crontab -e
+no crontab for ana - using an empty one
+crontab: installing new crontab                « (ilustrativo) depois de salvar no editor
+$ crontab -l
+# m h  dom mon dow   command
+30 2 * * * /home/ana/scripts/backup-docs.sh &gt;&gt; /home/ana/logs/backup.log 2&gt;&amp;1</pre>
+
+<p>Na primeira vez, o <code>crontab -e</code> pode perguntar qual editor usar (o <code>nano</code> é o mais simples). As mensagens do <code>crontab</code> costumam vir em inglês, mesmo com o sistema em português.</p>
+
+<h3>Os 5 campos de tempo</h3>
+<p>Cada linha da crontab é: <strong>cinco campos de tempo</strong>, separados por espaço, e depois o comando.</p>
+
+<pre class="syntax">┌───────── minuto        (0–59)
+│ ┌─────── hora          (0–23)
+│ │ ┌───── dia do mês    (1–31)
+│ │ │ ┌─── mês           (1–12, ou jan–dec)
+│ │ │ │ ┌─ dia da semana (0–7: 0 e 7 = domingo, 1 = segunda… ou sun–sat)
+│ │ │ │ │
+30 2 * * *  /home/ana/scripts/backup-docs.sh</pre>
+
+<dl class="anatomy">
+  <dt>30</dt><dd>No minuto 30…</dd>
+  <dt>2</dt><dd>…da hora 2 (2h da manhã; o relógio é de 24 horas)…</dd>
+  <dt>* * *</dt><dd>…de qualquer dia do mês, de qualquer mês, em qualquer dia da semana. <code>*</code> = "todos".</dd>
+  <dt>/home/ana/scripts/backup-docs.sh</dt><dd>O comando, com o caminho completo.</dd>
+</dl>
+
+<p>Cada campo aceita mais do que um número:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Significa</th></tr>
+<tr><td><code>*</code></td><td><code>* * * * *</code></td><td>Todo valor: a cada minuto.</td></tr>
+<tr><td>Número</td><td><code>0 8 * * *</code></td><td>Exatamente esse valor: todo dia às 8:00.</td></tr>
+<tr><td>Lista <code>,</code></td><td><code>0 8,12,18 * * *</code></td><td>Às 8h, 12h e 18h.</td></tr>
+<tr><td>Faixa <code>-</code></td><td><code>0 8 * * 1-5</code></td><td>Às 8h, de segunda a sexta.</td></tr>
+<tr><td>Passo <code>/</code></td><td><code>*/15 * * * *</code></td><td>A cada 15 minutos (0, 15, 30, 45).</td></tr>
+<tr><td>Faixa com passo</td><td><code>0 9-17/2 * * *</code></td><td>De 2 em 2 horas, das 9h às 17h (9, 11, 13, 15, 17).</td></tr>
+</table>
+</div>
+
+<h3>Exemplos para ler e copiar</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Quando roda</th></tr>
+<tr><td><code>30 2 * * *</code></td><td>Todo dia às 2:30.</td></tr>
+<tr><td><code>0 * * * *</code></td><td>De hora em hora, no minuto 0.</td></tr>
+<tr><td><code>*/5 * * * *</code></td><td>A cada 5 minutos.</td></tr>
+<tr><td><code>0 8 * * 1-5</code></td><td>Às 8h, em dias úteis.</td></tr>
+<tr><td><code>0 3 * * 0</code></td><td>Domingo às 3h.</td></tr>
+<tr><td><code>0 6 1 * *</code></td><td>Dia 1 de cada mês, às 6h.</td></tr>
+<tr><td><code>0 0 1 1 *</code></td><td>1º de janeiro, à meia-noite.</td></tr>
+<tr><td><code>15 14 15 10 *</code></td><td>15 de outubro, às 14:15 (todo ano).</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Dia do mês E dia da semana: vira "OU"</strong>
+<p>Se os dois campos tiverem valor (nenhum é <code>*</code>), o cron roda quando <strong>qualquer um</strong> casar. <code>0 8 13 * 5</code> não é "sexta-feira 13": é "todo dia 13 <strong>e</strong> toda sexta-feira". Para "sexta 13", agende <code>0 8 13 * *</code> e teste o dia da semana dentro do script.</p>
+</div>
+
+<h3>Os atalhos <code>@</code></h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Equivale a</th><th>Quando</th></tr>
+<tr><td><code>@reboot</code></td><td>—</td><td>Uma vez, quando o cron inicia (logo depois de ligar a máquina).</td></tr>
+<tr><td><code>@hourly</code></td><td><code>0 * * * *</code></td><td>De hora em hora.</td></tr>
+<tr><td><code>@daily</code> ou <code>@midnight</code></td><td><code>0 0 * * *</code></td><td>Todo dia à meia-noite.</td></tr>
+<tr><td><code>@weekly</code></td><td><code>0 0 * * 0</code></td><td>Domingo à meia-noite.</td></tr>
+<tr><td><code>@monthly</code></td><td><code>0 0 1 * *</code></td><td>Dia 1, à meia-noite.</td></tr>
+<tr><td><code>@yearly</code> ou <code>@annually</code></td><td><code>0 0 1 1 *</code></td><td>1º de janeiro.</td></tr>
+</table>
+</div>
+
+<p>Um exemplo de crontab completa, com comentários:</p>
+
+<pre class="file" data-file="crontab da ana (crontab -e)"># m  h  dom mon dow  comando
+MAILTO=""
+# backup da pasta Documentos, todo dia às 2:30
+30 2 * * *   /home/ana/scripts/backup-docs.sh &gt;&gt; /home/ana/logs/backup.log 2&gt;&amp;1
+# limpa a lixeira de downloads todo domingo às 3h
+0 3 * * 0    /home/ana/scripts/limpar-downloads.sh &gt;&gt; /home/ana/logs/limpeza.log 2&gt;&amp;1
+# avisa que a máquina ligou
+@reboot      echo "ligou em $(date +\%F_\%T)" &gt;&gt; /home/ana/logs/boot.log
+</pre>
+
+<hr>
+
+<h2>O ambiente mínimo do cron</h2>
+<p>Este é o motivo número um de "funciona no terminal, mas não no cron". O cron <strong>não</strong> abre um terminal nem lê o seu <code>~/.bashrc</code>. Ele roda cada linha com <code>/bin/sh</code>, num ambiente quase vazio. No Debian e no Ubuntu, por exemplo, o comando recebe só algo como:</p>
+
+<pre class="file" data-file="ambiente típico do cron">SHELL=/bin/sh
+HOME=/home/ana
+LOGNAME=ana
+PATH=/usr/bin:/bin
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>No terminal você tem…</th><th>No cron…</th><th>Consequência</th></tr>
+<tr><td><code>PATH</code> longo, com <code>~/.local/bin</code>, <code>/usr/local/bin</code>…</td><td><code>PATH=/usr/bin:/bin</code></td><td>Programas fora dessas pastas dão "not found".</td></tr>
+<tr><td>Aliases e funções do <code>.bashrc</code></td><td>Nada do <code>.bashrc</code></td><td><code>ll</code> e companhia não existem.</td></tr>
+<tr><td><code>LANG=pt_BR.UTF-8</code></td><td>Muitas vezes sem <code>LANG</code></td><td>Mensagens em inglês; acentos e <code>sort</code> podem mudar.</td></tr>
+<tr><td>Um terminal</td><td>Nenhum</td><td><code>[[ -t 1 ]]</code> é falso, <code>read</code> não tem de onde ler, <code>tput</code> reclama.</td></tr>
+<tr><td>A pasta onde você está</td><td>A pasta pessoal (<code>HOME</code>)</td><td>Caminhos relativos apontam para outro lugar.</td></tr>
+<tr><td>Bash</td><td><code>/bin/sh</code> roda a linha da crontab</td><td>Bashismos na <strong>linha</strong> da crontab falham (o script em si roda com o shebang dele).</td></tr>
+</table>
+</div>
+
+<h3>Teste antes, com <code>env -i</code></h3>
+<p>Você não precisa esperar até 2:30 para descobrir o problema. O comando <code>env -i</code> roda um programa com o ambiente <strong>vazio</strong> (<em>ignore environment</em>), e você acrescenta só as variáveis que o cron daria. Este script mostra o ambiente que recebe:</p>
+
+<pre class="file" data-file="ambiente.sh">#!/usr/bin/env bash
+echo "PATH=$PATH"
+echo "HOME=$HOME  SHELL=${SHELL:-}  USER=${USER:-}  LANG=${LANG:-}"
+echo "pasta atual: $PWD"
+echo "terminal? $([[ -t 1 ]] &amp;&amp; echo sim || echo não)"
+command -v shellcheck || echo "shellcheck: não encontrado"
+type ll 2&gt;&amp;1 | head -1
+</pre>
+
+<pre class="term">$ cd /
+$ env -i HOME=/home/ana LOGNAME=ana PATH=/usr/bin:/bin SHELL=/bin/sh /bin/sh -c 'bash ~/ambiente.sh'
+PATH=/usr/bin:/bin
+HOME=/home/ana  SHELL=/bin/sh  USER=  LANG=        « sem USER e sem LANG
+pasta atual: /                                     « a pasta de onde foi chamado
+terminal? não
+/usr/bin/shellcheck
+/home/ana/ambiente.sh: line 7: type: ll: not found « sem LANG, o Bash fala inglês</pre>
+
+<dl class="anatomy">
+  <dt>env -i</dt><dd>Começa com o ambiente vazio.</dd>
+  <dt>HOME=… LOGNAME=… PATH=… SHELL=…</dt><dd>Só as variáveis que o cron costuma dar.</dd>
+  <dt>/bin/sh -c '…'</dt><dd>Roda a linha como o cron rodaria: com o <code>sh</code>.</dd>
+</dl>
+
+<p>(O cron de verdade começa na pasta pessoal; aqui, chamamos de <code>/</code> de propósito, para mostrar que o script não deve depender da pasta atual.) Agora um comando que a Ana instalou em <code>~/bin</code>, que está no <code>PATH</code> do terminal dela, mas não no do cron:</p>
+
+<pre class="term">$ env -i HOME=/home/ana PATH=/usr/bin:/bin /bin/sh -c 'meucomando'
+/bin/sh: 1: meucomando: not found              « a mensagem é do dash, o sh do Debian/Ubuntu
+$ env -i HOME=/home/ana PATH=/usr/bin:/bin /bin/sh -c '~/bin/meucomando'
+meu comando rodou                              « com o caminho completo, funciona</pre>
+
+<h3>As três soluções para o <code>PATH</code></h3>
+<ol>
+  <li><strong>Caminhos completos</strong> na crontab e no script: <code>/home/ana/bin/meucomando</code>. Descubra o caminho com <code>command -v meucomando</code> no terminal.</li>
+  <li><strong>Definir o <code>PATH</code> no topo da crontab</strong>: <code>PATH=/home/ana/bin:/usr/local/bin:/usr/bin:/bin</code>.</li>
+  <li><strong>Definir o <code>PATH</code> no começo do script</strong>: <code>export PATH="$HOME/bin:/usr/local/bin:$PATH"</code>. É a mais robusta, porque vale de onde quer que o script seja chamado.</li>
+</ol>
+
+<h3>O <code>%</code> e o <code>~</code> na crontab</h3>
+<p>Dois detalhes da linha da crontab pegam todo mundo:</p>
+<ul>
+  <li><strong><code>%</code> vira quebra de linha.</strong> No campo do comando, o cron troca cada <code>%</code> por uma quebra de linha (o que vem depois do primeiro vira entrada do comando). <code>date +%F</code> não funciona. Escape com barra: <code>date +\%F</code>. Ou, melhor, ponha o comando dentro de um script.</li>
+  <li><strong><code>~</code> funciona no comando, mas não nas variáveis.</strong> No comando, quem expande o <code>~</code> é o <code>sh</code>, então <code>~/scripts/backup.sh</code> funciona. Mas as linhas de variáveis da crontab (<code>PATH=~/bin:/usr/bin</code>) são lidas pelo próprio cron, literalmente: nem <code>~</code> nem <code>$HOME</code> são expandidos ali. Use caminhos completos nessas linhas.</li>
+</ul>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Na crontab</th><th>Funciona?</th></tr>
+<tr><td><code>30 2 * * * ~/scripts/backup.sh</code></td><td>Sim (o <code>sh</code> expande o <code>~</code>).</td></tr>
+<tr><td><code>30 2 * * * $HOME/scripts/backup.sh</code></td><td>Sim (o <code>sh</code> expande <code>$HOME</code>).</td></tr>
+<tr><td><code>PATH=~/bin:/usr/bin:/bin</code></td><td>Não: o <code>PATH</code> fica com o texto <code>~/bin</code>.</td></tr>
+<tr><td><code>PATH=/home/ana/bin:/usr/bin:/bin</code></td><td>Sim.</td></tr>
+<tr><td><code>0 0 * * * tar czf /backup/docs-$(date +%F).tgz …</code></td><td>Não: o <code>%</code> corta o comando.</td></tr>
+<tr><td><code>0 0 * * * tar czf /backup/docs-$(date +\%F).tgz …</code></td><td>Sim.</td></tr>
+<tr><td><code>0 0 * * * [[ -f x ]] &amp;&amp; …</code></td><td>Não: <code>[[ ]]</code> é do Bash, e a linha roda com <code>sh</code>.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="contagem.sh" data-goal="src:(\$HOME|~)/frutas\.txt,contains:~/logs/contagem.log=frutas: 7">
+<p class="try-task"><strong>Missão:</strong> deixe este script pronto para o cron: ele não pode depender da pasta atual. Use o caminho completo de <code>frutas.txt</code> (com <code>$HOME</code>) e grave o log em <code>$HOME/logs/contagem.log</code>, criando a pasta com <code>mkdir -p</code> se ela não existir.</p>
+<pre class="script">#!/usr/bin/env bash
+total=$(wc -l &lt; frutas.txt)
+echo "$(date '+%F %H:%M') frutas: $total" &gt;&gt; contagem.log
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+pasta_log="$HOME/logs"
+mkdir -p "$pasta_log"
+total=$(wc -l &lt; "$HOME/frutas.txt")
+echo "$(date '+%F %H:%M') frutas: $total" &gt;&gt; "$pasta_log/contagem.log"
+</pre>
+</div>
+
+<hr>
+
+<h2>Para onde vai a saída? Logs</h2>
+<p>No terminal, você vê o que o script escreve. No cron, não há tela. Por padrão, o cron tenta mandar a saída <strong>por e-mail</strong> para o usuário (variável <code>MAILTO</code>); numa máquina sem servidor de e-mail, ela simplesmente se perde, e com ela as mensagens de erro. Por isso, redirecione sempre:</p>
+
+<pre class="syntax">30 2 * * *  /home/ana/scripts/backup-docs.sh &gt;&gt; /home/ana/logs/backup.log 2&gt;&amp;1</pre>
+
+<dl class="anatomy">
+  <dt>&gt;&gt; …/backup.log</dt><dd>Acrescenta a saída ao log, sem apagar as execuções anteriores (<a href="redirecionamento.html">Redirecionamento</a>).</dd>
+  <dt>2&gt;&amp;1</dt><dd>Os erros vão para o mesmo lugar. Sem isso, justamente as mensagens de erro se perdem.</dd>
+  <dt>MAILTO=""</dt><dd>(No topo da crontab.) Desliga o e-mail, já que tudo vai para o log.</dd>
+</dl>
+
+<p>Dentro do script, comece cada linha do log com data e hora, para saber quando cada coisa aconteceu:</p>
+
+<pre class="file" data-file="trecho.sh">log() {
+  printf '%s %s\n' "$(date '+%F %T')" "$*"
+}
+log "backup começou"
+</pre>
+
+<p>Logs crescem para sempre. Apague os antigos de vez em quando, ou use o <code>logrotate</code> do sistema. Outra opção é mandar para o diário do sistema com o comando <code>logger</code>: <code>logger -t backup-docs "backup terminou"</code>, e ler com <code>journalctl -t backup-docs</code>.</p>
+
+<hr>
+
+<h2>Não rodar duas vezes: <code>flock</code></h2>
+<p>Se o backup das 2:30 ainda está rodando quando chega a hora seguinte (ou alguém o roda à mão ao mesmo tempo), duas cópias podem escrever nos mesmos arquivos. O <code>flock</code> (<em>file lock</em>, "trava de arquivo", do pacote util-linux) resolve: só uma cópia consegue a trava; as outras desistem ou esperam.</p>
+
+<pre class="file" data-file="backup-noturno.sh">#!/usr/bin/env bash
+set -euo pipefail
+exec 9&gt; /tmp/backup-noturno.lock
+if ! flock -n 9; then
+  echo "backup-noturno.sh: outra cópia já está rodando; saindo." &gt;&amp;2
+  exit 1
+fi
+echo "[$$] backup começou"
+sleep 2
+echo "[$$] backup terminou"
+</pre>
+
+<dl class="anatomy">
+  <dt>exec 9&gt; /tmp/backup-noturno.lock</dt><dd>Abre (e cria) o arquivo de trava no <a href="descritores.html">descritor</a> 9, que fica aberto até o script acabar.</dd>
+  <dt>flock -n 9</dt><dd>Tenta travar o descritor 9. <code>-n</code> (<em>nonblock</em>): se já estiver travado, desiste na hora, com código 1, em vez de esperar.</dd>
+  <dt>if ! … then … exit 1</dt><dd>Não conseguiu a trava: outra cópia está rodando. Avisa e sai.</dd>
+</dl>
+
+<p>A trava é solta automaticamente quando o script termina, de qualquer jeito (até com <code>kill -9</code>), porque o sistema fecha o descritor. Não sobra "arquivo de trava" velho bloqueando para sempre. Teste rodando uma cópia em segundo plano e outra logo depois:</p>
+
+<pre class="term">$ bash backup-noturno.sh &amp;
+[1] 59881
+$ sleep 0.5
+[59881] backup começou
+$ bash backup-noturno.sh
+backup-noturno.sh: outra cópia já está rodando; saindo.
+$ echo $?
+1
+$ wait
+[59881] backup terminou
+$ bash backup-noturno.sh
+[59893] backup começou                         « a primeira terminou: a trava está livre
+[59893] backup terminou</pre>
+
+<p>Também dá para usar o <code>flock</code> direto na crontab, sem mexer no script: <code>flock -n /tmp/backup.lock /home/ana/scripts/backup-docs.sh</code>. Ele trava o arquivo, roda o comando e solta.</p>
+
+<hr>
+
+<h2>Timers do systemd</h2>
+<p>Nas distribuições com systemd (Debian, Ubuntu, Fedora, Arch…), há uma alternativa ao cron: o <strong>timer</strong>. Ele usa dois arquivos: um <code>.service</code>, que diz <strong>o que</strong> rodar, e um <code>.timer</code> com o mesmo nome, que diz <strong>quando</strong>. Para timers só seus, sem <code>sudo</code>, os arquivos ficam em <code>~/.config/systemd/user/</code>.</p>
+
+<pre class="file" data-file="~/.config/systemd/user/backup-docs.service">[Unit]
+Description=Backup da pasta Documentos
+
+[Service]
+Type=oneshot
+ExecStart=%h/scripts/backup-docs.sh
+</pre>
+
+<dl class="anatomy">
+  <dt>[Unit] Description=</dt><dd>Um nome legível, que aparece nas listagens e no log.</dd>
+  <dt>Type=oneshot</dt><dd>"Roda uma vez e termina" (não é um serviço que fica no ar).</dd>
+  <dt>ExecStart=%h/scripts/…</dt><dd>O comando, com caminho completo. <code>%h</code> é a pasta pessoal (no systemd, o <code>~</code> não funciona).</dd>
+</dl>
+
+<pre class="file" data-file="~/.config/systemd/user/backup-docs.timer">[Unit]
+Description=Roda o backup-docs todo dia às 02:30
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+</pre>
+
+<dl class="anatomy">
+  <dt>OnCalendar=*-*-* 02:30:00</dt><dd>Quando: <code>ano-mês-dia hora:min:seg</code>, com <code>*</code> = qualquer. Todo dia às 2:30.</dd>
+  <dt>Persistent=true</dt><dd>Se a máquina estava desligada às 2:30, roda assim que ligar. O cron simplesmente pula a execução perdida.</dd>
+  <dt>WantedBy=timers.target</dt><dd>Faz o timer ser ativado sempre que o sistema (ou a sua sessão) iniciar.</dd>
+</dl>
+
+<p>Antes de ativar, confira a sintaxe dos dois arquivos com <code>systemd-analyze verify</code> (esta parte foi conferida no laboratório; uma linha de aviso sobre outro serviço do sistema foi omitida):</p>
+
+<pre class="term">$ systemd-analyze verify --user ./backup-docs.service ./backup-docs.timer
+$ echo $?
+0                                              « nenhum problema
+$ systemd-analyze verify --user ./backup-docs.timer      « com OnCalendar=todo dia 2h
+/home/ana/un/backup-docs.timer:5: Failed to parse calendar specification, ignoring: todo dia 2h
+backup-docs.timer: Timer unit lacks value setting. Refusing.
+Unit backup-docs.timer has a bad unit file setting.</pre>
+
+<h3>Testar o <code>OnCalendar</code></h3>
+<p>O <code>systemd-analyze calendar</code> diz quando uma expressão vai disparar. Abaixo, calculando a partir de 15/10/2026 às 10:30 (opção <code>--base-time</code>), com as linhas em UTC e "From now" omitidas:</p>
+
+<pre class="term">$ systemd-analyze calendar --base-time='2026-10-15 10:30' --iterations=3 'Mon..Fri *-*-* 08:30:00'
+Normalized form: Mon..Fri *-*-* 08:30:00
+    Next elapse: Fri 2026-10-16 08:30:00 -03
+   Iteration #2: Mon 2026-10-19 08:30:00 -03       « pulou sábado e domingo
+   Iteration #3: Tue 2026-10-20 08:30:00 -03
+$ systemd-analyze calendar --base-time='2026-10-15 10:30' 'Sun *-*-* 03:00'
+  Original form: Sun *-*-* 03:00
+Normalized form: Sun *-*-* 03:00:00
+    Next elapse: Sun 2026-10-18 03:00:00 -03
+$ systemd-analyze calendar --base-time='2026-10-15 10:30' '*-*-01 06:00'
+  Original form: *-*-01 06:00
+Normalized form: *-*-01 06:00:00
+    Next elapse: Sun 2026-11-01 06:00:00 -03
+$ systemd-analyze calendar --base-time='2026-10-15 10:30' '*-*-* *:0/15'
+  Original form: *-*-* *:0/15
+Normalized form: *-*-* *:00/15:00
+    Next elapse: Thu 2026-10-15 10:45:00 -03       « a cada 15 minutos</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>cron</th><th><code>OnCalendar=</code></th></tr>
+<tr><td><code>30 2 * * *</code></td><td><code>*-*-* 02:30:00</code></td></tr>
+<tr><td><code>0 8 * * 1-5</code></td><td><code>Mon..Fri *-*-* 08:00</code></td></tr>
+<tr><td><code>*/15 * * * *</code></td><td><code>*:0/15</code></td></tr>
+<tr><td><code>0 3 * * 0</code></td><td><code>Sun *-*-* 03:00</code></td></tr>
+<tr><td><code>0 6 1 * *</code></td><td><code>*-*-01 06:00</code></td></tr>
+<tr><td><code>@daily</code>, <code>@weekly</code>, <code>@monthly</code></td><td><code>daily</code>, <code>weekly</code>, <code>monthly</code></td></tr>
+</table>
+</div>
+
+<p>Os dias da semana são sempre em inglês (<code>Mon Tue Wed Thu Fri Sat Sun</code>): <code>Seg</code> dá <code>Failed to parse calendar specification</code>.</p>
+
+<h3>Ativar e acompanhar (ilustrativo)</h3>
+<pre class="term">$ systemctl --user daemon-reload                « (ilustrativo) relê os arquivos novos
+$ systemctl --user enable --now backup-docs.timer
+Created symlink '/home/ana/.config/systemd/user/timers.target.wants/backup-docs.timer' → '/home/ana/.config/systemd/user/backup-docs.timer'.
+$ systemctl --user list-timers
+NEXT                          LEFT LAST PASSED UNIT              ACTIVATES
+Fri 2026-10-16 02:30:00 -03    16h -         - backup-docs.timer backup-docs.service
+
+1 timers listed.
+$ systemctl --user start backup-docs.service   « roda agora, para testar
+$ journalctl --user -u backup-docs.service     « a saída do script fica no diário</pre>
+
+<dl class="anatomy">
+  <dt>--user</dt><dd>Usa o systemd da sua sessão, sem <code>sudo</code>. Sem <code>--user</code>, os arquivos ficam em <code>/etc/systemd/system/</code> e os comandos precisam de <code>sudo</code>.</dd>
+  <dt>enable --now</dt><dd>Ativa o timer para as próximas vezes que você entrar e já o liga agora.</dd>
+  <dt>journalctl -u</dt><dd>Mostra o log de uma unidade: tudo o que o script escreveu, com data. Não precisa de redirecionamento.</dd>
+</dl>
+
+<div class="tip">
+<strong>Timers de usuário e o logout</strong>
+<p>O systemd de usuário só existe enquanto você tem uma sessão aberta. Para os seus timers rodarem mesmo sem você logado (num servidor, por exemplo), ative o <em>linger</em> uma vez: <code>loginctl enable-linger ana</code>.</p>
+</div>
+
+<h3>Uma vez só, daqui a pouco: <code>systemd-run</code></h3>
+<p>Para "rode isto daqui a 10 minutos", sem criar arquivos, use um timer temporário (ilustrativo):</p>
+
+<pre class="term">$ systemd-run --user --on-active=10min /home/ana/scripts/backup-docs.sh
+Running timer as unit: run-u52.timer           « (ilustrativo) o nome muda a cada vez
+Will run service as unit: run-u52.service
+$ systemd-run --user --on-calendar='2026-10-15 18:00' /home/ana/scripts/backup-docs.sh</pre>
+
+<hr>
+
+<h2><code>at</code>: uma vez, numa hora marcada (ilustrativo)</h2>
+<p>O <code>at</code> ("às") roda um comando <strong>uma única vez</strong>. Ele lê os comandos da entrada e precisa do pacote <code>at</code> com o serviço <code>atd</code> rodando (nem sempre vem instalado):</p>
+
+<pre class="term">$ echo "/home/ana/scripts/backup-docs.sh" | at 23:00
+warning: commands will be executed using /bin/sh « (ilustrativo)
+job 3 at Thu Oct 15 23:00:00 2026
+$ atq                                          « lista os agendados
+3	Thu Oct 15 23:00:00 2026 a ana
+$ atrm 3                                       « cancela o job 3</pre>
+
+<p>Formas de dizer a hora: <code>at 23:00</code>, <code>at now + 2 hours</code>, <code>at 9am tomorrow</code>. Como no cron, os comandos rodam com <code>sh</code> e sem terminal.</p>
+
+<hr>
+
+<h2>E um <code>while true; do …; sleep 3600; done</code>?</h2>
+<p>Parece mais simples, mas um laço com <code>sleep</code> não é um agendador:</p>
+<ul>
+  <li><strong>Morre junto com o terminal</strong> (sinal HUP, <a href="trap.html">trap e Sinais</a>) e não volta depois de reiniciar a máquina.</li>
+  <li><strong>Atrasa aos poucos:</strong> <code>sleep 3600</code> conta depois de o trabalho terminar. Se o trabalho leva 2 minutos, ao fim de um dia ele já atrasou 48.</li>
+  <li><strong>Ninguém vê se ele parou.</strong> Não há log nem aviso; o cron e o systemd registram cada execução.</li>
+  <li>Ocupa um terminal ou exige truques (<code>nohup</code>, <code>&amp;</code>, <code>disown</code>, veja <a href="jobs.html">Jobs</a>).</li>
+</ul>
+<p>Ele só faz sentido para algo curto, enquanto você está olhando (por exemplo, "mostre o tamanho da pasta a cada 5 segundos durante a cópia"). Para isso existe até o comando <code>watch -n 5 du -sh pasta</code>.</p>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Pontos fortes</th><th>Pontos fracos</th><th>Use quando</th></tr>
+<tr><td><code>cron</code></td><td>Em todo Unix (inclusive macOS e servidores antigos); uma linha por tarefa.</td><td>Ambiente mínimo; sem log automático; pula execuções perdidas.</td><td>O padrão simples, e quando não há systemd.</td></tr>
+<tr><td>systemd timer</td><td>Log no <code>journalctl</code>; <code>Persistent=</code>; controle de recursos; dependências.</td><td>Dois arquivos; só onde há systemd.</td><td>Distros modernas, tarefas importantes.</td></tr>
+<tr><td><code>systemd-run --on-active</code></td><td>Sem arquivos.</td><td>Some ao reiniciar.</td><td>"Daqui a pouco, uma vez".</td></tr>
+<tr><td><code>at</code></td><td>Simples para hora marcada.</td><td>Precisa do pacote e do <code>atd</code>.</td><td>"Hoje às 23h, uma vez".</td></tr>
+<tr><td><code>while … sleep</code></td><td>Nenhuma configuração.</td><td>Frágil, atrasa, sem log.</td><td>Só para acompanhar algo por alguns minutos.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Checklist de um script agendado</h2>
+<ul>
+  <li>Shebang <code>#!/usr/bin/env bash</code> e permissão de execução (<code>chmod +x</code>), ou chame com <code>/usr/bin/bash script.sh</code>.</li>
+  <li>Caminhos completos (ou <code>export PATH=…</code> no topo); nada depende da pasta atual.</li>
+  <li>Nada interativo: sem <code>read</code>, sem perguntas, sem cores (ou só com <code>[[ -t 1 ]]</code>, veja <a href="interativo.html">Menus e Cores</a>).</li>
+  <li>Saída e erros para um log com data (<code>&gt;&gt; log 2&gt;&amp;1</code>) ou para o <code>journalctl</code>.</li>
+  <li><code>set -euo pipefail</code>, mensagens de erro claras e código de saída correto (<a href="erros.html">Tratar Erros</a>).</li>
+  <li><code>flock</code> se duas execuções ao mesmo tempo puderem causar problema.</li>
+  <li>Teste com <code>env -i</code> antes de agendar.</li>
+</ul>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Funciona no terminal, não faz nada no cron</strong>
+<p><strong>O que aconteceu:</strong> quase sempre é o ambiente: um programa fora de <code>/usr/bin:/bin</code>, um caminho relativo, um <code>%</code> na linha, um alias.</p>
+<p><strong>Como confirmar:</strong> redirecione a saída para um log (<code>&gt;&gt; ~/logs/teste.log 2&gt;&amp;1</code>) e leia depois; ou rode o script com <code>env -i HOME="$HOME" PATH=/usr/bin:/bin /bin/sh -c '…'</code>.</p>
+<p><strong>Como resolver:</strong> caminhos completos, <code>PATH</code> no topo do script, <code>\%</code> na crontab.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permission denied" no log do cron</strong>
+<p><strong>O que aconteceu:</strong> o script não tem permissão de execução, ou está numa pasta que o cron não consegue ler.</p>
+<p><strong>Como resolver:</strong> <code>chmod +x ~/scripts/backup-docs.sh</code>, ou chame com <code>bash</code> na frente: <code>/usr/bin/bash /home/ana/scripts/backup-docs.sh</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não sei se o cron rodou</strong>
+<p><strong>Como confirmar (ilustrativo):</strong> o cron registra cada execução no log do sistema. Em distros com systemd: <code>journalctl -u cron</code> (Debian/Ubuntu) ou <code>journalctl -u crond</code> (Fedora). Em outras, <code>grep CRON /var/log/syslog</code>. Para timers: <code>systemctl --user list-timers</code> mostra a última e a próxima execução.</p>
+</div>
+
+<div class="cenario">
+<strong>O comando da crontab foi cortado no meio</strong>
+<p><strong>O que aconteceu:</strong> um <code>%</code> sem barra (comum em <code>date +%F</code>).</p>
+<p><strong>Como resolver:</strong> <code>date +\%F</code>, ou mova o comando para um script.</p>
+</div>
+
+<div class="cenario">
+<strong>O timer não aparece em <code>list-timers</code></strong>
+<p><strong>O que aconteceu:</strong> faltou <code>systemctl --user daemon-reload</code> depois de criar os arquivos, ou faltou <code>enable</code>, ou os arquivos estão na pasta errada (precisam ficar em <code>~/.config/systemd/user/</code>).</p>
+<p><strong>Como resolver:</strong> confira com <code>systemd-analyze verify --user</code>, depois <code>daemon-reload</code> e <code>enable --now</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>crontab -e</code> / <code>-l</code> / <code>-r</code></td><td>Edita / mostra / apaga a sua crontab.</td></tr>
+<tr><td><code>m h dom mon dow comando</code></td><td>Uma linha de agendamento.</td></tr>
+<tr><td><code>* , - /</code></td><td>Todos, lista, faixa, passo.</td></tr>
+<tr><td><code>@reboot @hourly @daily @weekly @monthly @yearly</code></td><td>Atalhos.</td></tr>
+<tr><td><code>\%</code></td><td>Um <code>%</code> literal na crontab.</td></tr>
+<tr><td><code>&gt;&gt; log 2&gt;&amp;1</code></td><td>Guarda saída e erros.</td></tr>
+<tr><td><code>env -i VAR=… /bin/sh -c '…'</code></td><td>Imita o ambiente do cron.</td></tr>
+<tr><td><code>flock -n arquivo cmd</code> / <code>flock -n 9</code></td><td>Uma execução por vez.</td></tr>
+<tr><td><code>OnCalendar=</code>, <code>Persistent=true</code></td><td>Quando o timer dispara; recuperar execuções perdidas.</td></tr>
+<tr><td><code>systemd-analyze calendar '…'</code></td><td>Mostra quando a expressão dispara.</td></tr>
+<tr><td><code>systemctl --user enable --now X.timer</code></td><td>Ativa o timer.</td></tr>
+<tr><td><code>systemctl --user list-timers</code></td><td>Lista os timers.</td></tr>
+<tr><td><code>systemd-run --user --on-active=10min cmd</code></td><td>Uma vez, daqui a 10 minutos.</td></tr>
+<tr><td><code>at HORA</code>, <code>atq</code>, <code>atrm N</code></td><td>Uma vez, numa hora marcada.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Todo dia às 7h</h3>
+<p>Complete os cinco campos para rodar o script todo dia às 7:00:</p>
+<div class="ex-code"><input data-answer="0 7 * * *" aria-label="campos de tempo"> /home/ana/scripts/bom-dia.sh</div>
+</div>
+
+<div class="exercise">
+<h3>2. A cada 10 minutos</h3>
+<p>Complete o primeiro campo:</p>
+<div class="ex-code"><input data-answer="*/10|0-59/10|0,10,20,30,40,50" aria-label="minuto"> * * * * /home/ana/scripts/checar.sh</div>
+</div>
+
+<div class="exercise">
+<h3>3. Guardar saída e erros</h3>
+<p>Complete para acrescentar a saída <strong>e</strong> os erros ao log:</p>
+<div class="ex-code">30 2 * * * /home/ana/scripts/backup.sh &gt;&gt; /home/ana/logs/backup.log <input data-answer="2&gt;&amp;1" aria-label="redirecionamento"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O que significa <code>0 8 * * 1-5</code>?</p>
+<label><input type="radio" name="q4"> Às 8h, nos dias 1 a 5 de cada mês.</label>
+<label><input type="radio" name="q4"> Às 8h e às 5h, todos os dias.</label>
+<label><input type="radio" name="q4"> Às 8h, de segunda a sexta-feira.</label>
+<label><input type="radio" name="q4"> De 8 em 8 minutos, de janeiro a maio.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Um script usa o comando <code>meucomando</code>, instalado em <code>~/bin</code>. No terminal funciona; no cron, dá "not found". Por quê?</p>
+<label><input type="radio" name="q5"> Porque o cron não roda scripts Bash.</label>
+<label><input type="radio" name="q5"> Porque o <code>PATH</code> do cron é curto (<code>/usr/bin:/bin</code>) e não inclui <code>~/bin</code>.</label>
+<label><input type="radio" name="q5"> Porque falta <code>sudo</code>.</label>
+<label><input type="radio" name="q5"> Porque o cron só aceita comandos do sistema.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Para que serve o <code>flock -n</code> num script agendado?</p>
+<label><input type="radio" name="q6"> Para impedir que duas cópias do script rodem ao mesmo tempo.</label>
+<label><input type="radio" name="q6"> Para o script rodar mais rápido.</label>
+<label><input type="radio" name="q6"> Para travar o arquivo de log contra leitura.</label>
+<label><input type="radio" name="q6"> Para agendar o script sem o cron.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Cron: <code>crontab -e</code>, cinco campos (minuto, hora, dia, mês, dia da semana) + comando; <code>*</code>, <code>,</code>, <code>-</code>, <code>/</code> e os atalhos <code>@daily</code>, <code>@reboot</code>…</li>
+  <li>O cron roda com <code>sh</code>, <code>PATH=/usr/bin:/bin</code>, sem <code>.bashrc</code> nem terminal; <code>%</code> precisa de <code>\</code>. Teste com <code>env -i</code>.</li>
+  <li>Sempre <code>&gt;&gt; log 2&gt;&amp;1</code>; use <code>flock -n</code> para não rodar duas vezes.</li>
+  <li>systemd: <code>.service</code> (o quê) + <code>.timer</code> (quando, <code>OnCalendar=</code>), <code>systemctl --user enable --now</code>, log no <code>journalctl</code>; <code>systemd-run --on-active</code> e <code>at</code> para uma vez só.</li>
+  <li>Um laço com <code>sleep</code> não é agendador: morre com o terminal e atrasa.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
