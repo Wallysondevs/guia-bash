@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash if, elif, else — decisões em scripts | Guia Bash</title>
+<meta name="description" content="if no Bash: if/then/fi, else e elif, por que o if testa o código de saída de qualquer comando (if grep -q, if mkdir), uma linha × várias, if aninhado × elif × &&, if ! comando e os erros de sintaxe reais, com exemplos na pasta da Ana e missões.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">if, elif, else</span></h1>
+
+<p class="intro">O <code>if</code> ("se", em inglês) faz o script tomar decisões: <strong>se</strong> o arquivo existe, copie; <strong>senão</strong>, avise. No Bash ele tem uma particularidade que muda tudo: o <code>if</code> não testa uma "condição", ele <strong>roda um comando</strong> e olha o código de saída. Entendendo isso, você entende qualquer <code>if</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A estrutura <code>if</code> / <code>then</code> / <code>fi</code>, e os ramos <code>else</code> e <code>elif</code>.</li>
+  <li>Que o <code>if</code> testa o <strong>código de saída</strong> de qualquer comando (<code>if grep -q</code>, <code>if mkdir</code>), não só <code>[ ]</code>.</li>
+  <li>Escrever em uma linha ou em várias, e quando usar <code>if</code> aninhado, <code>elif</code> ou <code>&amp;&amp;</code>.</li>
+  <li>Ler os erros de sintaxe reais: falta de <code>then</code>, de <code>;</code>, de <code>fi</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A forma mais simples</h2>
+<p>Antes de copiar a lista de frutas, a Ana quer ter certeza de que ela existe. Em português: "<strong>se</strong> frutas.txt é um arquivo, <strong>então</strong> mostre 'Achei a lista', <strong>fim</strong>".</p>
+
+<pre class="syntax">if COMANDO; then
+  COMANDOS que rodam quando o COMANDO deu certo (código 0)
+fi</pre>
+
+<dl class="anatomy">
+  <dt>if</dt><dd>"Se": rode o comando a seguir e olhe o código de saída.</dd>
+  <dt>[[ -f frutas.txt ]]</dt><dd>O comando testado. Aqui, um <a href="testes.html">teste</a> de arquivo.</dd>
+  <dt>;</dt><dd>Separa o comando do <code>then</code> quando estão na mesma linha.</dd>
+  <dt>then</dt><dd>"Então": o que vem a seguir roda se o código foi <code>0</code>.</dd>
+  <dt>echo "Achei a lista"</dt><dd>O corpo do <code>if</code>.</dd>
+  <dt>fi</dt><dd>Fim do <code>if</code>. É <code>if</code> escrito ao contrário.</dd>
+</dl>
+
+<pre class="term">$ if [[ -f frutas.txt ]]; then echo "Achei a lista"; fi
+Achei a lista
+$ if [[ -f compras.txt ]]; then echo "Achei"; fi
+$ echo $?
+0                        « não apareceu nada, e o código é 0</pre>
+
+<p>No segundo caso o teste deu "falso", então o corpo não rodou e nada apareceu. O <code>if</code> inteiro devolve <code>0</code> quando nenhum ramo roda: não "achar" não é um erro.</p>
+
+<h3>Uma linha × várias linhas</h3>
+<p>No terminal, é prático escrever tudo numa linha, com <code>;</code> separando as partes. Em scripts, o costume é uma parte por linha, com o corpo recuado (2 ou 4 espaços). As duas formas fazem a mesma coisa:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Uma linha</th><th>Várias linhas</th></tr>
+<tr><td><code>if [[ -f a ]]; then echo ok; fi</code></td><td><pre>if [[ -f a ]]; then
+  echo ok
+fi</pre></td></tr>
+</table>
+</div>
+
+<p>A regra: <code>then</code> e <code>fi</code> precisam começar um "comando novo", ou seja, vir depois de um <code>;</code> ou de uma quebra de linha. Por isso, em várias linhas, o <code>;</code> antes do <code>then</code> só é necessário se o <code>then</code> estiver na mesma linha do <code>if</code>. Quando você digita várias linhas no terminal, o Bash mostra o prompt <code>&gt;</code> até o <code>fi</code>:</p>
+
+<pre class="term">$ if [[ -f compras.txt ]]; then
+&gt;   echo "Achei"
+&gt; else
+&gt;   echo "Não achei compras.txt"
+&gt; fi
+Não achei compras.txt</pre>
+
+<hr>
+
+<h2>O <code>if</code> testa o código de saída de qualquer comando</h2>
+<p>Aqui está o segredo. O <code>if</code> não sabe o que é "condição". Ele roda o comando que você escreveu e olha o <code>$?</code>: <code>0</code> → entra no <code>then</code>; qualquer outro número → não entra. Os testes <code>[ ]</code> e <code>[[ ]]</code> são apenas comandos que devolvem 0 ou 1. <strong>Qualquer comando serve.</strong></p>
+
+<h3><code>if grep -q</code></h3>
+<p>O <code>grep</code> devolve <code>0</code> quando acha o texto e <code>1</code> quando não acha. A opção <code>-q</code> (<em>quiet</em>, "quieto") faz ele não mostrar as linhas: só o código importa.</p>
+<pre class="term">$ grep -q uva frutas.txt; echo $?
+0
+$ grep -q kiwi frutas.txt; echo $?
+1
+$ if grep -q uva frutas.txt; then echo "Tem uva"; fi
+Tem uva</pre>
+
+<p>Repare que não há colchetes: <code>if [ grep -q uva frutas.txt ]</code> estaria errado, porque aí você testaria o <strong>texto</strong> "grep", e não rodaria o grep.</p>
+
+<h3><code>if mkdir</code></h3>
+<p>Muitos comandos já dizem se deram certo. Em vez de perguntar antes ("a pasta existe?") e agir depois, você pode agir e testar o resultado:</p>
+<pre class="term">$ if mkdir relatorios; then echo "Pasta criada"; fi
+Pasta criada
+$ if mkdir relatorios; then echo "Pasta criada"; else echo "Não deu para criar"; fi
+mkdir: cannot create directory ‘relatorios’: Arquivo existe
+Não deu para criar</pre>
+<p>Na segunda vez, o <code>mkdir</code> falhou (código 1) e o <code>if</code> foi para o <code>else</code>. A mensagem de erro é do próprio <code>mkdir</code>, e vem metade em inglês porque a tradução dele está incompleta. Para escondê-la, use <code>mkdir relatorios 2&gt;/dev/null</code>.</p>
+
+<h3>Negar: <code>if ! comando</code></h3>
+<p>O <code>!</code> antes do comando inverte o código: sucesso vira falha e vice-versa.</p>
+<pre class="term">$ if ! grep -q kiwi frutas.txt; then echo "Falta kiwi"; fi
+Falta kiwi</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Depois do <code>if</code></th><th>Pergunta</th></tr>
+<tr><td><code>[[ -f arq ]]</code></td><td>O arquivo existe? (<a href="testes.html">Testes</a>)</td></tr>
+<tr><td><code>(( n &gt; 5 ))</code></td><td>A conta é verdadeira? (<a href="aritmetica.html">Contas</a>)</td></tr>
+<tr><td><code>grep -q texto arq</code></td><td>O texto está no arquivo?</td></tr>
+<tr><td><code>mkdir pasta</code>, <code>cp a b</code>, <code>cd pasta</code></td><td>Deu certo?</td></tr>
+<tr><td><code>command -v git &gt;/dev/null</code></td><td>O programa está instalado? (veja <a href="path.html">PATH</a>)</td></tr>
+<tr><td><code>! comando</code></td><td>O comando <strong>falhou</strong>?</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="out:Tem banana,ran:\bif\b" data-solucao="if grep -q banana frutas.txt; then echo &quot;Tem banana&quot;; fi">
+<p class="try-task"><strong>Missão:</strong> escreva um <code>if</code> de uma linha que mostre <code>Tem banana</code> se o arquivo <code>frutas.txt</code> contém a palavra banana. Use o <code>grep -q</code> direto no <code>if</code>, sem colchetes.</p>
+</div>
+
+<hr>
+
+<h2>Senão: <code>else</code></h2>
+<p>O <code>else</code> ("senão") é o caminho para quando o comando falha. Só um dos dois blocos roda, nunca os dois.</p>
+
+<pre class="syntax">if COMANDO; then
+  roda quando deu certo
+else
+  roda quando falhou
+fi</pre>
+
+<div class="tryscript" data-file="par.sh" data-args="7" data-goal="out:ímpar,src:\belse\b">
+<p class="try-task"><strong>Missão:</strong> o script diz "par" quando o número é par, mas com <code>7</code> não mostra nada. Acrescente um <code>else</code> que mostre <code>ímpar</code>. Teste com outros números no campo de argumentos.</p>
+<pre class="script">#!/usr/bin/env bash
+n=$1
+if (( n % 2 == 0 )); then
+  echo "$n é par"
+fi
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+n=$1
+if (( n % 2 == 0 )); then
+  echo "$n é par"
+else
+  echo "$n é ímpar"
+fi
+</pre>
+</div>
+
+<h2>Várias possibilidades: <code>elif</code></h2>
+<p>Quando há mais de dois caminhos, use <code>elif</code> (<em>else if</em>, "senão, se"). O Bash testa na ordem, de cima para baixo, e roda <strong>só o primeiro</strong> bloco cujo comando deu certo. O <code>else</code> final é opcional e pega "todo o resto".</p>
+
+<pre class="term">$ nota=8
+$ if (( nota &gt;= 9 )); then
+&gt;   echo "Excelente"
+&gt; elif (( nota &gt;= 7 )); then
+&gt;   echo "Aprovado"
+&gt; else
+&gt;   echo "Reprovado"
+&gt; fi
+Aprovado</pre>
+
+<p>Com <code>nota=8</code>: o primeiro teste (<code>8 &gt;= 9</code>) falhou; o segundo (<code>8 &gt;= 7</code>) deu certo, então "Aprovado" apareceu e o Bash pulou direto para o <code>fi</code>, sem olhar o <code>else</code>. A <strong>ordem importa</strong>: se o <code>&gt;= 7</code> viesse primeiro, uma nota 10 também cairia em "Aprovado".</p>
+
+<div class="tryscript" data-file="idade.sh" data-args="65" data-goal="out:Idoso,src:\belif\b">
+<p class="try-task"><strong>Missão:</strong> o script separa menores e adultos. Acrescente um <code>elif</code> para que idades de 60 em diante mostrem <code>Idoso</code>. Pense na ordem dos testes! Experimente com 15, 30 e 65.</p>
+<pre class="script">#!/usr/bin/env bash
+idade=$1
+if (( idade &lt; 18 )); then
+  echo "Menor de idade"
+else
+  echo "Adulto"
+fi
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+idade=$1
+if (( idade &lt; 18 )); then
+  echo "Menor de idade"
+elif (( idade &gt;= 60 )); then
+  echo "Idoso"
+else
+  echo "Adulto"
+fi
+</pre>
+</div>
+
+<hr>
+
+<h2>Exemplo 1: conferir antes de copiar</h2>
+<p>A Ana quer um script que copie um arquivo para a pasta <code>backup</code>, mas que avise se o arquivo não existe e que não sobrescreva uma cópia que já está lá.</p>
+
+<pre class="file" data-file="copiar.sh">#!/usr/bin/env bash
+origem=${1:?Uso: copiar.sh ARQUIVO}
+destino=backup
+
+if [[ ! -f $origem ]]; then
+  echo "Erro: $origem não existe" &gt;&amp;2
+  exit 1
+fi
+
+mkdir -p "$destino"
+if [[ -e $destino/${origem##*/} ]]; then
+  echo "Já existe uma cópia em $destino/"
+else
+  cp "$origem" "$destino/" &amp;&amp; echo "Copiado para $destino/"
+fi
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td>2</td><td>Pega o 1º argumento; se faltar, para com a mensagem de uso (<a href="expansao-parametros.html"><code>:?</code></a>).</td></tr>
+<tr><td>5</td><td><strong>Se não</strong> (<code>!</code>) é um arquivo…</td></tr>
+<tr><td>6–7</td><td>…mostra o erro no canal de erros (<code>&gt;&amp;2</code>) e encerra com código 1. Esse padrão, "testa o problema e sai cedo", evita <code>if</code>s dentro de <code>if</code>s.</td></tr>
+<tr><td>10</td><td>Cria a pasta de destino (<code>-p</code>: sem erro se já existe).</td></tr>
+<tr><td>11</td><td>Se já existe algo com o mesmo nome no destino (<code>${origem##*/}</code> é o nome do arquivo sem as pastas)…</td></tr>
+<tr><td>12</td><td>…só avisa.</td></tr>
+<tr><td>14</td><td>Senão, copia, e só se a cópia deu certo (<code>&amp;&amp;</code>) mostra a confirmação.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash copiar.sh Documentos/notas.txt
+Copiado para backup/
+$ bash copiar.sh Documentos/notas.txt
+Já existe uma cópia em backup/
+$ bash copiar.sh compras.txt
+Erro: compras.txt não existe
+$ echo $?
+1</pre>
+
+<h2>Exemplo 2: a situação de um aluno no <code>alunos.csv</code></h2>
+<p>O arquivo <code>Documentos/alunos.csv</code> tem uma linha por aluno: <code>nome,idade,cidade,nota</code>. O script procura o aluno, separa os campos e decide a situação pela nota.</p>
+
+<pre class="file" data-file="aluno.sh">#!/usr/bin/env bash
+nome=${1:?Uso: aluno.sh NOME}
+linha=$(grep "^$nome," Documentos/alunos.csv)
+
+if [[ -z $linha ]]; then
+  echo "$nome não está na lista"
+  exit 1
+fi
+
+idade=$(echo "$linha" | cut -d, -f2)
+nota=$(echo "$linha" | cut -d, -f4)
+inteira=${nota%.*}
+
+echo "$nome tem $idade anos e tirou $nota"
+if (( inteira &gt;= 9 )); then
+  echo "Situação: excelente"
+elif (( inteira &gt;= 7 )); then
+  echo "Situação: aprovado"
+else
+  echo "Situação: recuperação"
+fi
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td>3</td><td>Guarda a linha do aluno (<a href="substituicao-comando.html"><code>$( )</code></a>). O <code>^</code> e a vírgula garantem que "Ana" não case com "Mariana".</td></tr>
+<tr><td>5–8</td><td>Se a linha veio vazia (<code>-z</code>), o aluno não existe: avisa e sai com código 1.</td></tr>
+<tr><td>10–11</td><td><code>cut -d, -f2</code> pega o 2º campo, separando por vírgula (idade); <code>-f4</code> pega a nota.</td></tr>
+<tr><td>12</td><td>A nota é decimal (<code>9.5</code>) e <code>(( ))</code> só aceita inteiros: <code>${nota%.*}</code> corta do ponto em diante e fica <code>9</code>.</td></tr>
+<tr><td>15–21</td><td>O <code>if/elif/else</code> escolhe a situação.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash aluno.sh Ana
+Ana tem 29 anos e tirou 9.5
+Situação: excelente
+$ bash aluno.sh Bruno
+Bruno tem 34 anos e tirou 7.0
+Situação: aprovado
+$ bash aluno.sh Diego
+Diego tem 41 anos e tirou 6.0
+Situação: recuperação
+$ bash aluno.sh Zé
+Zé não está na lista
+$ echo $?
+1</pre>
+
+<div class="tryscript" data-file="aluno.sh" data-args="Carla">
+<p class="try-task"><strong>Brinque:</strong> rode com <code>Carla</code>, <code>Elisa</code> e um nome que não existe. Depois acrescente uma linha que diga "maior de 30 anos" quando a idade passar de 30.</p>
+<pre class="script">#!/usr/bin/env bash
+nome=${1:?Uso: aluno.sh NOME}
+linha=$(grep "^$nome," Documentos/alunos.csv)
+
+if [[ -z $linha ]]; then
+  echo "$nome não está na lista"
+  exit 1
+fi
+
+idade=$(echo "$linha" | cut -d, -f2)
+nota=$(echo "$linha" | cut -d, -f4)
+inteira=${nota%.*}
+
+echo "$nome tem $idade anos e tirou $nota"
+if (( inteira &gt;= 9 )); then
+  echo "Situação: excelente"
+elif (( inteira &gt;= 7 )); then
+  echo "Situação: aprovado"
+else
+  echo "Situação: recuperação"
+fi
+</pre>
+</div>
+
+<hr>
+
+<h2><code>if</code> aninhado × <code>elif</code> × <code>&amp;&amp;</code></h2>
+<p>Um <code>if</code> pode ficar dentro de outro (<strong>aninhado</strong>). Funciona, mas cada nível empurra o código para a direita:</p>
+<pre class="term">$ idade=29
+$ if (( idade &gt;= 18 )); then
+&gt;   if (( idade &gt;= 60 )); then
+&gt;     echo "Idoso"
+&gt;   else
+&gt;     echo "Adulto"
+&gt;   fi
+&gt; else
+&gt;   echo "Menor"
+&gt; fi
+Adulto</pre>
+<p>Cada <code>if</code> precisa do seu próprio <code>fi</code>. O mesmo resultado, com <code>elif</code>, fica numa "escada" só, mais fácil de ler (é a solução da missão do <code>idade.sh</code>). Quando as duas condições precisam ser verdadeiras ao mesmo tempo, junte-as no mesmo teste: <code>if [[ -f frutas.txt &amp;&amp; -s frutas.txt ]]</code>.</p>
+
+<h3>O atalho <code>&amp;&amp;</code> / <code>||</code> e sua armadilha</h3>
+<p>Para coisas curtas, <code>comando &amp;&amp; ação</code> é um "if sem else" (veja <a href="operadores.html">; &amp;&amp; ||</a>). Muita gente escreve <code>A &amp;&amp; B || C</code> como se fosse um <code>if/else</code>, mas não é:</p>
+<pre class="term">$ [[ -f frutas.txt ]] &amp;&amp; echo "existe" || echo "não existe"
+existe
+$ [[ -f frutas.txt ]] &amp;&amp; grep kiwi frutas.txt || echo "frutas.txt não existe"
+frutas.txt não existe            « mentira! o arquivo existe; quem falhou foi o grep
+$ if [[ -f frutas.txt ]]; then grep kiwi frutas.txt; else echo "frutas.txt não existe"; fi
+                                 « o if faz o certo: o arquivo existe, o grep só não achou nada</pre>
+<p>No <code>A &amp;&amp; B || C</code>, o <code>C</code> roda se <code>A</code> <strong>ou</strong> <code>B</code> falhar. Só é seguro quando <code>B</code> nunca falha (como um <code>echo</code>).</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Melhor quando…</th></tr>
+<tr><td><code>cmd &amp;&amp; ação</code></td><td>Uma ação curta, sem "senão". Ex.: <code>[[ -d tmp ]] || mkdir tmp</code>.</td></tr>
+<tr><td><code>if … then … fi</code></td><td>Mais de uma ação, ou quando a clareza importa.</td></tr>
+<tr><td><code>if … else … fi</code></td><td>Dois caminhos. Prefira esta forma a <code>A &amp;&amp; B || C</code>.</td></tr>
+<tr><td><code>if … elif … else … fi</code></td><td>Três ou mais caminhos com condições diferentes (faixas de nota, de idade).</td></tr>
+<tr><td><code>if</code> aninhado</td><td>Quando o segundo teste só faz sentido depois do primeiro (ex.: o arquivo existe → então leia e teste o conteúdo).</td></tr>
+<tr><td><a href="case.html"><code>case</code></a></td><td>Comparar <strong>um</strong> valor com várias opções ou padrões (<code>start|stop</code>, <code>*.jpg</code>).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Faltou o <code>then</code></strong>
+<pre class="file" data-file="e1.sh">#!/usr/bin/env bash
+if [[ -f frutas.txt ]]
+  echo "Achei"
+fi
+</pre>
+<pre class="term">$ bash e1.sh
+e1.sh: linha 4: erro de sintaxe próximo ao token inesperado `fi'
+e1.sh: linha 4: `fi'</pre>
+<p><strong>O que aconteceu:</strong> o Bash leu o <code>if</code>, depois o <code>echo</code> (achando que ainda fazia parte da condição), e encontrou um <code>fi</code> sem ter visto o <code>then</code>. Repare que o erro aponta para a linha 4 (onde ele percebeu o problema), não para a 2 (onde está o problema). O código de saída é <code>2</code> e <strong>nenhuma linha do script rodou</strong>.</p>
+<p><strong>Como resolver:</strong> <code>if [[ -f frutas.txt ]]; then</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Faltou o <code>;</code> antes do <code>then</code></strong>
+<pre class="term">$ if [ -f frutas.txt ] then echo "Achei"; fi
+bash: erro de sintaxe próximo ao token inesperado `fi'</pre>
+<p><strong>O que aconteceu:</strong> sem o <code>;</code>, a palavra <code>then</code> virou mais um <strong>argumento</strong> do comando <code>[</code>, e o Bash continuou procurando o <code>then</code> de verdade. Com <code>[[ ]]</code> o erro às vezes some, porque o <code>]]</code> encerra o teste; mas não conte com isso.</p>
+<p><strong>Como resolver:</strong> <code>if [ -f frutas.txt ]; then …</code>. O mesmo vale para o <code>fi</code> na mesma linha: <code>echo "Achei"; fi</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Faltou o <code>fi</code></strong>
+<pre class="file" data-file="e3.sh">#!/usr/bin/env bash
+if [[ -f frutas.txt ]]; then
+  echo "Achei"
+
+echo "fim"
+</pre>
+<pre class="term">$ bash e3.sh
+e3.sh: linha 6: erro de sintaxe: fim inesperado do arquivo do comando `if' na linha 2</pre>
+<p><strong>O que aconteceu:</strong> o Bash chegou ao fim do arquivo procurando o <code>fi</code> do <code>if</code> que começou na linha 2. Desta vez a mensagem ajuda: diz onde o <code>if</code> começou. No terminal, o sintoma é o prompt <code>&gt;</code> esperando para sempre: digite <code>fi</code> ou aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+<p><strong>Como resolver:</strong> feche cada <code>if</code> com um <code>fi</code>. Recuar o corpo ajuda a ver qual ficou aberto.</p>
+</div>
+
+<div class="cenario">
+<strong><code>else if</code> e <code>elseif</code></strong>
+<pre class="file" data-file="e6.sh">#!/usr/bin/env bash
+if [[ -f frutas.txt ]]; then
+  echo a
+elseif [[ -d x ]]; then
+  echo b
+fi
+</pre>
+<pre class="term">$ bash e6.sh
+e6.sh: linha 4: erro de sintaxe próximo ao token inesperado `then'
+e6.sh: linha 4: `elseif [[ -d x ]]; then'</pre>
+<p><strong>O que aconteceu:</strong> <code>elseif</code> (de outras linguagens) não existe no Bash: ele achou que era um comando, e o <code>then</code> ficou sobrando. Já <code>else if</code> (separado) abre um <strong>novo</strong> <code>if</code> dentro do <code>else</code>, que precisa de outro <code>fi</code>; esquecê-lo dá o erro "fim inesperado do arquivo".</p>
+<p><strong>Como resolver:</strong> use <code>elif</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Bloco vazio</strong>
+<pre class="file" data-file="e4.sh">#!/usr/bin/env bash
+if [[ -f frutas.txt ]]; then
+fi
+</pre>
+<pre class="term">$ bash e4.sh
+e4.sh: linha 3: erro de sintaxe próximo ao token inesperado `fi'
+e4.sh: linha 3: `fi'</pre>
+<p><strong>O que aconteceu:</strong> o <code>then</code> foi seguido direto pelo <code>fi</code>. O Bash não aceita um bloco sem nenhum comando.</p>
+<p><strong>Como resolver:</strong> se for de propósito (algo a fazer depois), use o comando <code>:</code>, que não faz nada: <code>then :</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>if</code> sempre vai para o <code>else</code> (ou nunca)</strong>
+<p><strong>O que aconteceu:</strong> o comando testado deu um código diferente do que você imaginava. Causas comuns: um teste escrito errado (que devolve <code>2</code>, com uma mensagem como <code>[: faltando `]'</code> ou <code>[-f: comando não encontrado</code>), colchetes em volta de um comando (<code>if [ grep … ]</code>) ou números comparados com <code>&lt;</code>.</p>
+<p><strong>Como confirmar:</strong> rode o comando do <code>if</code> sozinho e depois <code>echo $?</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th></tr>
+<tr><td><code>if CMD; then …; fi</code></td><td><code>if [[ -f a ]]; then echo ok; fi</code></td></tr>
+<tr><td><code>if CMD; then …; else …; fi</code></td><td><code>if mkdir x; then echo ok; else echo falhou; fi</code></td></tr>
+<tr><td><code>if …; then …; elif CMD; then …; else …; fi</code></td><td>faixas de nota</td></tr>
+<tr><td><code>if ! CMD; then</code></td><td><code>if ! grep -q x arq; then</code></td></tr>
+<tr><td><code>if grep -q</code></td><td>texto está no arquivo?</td></tr>
+<tr><td><code>if (( conta ))</code></td><td><code>if (( n % 2 == 0 ))</code></td></tr>
+<tr><td><code>CMD &amp;&amp; ação</code> / <code>CMD || ação</code></td><td><code>[[ -d tmp ]] || mkdir tmp</code></td></tr>
+<tr><td><code>then :</code></td><td>bloco que não faz nada</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Fechar o if</h3>
+<p>Complete o comando:</p>
+<div class="ex-code">if [[ -d Imagens ]]; <input data-answer="then" aria-label="palavra"> echo "tem pasta"; <input data-answer="fi" aria-label="palavra"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Senão, se</h3>
+<p>Complete a palavra que testa outra condição quando a primeira falha:</p>
+<div class="ex-code">if (( n &gt; 0 )); then echo positivo; <input data-answer="elif" aria-label="palavra"> (( n &lt; 0 )); then echo negativo; else echo zero; fi</div>
+</div>
+
+<div class="exercise">
+<h3>3. Testar um comando</h3>
+<p>Complete para mostrar "achei" se <code>notas.txt</code> contém "Bash", sem mostrar a linha encontrada:</p>
+<div class="ex-code">if grep <input data-answer="-q" aria-label="opção"> Bash notas.txt; then echo achei; fi</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O que o <code>if</code> realmente verifica?</p>
+<label><input type="radio" name="q4"> Se a condição entre colchetes é verdadeira; os colchetes são obrigatórios.</label>
+<label><input type="radio" name="q4"> O código de saída do comando: 0 entra no <code>then</code>.</label>
+<label><input type="radio" name="q4"> Se o comando mostrou alguma coisa na tela.</label>
+<label><input type="radio" name="q4"> O código de saída: 1 entra no <code>then</code>.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Com <code>nota=10</code>, o que mostra: <code>if (( nota &gt;= 7 )); then echo A; elif (( nota &gt;= 9 )); then echo B; else echo C; fi</code>?</p>
+<label><input type="radio" name="q5"> <code>B</code></label>
+<label><input type="radio" name="q5"> <code>A</code> e <code>B</code></label>
+<label><input type="radio" name="q5"> <code>A</code>, porque só o primeiro bloco verdadeiro roda.</label>
+<label><input type="radio" name="q5"> <code>C</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. O script dá "fim inesperado do arquivo do comando `if' na linha 5". O que falta?</p>
+<label><input type="radio" name="q6"> O <code>fi</code> do <code>if</code> da linha 5.</label>
+<label><input type="radio" name="q6"> O <code>then</code> da linha 5.</label>
+<label><input type="radio" name="q6"> Aspas na linha 5.</label>
+<label><input type="radio" name="q6"> Permissão de execução.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>if CMD; then …; fi</code>: roda o bloco se o <code>CMD</code> devolveu código <code>0</code>. <code>fi</code> é <code>if</code> ao contrário.</li>
+  <li>Qualquer comando serve: <code>[[ ]]</code>, <code>(( ))</code>, <code>grep -q</code>, <code>mkdir</code>… e <code>!</code> inverte.</li>
+  <li><code>else</code> pega o caso contrário; <code>elif</code> testa outra condição, e só o primeiro bloco verdadeiro roda.</li>
+  <li><code>then</code> e <code>fi</code> vêm depois de <code>;</code> ou de quebra de linha. Erros de sintaxe apontam para onde o Bash percebeu, não onde está o erro.</li>
+  <li><code>A &amp;&amp; B || C</code> não é <code>if/else</code>: use <code>if</code> quando houver dois caminhos.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
