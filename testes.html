@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Testes — [ ], [[ ]] e test | Guia Bash</title>
+<meta name="description" content="Testes no Bash: test, [ ] e [[ ]], os espaços obrigatórios, testes de arquivo (-e -f -d -r -w -x -s -L -nt -ot), de texto e de número, ! && ||, por que [ $var = x ] quebra com variável vazia ou com espaço, == com padrão e tabela qual usar, com mensagens de erro reais e missões.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Testes: [ ], [[ ]] e test</span></h1>
+
+<p class="intro">Um script precisa fazer perguntas: "o arquivo existe?", "a resposta foi sim?", "a nota é maior que 7?". No Bash, quem responde são os comandos de <strong>teste</strong>. Eles não mostram nada na tela: a resposta vem no <a href="codigo-saida.html">código de saída</a>, <code>0</code> para "sim" e <code>1</code> para "não". Nesta aula você aprende as três formas de testar e qual usar.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que são <code>test</code>, <code>[ ]</code> e <code>[[ ]]</code>, e por que os espaços são obrigatórios.</li>
+  <li>Os testes de arquivo (<code>-e -f -d -s -r -w -x -L -nt -ot</code>), de texto e de número.</li>
+  <li>Como combinar testes com <code>!</code>, <code>&amp;&amp;</code> e <code>||</code>.</li>
+  <li>Por que <code>[ $var = sim ]</code> quebra com variável vazia ou com espaço, e <code>[[ ]]</code> não.</li>
+  <li>Comparar com padrões (<code>== *.jpg</code>) e a tabela "qual usar".</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Um teste é um comando que responde com o código de saída</h2>
+<p>Comece pelo mais simples, o comando <code>test</code>. A opção <code>-f</code> pergunta "isto é um arquivo comum?":</p>
+
+<dl class="anatomy">
+  <dt>test</dt><dd>O comando de teste ("testar").</dd>
+  <dt>-f</dt><dd>A pergunta: é um arquivo (<em>file</em>) comum?</dd>
+  <dt>frutas.txt</dt><dd>Sobre quem é a pergunta.</dd>
+</dl>
+
+<pre class="term">$ test -f frutas.txt
+$ echo $?
+0                        « 0 = verdadeiro: é um arquivo</pre>
+
+<p>Repare: o <code>test</code> <strong>não mostrou nada</strong>. É assim mesmo. A resposta está no <code>$?</code>. Sozinho, isso parece inútil, mas é exatamente o que o <a href="if.html"><code>if</code></a> e os operadores <a href="operadores.html"><code>&amp;&amp;</code> e <code>||</code></a> usam para decidir:</p>
+
+<pre class="term">$ test -f frutas.txt &amp;&amp; echo "existe"
+existe</pre>
+
+<h2>A forma com colchetes: <code>[ ]</code></h2>
+<p>Escrever <code>test</code> é pouco legível, então existe um <strong>apelido</strong> para ele: o comando <code>[</code>. Isso mesmo, <code>[</code> é o nome de um comando, e ele exige que o último argumento seja <code>]</code>, só para ficar bonito.</p>
+
+<pre class="term">$ [ -f frutas.txt ]
+$ echo $?
+0
+$ [ -d frutas.txt ]
+$ echo $?
+1                        « 1 = falso: frutas.txt não é uma pasta (directory)
+$ type [
+[ é um comando interno do shell</pre>
+
+<p><code>test -f frutas.txt</code> e <code>[ -f frutas.txt ]</code> são <strong>o mesmo comando</strong>. Entender isso explica a regra mais importante desta aula.</p>
+
+<h3>Os espaços são obrigatórios</h3>
+<p>Como <code>[</code> é um comando, ele precisa estar separado por espaço, como qualquer comando (você não escreve <code>ls-l</code>). E o <code>]</code> é um argumento, que também precisa de espaço antes.</p>
+
+<pre class="term">$ [-f frutas.txt ]
+bash: [-f: comando não encontrado          « procurou um comando chamado "[-f"
+$ [ -f frutas.txt]
+bash: [: faltando `]'                      « o último argumento era "frutas.txt]", não "]"
+$ echo $?
+2                                          « 2 = o teste nem conseguiu rodar</pre>
+
+<pre class="syntax">  [ -f frutas.txt ]
+   ↑  ↑          ↑
+   espaço depois do [, entre cada parte, e antes do ]</pre>
+
+<div class="tip">
+<strong>Três códigos possíveis</strong>
+<p>Um teste devolve <code>0</code> (verdadeiro), <code>1</code> (falso) ou <code>2</code> (erro: o teste foi escrito errado). Quando um <code>if</code> vai sempre para o <code>else</code> sem motivo, rode o teste sozinho e veja o <code>$?</code>: se for <code>2</code>, havia uma mensagem de erro que você não viu.</p>
+</div>
+
+<h2>A forma moderna: <code>[[ ]]</code></h2>
+<p>O Bash (assim como o ksh e o zsh) tem uma versão melhorada, com colchetes duplos. Ela não é um comando, e sim uma <strong>palavra-chave</strong>: o próprio Bash a interpreta, antes de separar palavras e expandir curingas. Isso a torna mais segura, como você vai ver.</p>
+
+<pre class="term">$ [[ -d Documentos ]]
+$ echo $?
+0
+$ type [[
+[[ é uma palavra-chave do shell</pre>
+
+<p>Os espaços também são obrigatórios: <code>[[-f frutas.txt ]]</code> dá <code>bash: [[-f: comando não encontrado</code>.</p>
+
+<hr>
+
+<h2>Testes de arquivo</h2>
+<p>Todos funcionam igual em <code>test</code>, <code>[ ]</code> e <code>[[ ]]</code>. A letra vem quase sempre do inglês:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Teste</th><th>Verdadeiro se…</th><th>Origem</th></tr>
+<tr><td><code>-e arq</code></td><td>existe (arquivo, pasta, qualquer coisa)</td><td><em>exists</em></td></tr>
+<tr><td><code>-f arq</code></td><td>existe e é arquivo comum</td><td><em>file</em></td></tr>
+<tr><td><code>-d arq</code></td><td>existe e é pasta</td><td><em>directory</em></td></tr>
+<tr><td><code>-s arq</code></td><td>existe e não está vazio (tamanho &gt; 0)</td><td><em>size</em></td></tr>
+<tr><td><code>-r arq</code></td><td>você pode ler</td><td><em>read</em></td></tr>
+<tr><td><code>-w arq</code></td><td>você pode escrever</td><td><em>write</em></td></tr>
+<tr><td><code>-x arq</code></td><td>você pode executar (ou entrar, se for pasta)</td><td><em>execute</em></td></tr>
+<tr><td><code>-L arq</code></td><td>é um link simbólico</td><td><em>link</em></td></tr>
+<tr><td><code>a -nt b</code></td><td><code>a</code> foi modificado depois de <code>b</code></td><td><em>newer than</em></td></tr>
+<tr><td><code>a -ot b</code></td><td><code>a</code> foi modificado antes de <code>b</code></td><td><em>older than</em></td></tr>
+</table>
+</div>
+
+<pre class="term">$ [ -e Documentos ]; echo $?
+0                        « existe (é uma pasta, mas -e não liga para o tipo)
+$ [ -s frutas.txt ]; echo $?
+0
+$ touch vazio.txt
+$ [ -s vazio.txt ]; echo $?
+1                        « existe, mas está vazio
+$ [ -r frutas.txt ] &amp;&amp; echo "pode ler"
+pode ler
+$ [ -w /etc/passwd ] || echo "não pode escrever"
+não pode escrever        « o arquivo é do root
+$ [ -x Documentos/projetos/backup.sh ]; echo $?
+0                        « o backup.sh tem permissão de execução</pre>
+
+<p>Com um link e duas datas:</p>
+<pre class="term">$ ln -s frutas.txt atalho.txt
+$ [ -L atalho.txt ] &amp;&amp; echo "é link"
+é link
+$ [ -f atalho.txt ] &amp;&amp; echo "e aponta para um arquivo"
+e aponta para um arquivo         « -f segue o link até o destino
+$ touch -d 2026-10-01 velho.txt
+$ [ frutas.txt -nt velho.txt ] &amp;&amp; echo "frutas é mais novo"
+frutas é mais novo
+$ [ velho.txt -ot frutas.txt ] &amp;&amp; echo "velho é mais antigo"
+velho é mais antigo</pre>
+
+<p>O <code>-nt</code> é útil para "só refaça o backup se o original mudou depois do último backup". Permissões (<code>-r -w -x</code>) são explicadas nos guias de cada sistema; aqui basta saber que o teste responde "<strong>você</strong>, com o seu usuário, pode?".</p>
+
+<div class="try" data-goal="ran:-x,exit:0" data-solucao="[[ -x Documentos/projetos/backup.sh ]]">
+<p class="try-task"><strong>Missão:</strong> use <code>[[ ]]</code> para perguntar se <code>Documentos/projetos/backup.sh</code> pode ser executado. Depois rode <code>echo $?</code> para ver a resposta.</p>
+</div>
+
+<hr>
+
+<h2>Testes de texto</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Teste</th><th>Verdadeiro se…</th><th>Origem</th></tr>
+<tr><td><code>-z "$v"</code></td><td>o texto está vazio (tamanho zero)</td><td><em>zero</em></td></tr>
+<tr><td><code>-n "$v"</code></td><td>o texto não está vazio</td><td><em>non-zero</em></td></tr>
+<tr><td><code>"$a" = "$b"</code></td><td>os textos são iguais (<code>==</code> também funciona no Bash)</td><td></td></tr>
+<tr><td><code>"$a" != "$b"</code></td><td>os textos são diferentes</td><td></td></tr>
+<tr><td><code>"$a" &lt; "$b"</code></td><td><code>a</code> vem antes de <code>b</code> na ordem alfabética (só em <code>[[ ]]</code>; em <code>[ ]</code>, escreva <code>\&lt;</code>)</td><td></td></tr>
+<tr><td><code>"$a" &gt; "$b"</code></td><td><code>a</code> vem depois de <code>b</code></td><td></td></tr>
+</table>
+</div>
+
+<pre class="term">$ [ -z "" ]; echo $?
+0
+$ [ -n "Ana" ]; echo $?
+0
+$ [ "abc" = "abc" ]; echo $?
+0
+$ [ "abc" != "abd" ]; echo $?
+0
+$ [[ "banana" &lt; "uva" ]]; echo $?
+0                        « b vem antes de u</pre>
+
+<div class="warning">
+<strong>Em <code>[ ]</code>, <code>&gt;</code> é redirecionamento!</strong>
+<p><code>[ 5 &gt; 3 ]</code> não compara nada: o <code>&gt;</code> manda a saída do <code>[ 5 ]</code> para um arquivo chamado <code>3</code>. O código é <code>0</code> (porque <code>[ 5 ]</code> é "texto não vazio") e aparece um arquivo <code>3</code> vazio na pasta. Para números, use <code>-gt</code> ou <code>(( ))</code>; para textos, <code>[[ ]]</code>.</p>
+</div>
+
+<hr>
+
+<h2>Testes de número</h2>
+<p>Para comparar <strong>números</strong> em <code>[ ]</code> e <code>[[ ]]</code> existem operadores com letras, que vêm do inglês:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Teste</th><th>Significa</th><th>Origem</th><th>Em <code>(( ))</code></th></tr>
+<tr><td><code>-eq</code></td><td>igual</td><td><em>equal</em></td><td><code>==</code></td></tr>
+<tr><td><code>-ne</code></td><td>diferente</td><td><em>not equal</em></td><td><code>!=</code></td></tr>
+<tr><td><code>-lt</code></td><td>menor que</td><td><em>less than</em></td><td><code>&lt;</code></td></tr>
+<tr><td><code>-le</code></td><td>menor ou igual</td><td><em>less or equal</em></td><td><code>&lt;=</code></td></tr>
+<tr><td><code>-gt</code></td><td>maior que</td><td><em>greater than</em></td><td><code>&gt;</code></td></tr>
+<tr><td><code>-ge</code></td><td>maior ou igual</td><td><em>greater or equal</em></td><td><code>&gt;=</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ [ 10 -eq 10 ]; echo $?
+0
+$ [ 3 -lt 10 ]; echo $?
+0
+$ [ 9 -ge 10 ]; echo $?
+1</pre>
+
+<h3>Por que não usar <code>&lt;</code> para números?</h3>
+<p>Porque <code>&lt;</code> em <code>[[ ]]</code> compara <strong>texto</strong>, letra por letra, como num dicionário. E no dicionário, <code>"10"</code> vem antes de <code>"9"</code> (porque <code>1</code> vem antes de <code>9</code>):</p>
+<pre class="term">$ [[ 10 &lt; 9 ]]; echo $?
+0                        « "verdadeiro"?! comparou como texto
+$ [ 10 -lt 9 ]; echo $?
+1                        « certo: 10 não é menor que 9
+$ (( 10 &lt; 9 )); echo $?
+1                        « certo: dentro de (( )), &lt; é numérico</pre>
+
+<p>Para números, a forma mais legível é <code>(( ))</code>, vista em <a href="aritmetica.html">Contas</a>: <code>(( nota &gt;= 7 ))</code> se lê como na matemática. Os operadores com letras continuam úteis porque funcionam em <code>[ ]</code>, inclusive no <code>sh</code>.</p>
+
+<p>Todos os três aceitam só <strong>inteiros</strong>:</p>
+<pre class="term">$ [ 9.5 -gt 9 ]
+bash: [: 9.5: esperava número inteiro
+$ [ abc -eq 1 ]
+bash: [: abc: esperava número inteiro</pre>
+<p>Para comparar decimais (como as notas do <code>alunos.csv</code>), use <code>bc</code> ou <code>awk</code> (veja <a href="aritmetica.html#decimais">Números com vírgula</a>).</p>
+
+<hr>
+
+<h2>Combinar testes: <code>!</code>, <code>&amp;&amp;</code> e <code>||</code></h2>
+
+<h3>Negar: <code>!</code></h3>
+<pre class="term">$ [ ! -f nada.txt ]; echo $?
+0                        « "não é arquivo" é verdade
+$ ! [ -f nada.txt ]; echo $?
+0                        « mesma coisa, negando o comando inteiro</pre>
+<p>Atenção ao espaço: <code>! -f</code>, não <code>!-f</code>.</p>
+
+<h3>"E" e "ou"</h3>
+<p>Há três jeitos de escrever "o arquivo existe <strong>e</strong> a pasta existe":</p>
+<pre class="term">$ [[ -f frutas.txt &amp;&amp; -d Documentos ]]; echo $?
+0                        « dentro de [[ ]]: &amp;&amp; e ||
+$ [ -f frutas.txt ] &amp;&amp; [ -d Documentos ]; echo $?
+0                        « dois comandos [ ] ligados por &amp;&amp;
+$ [ -f frutas.txt -a -d Documentos ]; echo $?
+0                        « -a (and) e -o (or): forma antiga</pre>
+
+<p>O <code>-a</code> e o <code>-o</code> dentro de <code>[ ]</code> são considerados <strong>obsoletos</strong>: com certos valores de variáveis (como um texto igual a <code>!</code> ou <code>(</code>), o <code>[</code> não consegue saber o que é operador e o que é dado. Use <code>[[ … &amp;&amp; … ]]</code> ou <code>[ … ] &amp;&amp; [ … ]</code>. E cada operador no seu lugar:</p>
+
+<pre class="term">$ [ -f frutas.txt &amp;&amp; -d Documentos ]
+bash: [: faltando `]'          « o &amp;&amp; cortou o comando [ antes do ]
+$ [[ -f frutas.txt -a -d Documentos ]]
+bash: erro de sintaxe na expressão condicional: token inesperado `-a'
+bash: erro de sintaxe próximo a `-a'</pre>
+
+<hr>
+
+<h2>Por que <code>[ $var = x ]</code> quebra (e <code>[[ ]]</code> não)</h2>
+<p>Este é o erro mais clássico de quem escreve testes. Lembre: <code>[</code> é um <strong>comando</strong>, e o Bash expande as variáveis e separa as palavras <strong>antes</strong> de chamá-lo. Veja o que o <code>[</code> recebe em cada caso:</p>
+
+<pre class="term">$ x=
+$ [ $x = sim ]
+bash: [: =: esperava operador unário
+$ echo $?
+2</pre>
+<p>Com <code>x</code> vazio e sem aspas, <code>$x</code> some. O <code>[</code> recebe só <code>= sim ]</code>, olha para o <code>=</code> como se fosse um operador de um lado só (como <code>-f</code>, um operador "unário") e não entende.</p>
+
+<pre class="term">$ x="não sei"
+$ [ $x = sim ]
+bash: [: número excessivo de argumentos
+$ echo $?
+2</pre>
+<p>Com espaço no valor, <code>$x</code> virou <strong>duas</strong> palavras: o <code>[</code> recebeu <code>não sei = sim ]</code>, argumentos demais para uma comparação.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrito</th><th><code>x</code> vale</th><th>O <code>[</code> recebe</th><th>Resultado</th></tr>
+<tr><td><code>[ $x = sim ]</code></td><td>(vazio)</td><td><code>[ = sim ]</code></td><td>erro: esperava operador unário</td></tr>
+<tr><td><code>[ $x = sim ]</code></td><td><code>não sei</code></td><td><code>[ não sei = sim ]</code></td><td>erro: número excessivo de argumentos</td></tr>
+<tr><td><code>[ "$x" = sim ]</code></td><td>(vazio)</td><td><code>[ "" = sim ]</code></td><td>falso (1), sem erro</td></tr>
+<tr><td><code>[[ $x = sim ]]</code></td><td>qualquer</td><td>(não há separação de palavras)</td><td>falso (1), sem erro</td></tr>
+</table>
+</div>
+
+<pre class="term">$ x=
+$ [ "$x" = sim ]; echo $?
+1                        « com aspas: comparação correta
+$ [[ $x = sim ]]; echo $?
+1                        « [[ ]] não precisa das aspas na variável</pre>
+
+<p>O <code>-n</code> sem aspas é ainda mais traiçoeiro, porque não dá erro, dá a resposta errada:</p>
+<pre class="term">$ x=
+$ [ -n $x ]; echo $?
+0                        « "não está vazia"?! O [ recebeu só "-n", um texto não vazio
+$ [ -n "$x" ]; echo $?
+1                        « certo</pre>
+
+<p><strong>Regras práticas:</strong> em <code>[ ]</code>, <strong>sempre</strong> coloque aspas nas variáveis. Em <code>[[ ]]</code>, as aspas no lado esquerdo são opcionais (mas não fazem mal), e no lado direito têm um significado especial, que você vê a seguir.</p>
+
+<div class="try" data-setup="resp=" data-goal="ran:\$resp,exit:1" data-solucao="[[ $resp = sim ]]">
+<p class="try-task"><strong>Missão:</strong> a variável <code>resp</code> está vazia. Rode <code>[ $resp = sim ]</code> e veja o erro. Depois escreva um teste que compare <code>$resp</code> com <code>sim</code> <strong>sem erro</strong>, respondendo "falso" (código 1).</p>
+</div>
+
+<hr>
+
+<h2>Padrões com <code>==</code> em <code>[[ ]]</code></h2>
+<p>Dentro de <code>[[ ]]</code>, o lado direito de <code>==</code> (e de <code>=</code> e <code>!=</code>) é um <strong>padrão</strong>, com os mesmos <a href="curingas.html">curingas</a> dos nomes de arquivo. Isso permite perguntar "termina com .jpg?":</p>
+
+<dl class="anatomy">
+  <dt>[[</dt><dd>Teste do Bash.</dd>
+  <dt>$arq</dt><dd>O texto a examinar.</dd>
+  <dt>==</dt><dd>"Casa com o padrão…"</dd>
+  <dt>*.jpg</dt><dd>Qualquer coisa seguida de <code>.jpg</code>. <strong>Sem aspas</strong>, para ser padrão.</dd>
+  <dt>]]</dt><dd>Fim.</dd>
+</dl>
+
+<pre class="term">$ arq=foto.jpg
+$ [[ $arq == *.jpg ]]; echo $?
+0                        « casa com o padrão
+$ [[ $arq == "*.jpg" ]]; echo $?
+1                        « com aspas: compara com o texto literal "*.jpg"
+$ [[ $arq != *.png ]]; echo $?
+0
+$ [ $arq == *.jpg ]; echo $?
+1                        « em [ ], o * não é padrão: virou nomes de arquivos ou texto</pre>
+
+<p>Se for comparar com muitas opções, o <a href="case.html"><code>case</code></a> costuma ficar mais limpo.</p>
+
+<h3>Regex: <code>=~</code></h3>
+<p><code>[[ ]]</code> também testa <strong>expressões regulares</strong>, um tipo de padrão muito mais poderoso, com o operador <code>=~</code>. Só como aperitivo:</p>
+<pre class="term">$ cep=50000-000
+$ [[ $cep =~ ^[0-9]{5}-[0-9]{3}$ ]] &amp;&amp; echo "CEP válido"
+CEP válido</pre>
+<p>Ler e escrever regex é assunto da aula <a href="regex.html">Regex com [[ =~ ]]</a>.</p>
+
+<h3>Variável existe? <code>-v</code></h3>
+<p><code>[[ -v nome ]]</code> (sem <code>$</code>!) pergunta se a variável <strong>existe</strong>, mesmo vazia. É a diferença entre "vazia" e "não definida" de <a href="variaveis.html">Variáveis</a>:</p>
+<pre class="term">$ unset v
+$ [[ -v v ]]; echo $?
+1
+$ v=
+$ [[ -v v ]]; echo $?
+0                        « existe, embora vazia</pre>
+
+<div class="tryscript" data-file="tipo.sh" data-args="perfil.png" data-goal="out:imagem,src:\|\|">
+<p class="try-task"><strong>Missão:</strong> o script reconhece <code>.jpg</code> como imagem, mas com <code>perfil.png</code> não mostra nada. Mude o teste para aceitar <code>.jpg</code> <strong>ou</strong> <code>.png</code>, usando <code>||</code> dentro do <code>[[ ]]</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+[[ $1 == *.jpg ]] &amp;&amp; echo "imagem"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+[[ $1 == *.jpg || $1 == *.png ]] &amp;&amp; echo "imagem"
+</pre>
+</div>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>test</code> / <code>[ ]</code></th><th><code>[[ ]]</code></th><th><code>(( ))</code></th></tr>
+<tr><td>O que é</td><td>Comando</td><td>Palavra-chave do Bash</td><td>Palavra-chave do Bash</td></tr>
+<tr><td>Onde funciona</td><td>Qualquer <code>sh</code> (POSIX)</td><td>Bash, ksh, zsh</td><td>Bash, ksh, zsh</td></tr>
+<tr><td>Variável vazia ou com espaço</td><td>Quebra sem aspas</td><td>Seguro</td><td>Vazia vale 0</td></tr>
+<tr><td>E / ou</td><td><code>] &amp;&amp; [</code> (<code>-a</code>/<code>-o</code> obsoletos)</td><td><code>&amp;&amp;</code> <code>||</code> dentro</td><td><code>&amp;&amp;</code> <code>||</code> dentro</td></tr>
+<tr><td>Padrões (<code>*.jpg</code>)</td><td>Não</td><td>Sim, com <code>==</code></td><td>Não</td></tr>
+<tr><td>Regex</td><td>Não</td><td>Sim, com <code>=~</code></td><td>Não</td></tr>
+<tr><td>Números</td><td><code>-lt -gt</code>…</td><td><code>-lt -gt</code>…</td><td><code>&lt; &gt; ==</code>, contas</td></tr>
+<tr><td><strong>Use para</strong></td><td>Scripts <code>#!/bin/sh</code> portáveis</td><td><strong>Arquivos e textos em scripts Bash</strong></td><td><strong>Números</strong></td></tr>
+</table>
+</div>
+
+<p>Resumindo: num script Bash, use <code>[[ ]]</code> para arquivos e textos, e <code>(( ))</code> para números. Use <code>[ ]</code> quando o script precisar rodar em <code>sh</code> (veja <a href="portabilidade.html">POSIX sh e Bashismos</a>), e então coloque aspas em todas as variáveis.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"[: faltando `]'"</strong>
+<pre class="term">$ [ -f frutas.txt]
+bash: [: faltando `]'</pre>
+<p><strong>O que aconteceu:</strong> faltou o espaço antes do <code>]</code>, ou um <code>&amp;&amp;</code>/<code>;</code> cortou o comando antes dele.</p>
+<p><strong>Como resolver:</strong> <code>[ -f frutas.txt ]</code>, com espaço dos dois lados.</p>
+</div>
+
+<div class="cenario">
+<strong>"[-f: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> faltou o espaço depois do <code>[</code> (ou do <code>[[</code>). O Bash procurou um comando com esse nome grudado.</p>
+<p><strong>Como resolver:</strong> <code>[ -f arquivo ]</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"[: =: esperava operador unário" e "[: número excessivo de argumentos"</strong>
+<p><strong>O que aconteceu:</strong> uma variável sem aspas dentro de <code>[ ]</code> estava vazia (primeira mensagem) ou tinha espaços (segunda).</p>
+<p><strong>Como confirmar:</strong> <code>declare -p x</code> mostra o valor real da variável.</p>
+<p><strong>Como resolver:</strong> <code>[ "$x" = sim ]</code>, ou troque por <code>[[ $x = sim ]]</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"esperava número inteiro"</strong>
+<pre class="term">$ [ 9.5 -gt 9 ]
+bash: [: 9.5: esperava número inteiro</pre>
+<p><strong>O que aconteceu:</strong> <code>-gt</code> e companhia só aceitam inteiros. O valor era decimal, texto ou vazio (com aspas, vazio dá a mesma mensagem).</p>
+<p><strong>Como resolver:</strong> confira o valor antes; para decimais, use <code>bc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu um arquivo com nome de número na pasta</strong>
+<p><strong>O que aconteceu:</strong> você usou <code>&gt;</code> ou <code>&lt;</code> dentro de <code>[ ]</code>, e eles viraram <a href="redirecionamento.html">redirecionamento</a>.</p>
+<p><strong>Como resolver:</strong> apague o arquivo e use <code>-gt</code>/<code>-lt</code> ou <code>(( ))</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O teste sempre dá "verdadeiro"</strong>
+<p><strong>O que aconteceu:</strong> causas comuns: <code>[ -n $x ]</code> sem aspas (sempre verdadeiro); <code>[ $x ]</code> com um texto qualquer; ou <code>[ "$a"="$b" ]</code> <strong>sem espaços</strong> em volta do <code>=</code>, que vira um texto só (não vazio = verdadeiro).</p>
+<p><strong>Como resolver:</strong> espaços em volta do operador e aspas nas variáveis: <code>[ "$a" = "$b" ]</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Grupo</th><th>Testes</th></tr>
+<tr><td>Arquivos</td><td><code>-e</code> existe · <code>-f</code> arquivo · <code>-d</code> pasta · <code>-s</code> não vazio · <code>-r -w -x</code> permissões · <code>-L</code> link · <code>-nt -ot</code> mais novo/antigo</td></tr>
+<tr><td>Texto</td><td><code>-z</code> vazio · <code>-n</code> não vazio · <code>= ==</code> igual · <code>!=</code> diferente · <code>&lt; &gt;</code> ordem (em <code>[[ ]]</code>)</td></tr>
+<tr><td>Números</td><td><code>-eq -ne -lt -le -gt -ge</code>, ou <code>(( a &lt; b ))</code></td></tr>
+<tr><td>Lógica</td><td><code>!</code> não · <code>&amp;&amp;</code> e · <code>||</code> ou (em <code>[[ ]]</code>); <code>] &amp;&amp; [</code> em <code>[ ]</code></td></tr>
+<tr><td>Só em <code>[[ ]]</code></td><td><code>== padrão</code> · <code>=~ regex</code> · <code>-v nome</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. É uma pasta?</h3>
+<p>Complete para testar se <code>Imagens</code> é uma pasta:</p>
+<div class="ex-code">[[ <input data-answer="-d" aria-label="operador"> Imagens ]]</div>
+</div>
+
+<div class="exercise">
+<h3>2. Maior ou igual</h3>
+<p>Complete para testar se <code>idade</code> é maior ou igual a 18 usando colchetes:</p>
+<div class="ex-code">[ "$idade" <input data-answer="-ge" aria-label="operador"> 18 ]</div>
+</div>
+
+<div class="exercise">
+<h3>3. Variável vazia</h3>
+<p>Complete para testar se <code>nome</code> está vazia:</p>
+<div class="ex-code">[ <input data-answer="-z" aria-label="operador"> "$nome" ]</div>
+</div>
+
+<div class="exercise">
+<h3>4. Termina com .sh</h3>
+<p>Complete para testar se <code>arq</code> termina com <code>.sh</code>:</p>
+<div class="ex-code">[[ $arq == <input data-answer="*.sh" aria-label="padrão"> ]]</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. <code>cidade="São Paulo"</code>. O que acontece com <code>[ $cidade = Recife ]</code>?</p>
+<label><input type="radio" name="q5"> Devolve 1 (falso), sem mensagem.</label>
+<label><input type="radio" name="q5"> Devolve 0 (verdadeiro).</label>
+<label><input type="radio" name="q5"> Erro "número excessivo de argumentos" e código 2.</label>
+<label><input type="radio" name="q5"> Erro "comando não encontrado".</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">6. Qual é o resultado de <code>[[ 100 &lt; 20 ]]</code>?</p>
+<label><input type="radio" name="q6"> Falso (1), porque 100 é maior que 20.</label>
+<label><input type="radio" name="q6"> Verdadeiro (0), porque <code>&lt;</code> compara como texto e "1" vem antes de "2".</label>
+<label><input type="radio" name="q6"> Cria um arquivo chamado 20.</label>
+<label><input type="radio" name="q6"> Erro de sintaxe.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Testes respondem pelo código de saída: <code>0</code> verdadeiro, <code>1</code> falso, <code>2</code> erro no teste.</li>
+  <li><code>[</code> é um comando (igual a <code>test</code>): espaços obrigatórios em volta de <code>[</code>, <code>]</code> e de cada operador.</li>
+  <li>Arquivos: <code>-e -f -d -s -r -w -x -L -nt -ot</code>. Texto: <code>-z -n = !=</code>. Números: <code>-eq -ne -lt -le -gt -ge</code> ou <code>(( ))</code>.</li>
+  <li>Em <code>[ ]</code>, sempre <code>"$var"</code> com aspas; <code>[[ ]]</code> não quebra com vazio ou espaço.</li>
+  <li><code>[[ ]]</code> tem <code>&amp;&amp;</code>, <code>||</code>, padrões com <code>==</code> e regex com <code>=~</code>. Num script Bash: <code>[[ ]]</code> para arquivos e textos, <code>(( ))</code> para números.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
