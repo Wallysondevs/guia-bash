@@ -66,7 +66,7 @@ volta 3
 ```
 - `$ ` = comando digitado (vira `ana@notebook:~$`). `#> ` = como root.
 - `> ` **logo depois de um comando** = linha de continuação (o prompt secundário `PS2` do Bash). Use para comandos de várias linhas, exatamente como o Bash mostra.
-- O prompt acompanha os `cd`. Pasta inicial: `data-cwd="~/scripts"`. `data-user`, `data-host`, `data-title` mudam a janela.
+- O prompt acompanha `cd` (com aspas, `\ `, `~`, variáveis atribuídas antes na mesma sessão, `cd -`, `CDPATH`), `pushd` e `popd`, inclusive vários na mesma linha (`cd a && cd b`). Um `cd` cuja saída seguinte é `bash: cd: …` não muda a pasta. Não acompanha `cd` dentro de laços/funções. Pasta inicial: `data-cwd="~/scripts"`. `data-user`, `data-host`, `data-title` mudam a janela.
 - `«` inicia uma anotação (etiqueta laranja, não é copiada).
 - Dentro de qualquer `<pre>` escreva `&lt;` `&gt;` `&amp;`.
 

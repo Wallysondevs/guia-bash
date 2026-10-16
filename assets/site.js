@@ -313,6 +313,103 @@ var NIVEIS = [
   }
   function curto(p, home) { return p === home ? "~" : p.indexOf(home + "/") === 0 ? "~" + p.slice(home.length) : p; }
 
+
+  /* ---------- acompanhar a pasta atual nas sessões pre.term ----------
+     Entende cd/pushd/popd com aspas, barras invertidas, ~, variáveis atribuídas
+     na própria sessão, cd - e CDPATH (pela linha que o Bash imprime), e não
+     muda a pasta quando a saída mostra que o comando falhou. */
+  function saidaDepois(linhas, idx) {
+    var out = [], j = idx + 1;
+    while (j < linhas.length && /^> ?/.test(linhas[j])) j++; // linhas de continuação
+    for (; j < linhas.length; j++) {
+      if (/^(\$|#>) ?/.test(linhas[j])) break;
+      out.push(linhas[j].replace(/\s*«.*$/, ""));
+    }
+    return out;
+  }
+  function palavrasShell(txt, vars, home) {
+    var res = [], cur = null, i = 0, c;
+    function add(x) { cur = (cur || "") + x; }
+    function variavel() {
+      var m = /^\$(\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/.exec(txt.slice(i));
+      if (!m) { add("$"); i++; return; }
+      var n = m[2] || m[3];
+      add(n === "HOME" ? home : n === "PWD" ? vars.__pwd : n === "OLDPWD" ? (vars.__oldpwd || "") : (vars[n] != null ? vars[n] : "\u0000"));
+      i += m[0].length;
+    }
+    while (i < txt.length) {
+      c = txt[i];
+      if (/\s/.test(c)) { if (cur !== null) { res.push(cur); cur = null; } i++; continue; }
+      if (c === "~" && cur === null && (i + 1 === txt.length || /[\/\s]/.test(txt[i + 1]))) { add(home); i++; continue; }
+      if (c === "\\") { add(txt[i + 1] || ""); i += 2; continue; }
+      if (c === "'") { var f = txt.indexOf("'", i + 1); if (f < 0) f = txt.length; add(txt.slice(i + 1, f)); i = f + 1; continue; }
+      if (c === '"') {
+        i++; add("");
+        while (i < txt.length && txt[i] !== '"') {
+          if (txt[i] === "\\" && /[$`"\\]/.test(txt[i + 1] || "")) { add(txt[i + 1]); i += 2; }
+          else if (txt[i] === "$") variavel();
+          else { add(txt[i]); i++; }
+        }
+        i++; continue;
+      }
+      if (c === "$") { variavel(); continue; }
+      add(c); i++;
+    }
+    if (cur !== null) res.push(cur);
+    return res;
+  }
+  function segmentos(cmd) { // divide em && ; || fora de aspas
+    var segs = [], cur = "", q = "", i;
+    for (i = 0; i < cmd.length; i++) {
+      var c = cmd[i];
+      if (q) { cur += c; if (c === "\\" && q === '"') { cur += cmd[++i] || ""; } else if (c === q) q = ""; continue; }
+      if (c === "\\") { cur += c + (cmd[++i] || ""); continue; }
+      if (c === "'" || c === '"') { q = c; cur += c; continue; }
+      if ((c === "&" && cmd[i + 1] === "&") || (c === "|" && cmd[i + 1] === "|")) { segs.push(cur); cur = ""; i++; continue; }
+      if (c === ";" || c === "|") { segs.push(cur); cur = ""; continue; }
+      cur += c;
+    }
+    segs.push(cur);
+    return segs;
+  }
+  function acompanharCd(cmd, cwd, home, ses, saida) {
+    var falhou = saida.some(function (l) { return /^bash: (cd|pushd|popd|dirs): /.test(l); });
+    var impresso = saida.filter(function (l) { return /^(\/|~)/.test(l); })[0];
+    var mudou = false;
+    segmentos(cmd).forEach(function (seg) {
+      ses.vars.__pwd = cwd; ses.vars.__oldpwd = ses.oldpwd;
+      var w = palavrasShell(seg.trim(), ses.vars, home);
+      if (!w.length) return;
+      // atribuições simples: nome=valor (sem comando depois)
+      if (w.every(function (x) { return /^[A-Za-z_]\w*=/.test(x); })) {
+        w.forEach(function (x) { var k = x.indexOf("="); ses.vars[x.slice(0, k)] = x.slice(k + 1); });
+        return;
+      }
+      var nome = w[0], args = w.slice(1).filter(function (a) { return !/^-[LPe@]+$/.test(a); });
+      if (nome !== "cd" && nome !== "pushd" && nome !== "popd") return;
+      if (falhou) return;
+      if (args.some(function (a) { return a.indexOf("\u0000") !== -1; })) return; // variável desconhecida
+      var novo = null;
+      if (nome === "cd") {
+        if (args[0] === "-") { if (!ses.oldpwd) return; novo = ses.oldpwd; }
+        else if (impresso && !mudou) novo = impresso.replace(/^~(?=\/|$)/, home); // CDPATH: o Bash imprime a pasta
+        else novo = resolver(cwd, args[0] || home, home);
+      } else if (nome === "pushd") {
+        if (impresso && !mudou) { // pushd imprime a pilha: a primeira entrada é a pasta nova
+          var topo = impresso.split(" ")[0].replace(/^~(?=\/|$)/, home);
+          novo = topo;
+        } else novo = args[0] ? resolver(cwd, args[0], home) : (ses.pilha[ses.pilha.length - 1] || null);
+        if (novo) ses.pilha.push(cwd);
+      } else if (nome === "popd") {
+        if (impresso && !mudou) novo = impresso.split(" ")[0].replace(/^~(?=\/|$)/, home);
+        else novo = ses.pilha.length ? ses.pilha[ses.pilha.length - 1] : null;
+        ses.pilha.pop();
+      }
+      if (novo && novo !== cwd) { ses.oldpwd = cwd; cwd = novo; mudou = true; }
+      else if (novo) mudou = true;
+    });
+    return cwd;
+  }
   document.querySelectorAll("pre.term").forEach(function (pre) {
     var user = pre.getAttribute("data-user") || "ana",
       host = pre.getAttribute("data-host") || "notebook",
@@ -320,8 +417,8 @@ var NIVEIS = [
       cwd = resolver("/", (pre.getAttribute("data-cwd") || "~").replace(/^~/, homeUser), homeUser);
     var linhas = pre.textContent.replace(/^\n+|\s+$/g, "").split("\n"), html = [], cmds = [];
     var tituloCwd = curto(cwd, homeUser), primeiroUser = user, pilhaSu = [];
-    var ultimoCmd = false;
-    linhas.forEach(function (l) {
+    var ultimoCmd = false, sessao = { vars: {}, oldpwd: null, pilha: [] };
+    linhas.forEach(function (l, idx) {
       var mc = ultimoCmd && /^> ?(.*)$/.exec(l);
       if (mc) {
         var nc = "", ic = mc[1].indexOf("«");
@@ -338,9 +435,7 @@ var NIVEIS = [
         if (ia !== -1) { nota = '<span class="t-a">← ' + esc(m[2].slice(ia + 1).trim()) + "</span>"; m[2] = m[2].slice(0, ia).replace(/\s+$/, ""); }
         html.push('<span class="t-p"><span class="t-u">' + u + "@" + host + '</span>:<span class="t-d">' + esc(curto(cwd, home)) + "</span>" + (root_ ? "#" : "$") + " </span>" + '<span class="t-c">' + esc(m[2]) + "</span>" + (nota ? "   " + nota : ""));
         cmds.push(m[2]);
-        // acompanha cd simples (cd x; cd x && ...)
-        var cd = /^\s*cd(?:\s+("[^"]*"|'[^']*'|\S+))?\s*(?:$|&&|;)/.exec(m[2]);
-        if (cd) cwd = resolver(cwd, cd[1] ? cd[1].replace(/^["']|["']$/g, "") : "", home);
+        cwd = acompanharCd(m[2], cwd, home, sessao, saidaDepois(linhas, idx));
         if (/^\s*sudo -i\s*$/.test(m[2])) cwd = "/root";
         if (/^\s*su(\s+-|\s+-l|\s+--login)?(\s+root)?\s*$/.test(m[2])) { pilhaSu.push({ cwd: cwd }); if (/-/.test(m[2])) cwd = "/root"; }
         if (/^\s*(exit|logout)\s*$/.test(m[2]) && root_ && pilhaSu.length) cwd = pilhaSu.pop().cwd;
