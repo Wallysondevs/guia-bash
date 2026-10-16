@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Primeiro Script — criar, shebang, chmod +x e ./ | Guia Bash</title>
+<meta name="description" content="Crie seu primeiro script Bash passo a passo: o arquivo, a linha #!/usr/bin/env bash, comentários, chmod +x, ./ola.sh, onde guardar seus scripts e os erros reais (Permissão negada, comando não encontrado, ^M).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Seu Primeiro Script</span></h1>
+
+<p class="intro">Um <strong>script</strong> é um arquivo de texto com comandos do Bash, um embaixo do outro. Em vez de digitar os mesmos comandos todo dia, você escreve uma vez, dá um nome ao arquivo e passa a rodá-lo como se fosse um programa novo. Nesta aula você cria o seu primeiro, linha por linha, e aprende a resolver os erros que todo mundo encontra na primeira vez.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como criar um arquivo de script no terminal e no editor.</li>
+  <li>O que é a primeira linha <code>#!/usr/bin/env bash</code> (o <em>shebang</em>) e por que ela importa.</li>
+  <li>Como escrever comentários e dar permissão de execução com <code>chmod +x</code>.</li>
+  <li>Por que se roda com <code>./ola.sh</code>, e como rodar só com <code>ola.sh</code>, de qualquer pasta.</li>
+  <li>O que fazer com "Permissão negada", "comando não encontrado" e "/bin/bash^M: interpretador incorreto".</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que é um script</h2>
+<p>Pense numa receita de bolo. Você não inventa os passos toda vez: eles estão escritos, em ordem, e qualquer pessoa pode seguir. Um script é a receita; o Bash é quem cozinha. Ele lê o arquivo de cima para baixo e executa cada linha como se você tivesse digitado.</p>
+
+<p>Exemplo do dia a dia: toda manhã a Ana abre o terminal e digita os mesmos três comandos para ver quem ela é, onde está e quantos arquivos tem ali. Três comandos, todo dia. Com um script, vira um comando só.</p>
+
+<pre class="syntax">  sem script                         com script
+  ─────────────────────              ─────────────────────
+  $ echo "Olá, $USER!"               $ ./ola.sh
+  $ echo "Você está em: $PWD"          (o arquivo ola.sh tem
+  $ ls | wc -l                          as três linhas dentro)</pre>
+
+<p>Para um arquivo virar um script que roda sozinho, são três passos. Esta aula é exatamente esses três passos:</p>
+<ol>
+  <li><strong>Escrever</strong> o arquivo, com a linha <code>#!</code> no topo.</li>
+  <li><strong>Dar permissão</strong> de execução: <code>chmod +x</code>.</li>
+  <li><strong>Rodar</strong>: <code>./nome-do-arquivo</code>.</li>
+</ol>
+
+<hr>
+
+<h2>Passo 1: escrever o arquivo</h2>
+<p>Um script é texto puro, então qualquer editor de texto serve. Os mais comuns:</p>
+<ul>
+  <li><strong>nano</strong>: editor simples, dentro do terminal. <code>nano ola.sh</code> abre o arquivo; <kbd>Ctrl</kbd>+<kbd>O</kbd> salva e <kbd>Ctrl</kbd>+<kbd>X</kbd> sai. Ótimo para começar.</li>
+  <li><strong>vim</strong>: poderoso, também no terminal, mas tem uma curva de aprendizado (para sair sem salvar: <kbd>Esc</kbd> e <code>:q!</code>).</li>
+  <li><strong>VS Code</strong> (ou outro editor gráfico): <code>code ola.sh</code>. Confortável, com cores e verificação de erros.</li>
+</ul>
+
+<p>Nesta aula vamos criar o arquivo <strong>direto no terminal</strong>, com o <code>cat</code> e um <em>here-doc</em>. Assim você pode repetir exatamente o que está aqui, e vê o conteúdo junto com o comando.</p>
+
+<dl class="anatomy">
+  <dt>cat</dt><dd>O programa que repete o que recebe. Aqui ele recebe as linhas que você digitar.</dd>
+  <dt>&gt; ola.sh</dt><dd>Grava o que o <code>cat</code> repetir no arquivo <code>ola.sh</code> (cria ou substitui). Veja <a href="redirecionamento.html">Redirecionamento</a>.</dd>
+  <dt>&lt;&lt;'EOF'</dt><dd>"A entrada são as próximas linhas, até aparecer uma linha só com <code>EOF</code>" (<em>end of file</em>, fim do arquivo). As aspas simples em volta de <code>EOF</code> fazem o texto ser gravado <strong>exatamente</strong> como você digitou, sem trocar <code>$USER</code> pelo valor. Detalhes em <a href="heredoc.html">Here-docs</a>.</dd>
+</dl>
+
+<pre class="term">$ cat &gt; ola.sh &lt;&lt;'EOF'
+&gt; #!/usr/bin/env bash
+&gt; # ola.sh — meu primeiro script
+&gt; # Cumprimenta quem rodou e diz onde a pessoa está.
+&gt;
+&gt; echo "Olá, $USER!"
+&gt; echo "Você está em: $PWD"
+&gt; echo "Esta pasta tem $(ls | wc -l) itens."   # conta as linhas do ls
+&gt; EOF
+$ </pre>
+
+<p>O <code>&gt;</code> no começo das linhas do meio é o prompt de continuação do Bash: ele avisa que o comando ainda não acabou. <strong>Você não digita esse sinal.</strong> Quando você digita a linha <code>EOF</code>, o comando termina e o prompt normal volta, sem mostrar nada. Silêncio, aqui, é sucesso.</p>
+
+<p>O arquivo ficou assim:</p>
+
+<pre class="file" data-file="ola.sh">#!/usr/bin/env bash
+# ola.sh — meu primeiro script
+# Cumprimenta quem rodou e diz onde a pessoa está.
+
+echo "Olá, $USER!"
+echo "Você está em: $PWD"
+echo "Esta pasta tem $(ls | wc -l) itens."   # conta as linhas do ls
+</pre>
+
+<h3>Linha por linha</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>#!/usr/bin/env bash</code></td><td>O <strong>shebang</strong>: diz ao sistema qual programa deve ler este arquivo. Tem que ser a <strong>primeira</strong> linha. Explicado logo abaixo.</td></tr>
+<tr><td><code># ola.sh — meu primeiro script</code></td><td>Comentário: o Bash ignora. Serve para pessoas.</td></tr>
+<tr><td><code># Cumprimenta quem…</code></td><td>Outro comentário, dizendo para que o script serve.</td></tr>
+<tr><td>(linha vazia)</td><td>Ignorada. Use para separar blocos e deixar o script legível.</td></tr>
+<tr><td><code>echo "Olá, $USER!"</code></td><td>Mostra uma saudação. <code>$USER</code> é trocado pelo nome do usuário (<a href="variaveis-intro.html">variáveis</a>).</td></tr>
+<tr><td><code>echo "Você está em: $PWD"</code></td><td><code>$PWD</code> guarda a pasta atual (<em>print working directory</em>).</td></tr>
+<tr><td><code>echo "… $(ls | wc -l) itens."</code></td><td><code>$( )</code> roda <code>ls | wc -l</code> (conta os itens da pasta) e coloca o resultado no meio do texto. Depois do <code>#</code>, um comentário no fim da linha.</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>A extensão <code>.sh</code> é opcional</strong>
+<p>No Linux, quem decide como rodar o arquivo é o shebang, não o nome. O <code>.sh</code> é só um costume que ajuda você (e o editor, que pinta as cores certas) a reconhecer um script. Muitos scripts instalados no sistema não têm extensão nenhuma.</p>
+</div>
+
+<hr>
+
+<h2>O shebang: <code>#!/usr/bin/env bash</code></h2>
+<p>O nome vem de <em>hash</em> (<code>#</code>) + <em>bang</em> (<code>!</code>), "jogo da velha e exclamação". Quando você manda rodar um arquivo, o Linux lê os dois primeiros caracteres. Se forem <code>#!</code>, o resto da linha diz <strong>qual programa</strong> deve executar o arquivo.</p>
+
+<dl class="anatomy">
+  <dt>#!</dt><dd>A marca: "a seguir vem o interpretador". Tem que estar no começo da primeira linha, sem espaço antes.</dd>
+  <dt>/usr/bin/env</dt><dd>Um programa que procura outro programa no seu <code>PATH</code> (a lista de pastas onde ficam os comandos) e o executa.</dd>
+  <dt>bash</dt><dd>O programa que o <code>env</code> vai procurar. Ele vai achar o <code>bash</code> que você também usaria ao digitar <code>bash</code> no terminal.</dd>
+</dl>
+
+<p>Na prática, quando você roda <code>./ola.sh</code>, o sistema transforma isso em <code>/usr/bin/env bash ./ola.sh</code>. O Bash abre o arquivo, pula a primeira linha (para ele, ela é só um comentário, porque começa com <code>#</code>) e executa o resto.</p>
+
+<h3><code>#!/usr/bin/env bash</code> ou <code>#!/bin/bash</code>?</h3>
+<p>Você vai ver as duas formas. As duas funcionam no Linux. A diferença é <strong>onde</strong> o Bash é procurado:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>#!/usr/bin/env bash</code></th><th><code>#!/bin/bash</code></th></tr>
+<tr><td>Onde procura</td><td>No seu <code>PATH</code>, como no terminal.</td><td>Exatamente no caminho <code>/bin/bash</code>.</td></tr>
+<tr><td>Linux (Ubuntu, Debian, Fedora, Arch)</td><td>Funciona.</td><td>Funciona.</td></tr>
+<tr><td>macOS com Bash novo (Homebrew)</td><td>Usa o Bash 5 instalado (<code>/opt/homebrew/bin/bash</code>).</td><td>Usa o <code>/bin/bash</code> do sistema, que é o <strong>3.2</strong>, de 2007.</td></tr>
+<tr><td>FreeBSD, NixOS, Termux</td><td>Funciona.</td><td>Falha: lá o Bash não fica em <code>/bin</code>.</td></tr>
+<tr><td>Passar opções (<code>-e</code>, <code>-x</code>…)</td><td>Não dá direto na linha (use <code>set -e</code> dentro do script).</td><td>Dá: <code>#!/bin/bash -e</code>.</td></tr>
+</table>
+</div>
+
+<p><strong>Qual usar?</strong> Neste guia usamos <code>#!/usr/bin/env bash</code>, porque ele roda o mesmo Bash que você testou no terminal, em qualquer sistema. Se você só vai rodar o script em servidores Linux, <code>#!/bin/bash</code> também está ótimo. O que <strong>não</strong> serve é <code>#!/bin/sh</code> num script que usa recursos do Bash: <code>sh</code> pode ser outro shell, mais simples (no Debian e no Ubuntu é o <code>dash</code>). Veja <a href="portabilidade.html">POSIX sh e Bashismos</a>.</p>
+
+<div class="note">
+<strong>E se eu esquecer o shebang?</strong>
+<p>Rodando de dentro do Bash, o script costuma funcionar mesmo assim: o Bash percebe que não há <code>#!</code> e executa o arquivo com ele mesmo. Mas aí depende de quem chamou. Se for outro programa (o <code>cron</code>, um atalho do sistema, o <code>zsh</code>), o resultado muda. Escreva sempre o shebang: é uma linha só, e tira a dúvida.</p>
+</div>
+
+<hr>
+
+<h2>Comentários: <code>#</code></h2>
+<p>Tudo o que vem depois de um <code>#</code> até o fim da linha é <strong>comentário</strong>: o Bash ignora. Comentários são para quem vai ler o script depois, inclusive você daqui a seis meses.</p>
+
+<p>Dois detalhes que confundem no começo. O <code>#</code> só começa um comentário quando está no <strong>início de uma palavra</strong>, e nunca dentro de aspas:</p>
+
+<pre class="term">$ echo "# isto não é comentário"
+# isto não é comentário         « dentro de aspas, # é um caractere qualquer
+$ echo oi#tchau
+oi#tchau                        « grudado numa palavra, também
+$ echo oi #tchau
+oi                              « com espaço antes: daqui para a frente é comentário</pre>
+
+<div class="tip">
+<strong>O que comentar</strong>
+<p>No topo: o nome do script, para que serve e como usar. No meio: o <strong>porquê</strong> das partes que não são óbvias. Não comente o óbvio (<code># mostra olá</code> em cima de <code>echo "Olá"</code> não ajuda ninguém).</p>
+</div>
+
+<hr>
+
+<h2>Passo 2: dar permissão de execução</h2>
+<p>Vamos tentar rodar o script do jeito que acabamos de criar. Primeiro, veja as permissões do arquivo com <code>ls -l</code>:</p>
+
+<pre class="term">$ ls -l ola.sh
+-rw-rw-r-- 1 ana ana 223 out 15 10:30 ola.sh
+$ ./ola.sh
+bash: ./ola.sh: Permissão negada
+$ echo $?
+126                              « 126 = o arquivo existe, mas não pode ser executado</pre>
+
+<p>O começo <code>-rw-rw-r--</code> mostra as permissões: <code>r</code> (<em>read</em>, ler) e <code>w</code> (<em>write</em>, escrever), mas nenhum <code>x</code> (<em>execute</em>, executar). Todo arquivo novo nasce assim, sem permissão de execução, por segurança. Por isso o sistema recusou.</p>
+
+<dl class="anatomy">
+  <dt>chmod</dt><dd>Muda as permissões (<em>change mode</em>).</dd>
+  <dt>+x</dt><dd>Acrescenta (<code>+</code>) a permissão de execução (<code>x</code>).</dd>
+  <dt>ola.sh</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term">$ chmod +x ola.sh
+$ ls -l ola.sh
+-rwxrwxr-x 1 ana ana 223 out 15 10:30 ola.sh       « apareceram três x</pre>
+
+<p>Os três <code>x</code> são para três grupos de pessoas: a dona do arquivo, o grupo dela e os outros. O <code>chmod +x</code> é feito uma vez só: a permissão fica gravada no arquivo, mesmo que você edite o conteúdo depois.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Resultado</th><th>Quando usar</th></tr>
+<tr><td><code>chmod +x ola.sh</code></td><td><code>-rwxrwxr-x</code></td><td>O normal: todos que podem ler, podem executar.</td></tr>
+<tr><td><code>chmod u+x ola.sh</code></td><td><code>-rwxrw-r--</code></td><td>Só você (<code>u</code> = <em>user</em>, dona) pode executar.</td></tr>
+<tr><td><code>chmod 755 ola.sh</code></td><td><code>-rwxr-xr-x</code></td><td>Forma numérica, comum em tutoriais e instaladores.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passo 3: rodar com <code>./</code></h2>
+
+<dl class="anatomy">
+  <dt>./</dt><dd>"Nesta pasta aqui". O ponto é a pasta atual, e a barra separa o nome do arquivo.</dd>
+  <dt>ola.sh</dt><dd>O script.</dd>
+</dl>
+
+<pre class="term">$ ./ola.sh
+Olá, ana!
+Você está em: /home/ana
+Esta pasta tem 10 itens.
+$ echo $?
+0                                « o script terminou bem</pre>
+
+<p>Cada <code>echo</code> do script virou uma linha na tela, na ordem em que estão no arquivo. O <code>$USER</code> virou <code>ana</code>, o <code>$PWD</code> virou a pasta atual e o <code>$(ls | wc -l)</code> virou o número de itens (os 9 da pasta pessoal mais o próprio <code>ola.sh</code>). O código de saída de um script é o do <strong>último comando</strong> que ele rodou; aqui, o último <code>echo</code> deu certo, então <code>0</code>. Mais sobre isso em <a href="codigo-saida.html">Código de Saída</a>.</p>
+
+<h3>Por que não basta digitar <code>ola.sh</code>?</h3>
+
+<pre class="term">$ ola.sh
+bash: ola.sh: comando não encontrado
+$ echo $?
+127                              « 127 = não achei esse comando</pre>
+
+<p>Quando você digita um nome sem barra, o Bash <strong>não</strong> procura na pasta atual. Ele procura só nas pastas da variável <code>PATH</code> (como <code>/usr/bin</code>, onde moram <code>ls</code>, <code>cat</code>…). É uma proteção: se alguém deixar um arquivo chamado <code>ls</code> numa pasta, ele não roda no lugar do <code>ls</code> de verdade só porque você entrou nela. Com uma barra no nome (<code>./ola.sh</code>, <code>../ola.sh</code>, <code>/home/ana/ola.sh</code>), você diz o caminho exato e o <code>PATH</code> não é consultado.</p>
+
+<p>O caminho é relativo a onde você está. De dentro de <code>Documentos</code>, o script está uma pasta acima:</p>
+
+<pre class="term">$ cd Documentos
+$ ./ola.sh
+bash: ./ola.sh: Arquivo ou diretório inexistente        « não existe ola.sh aqui dentro
+$ ../ola.sh
+Olá, ana!
+Você está em: /home/ana/Documentos                      « $PWD é a pasta de onde você rodou
+Esta pasta tem 5 itens.</pre>
+
+<p>Repare: o script mostra a pasta de <strong>onde você rodou</strong>, não a pasta onde o arquivo está.</p>
+
+<div class="try" data-setup="printf '#!/usr/bin/env bash\necho &quot;Backup pronto&quot;\n' &gt; backup-rapido.sh" data-goal="exec:~/backup-rapido.sh,out:Backup pronto" data-solucao="chmod +x backup-rapido.sh;;./backup-rapido.sh">
+<p class="try-task"><strong>Missão:</strong> o script <code>backup-rapido.sh</code> já está na pasta da Ana, mas <code>./backup-rapido.sh</code> dá "Permissão negada". Confira com <code>ls -l backup-rapido.sh</code>, corrija a permissão e rode o script até aparecer <code>Backup pronto</code>.</p>
+</div>
+
+<hr>
+
+<h2>Onde guardar seus scripts</h2>
+<p>Ter que escrever <code>./</code> ou o caminho todo cansa. Para rodar seu script só pelo nome, de qualquer pasta, como um comando de verdade, coloque-o numa pasta que esteja no <code>PATH</code>. As pastas pessoais tradicionais para isso são:</p>
+
+<ul>
+  <li><code>~/.local/bin</code>: o padrão moderno (é onde o <code>pip</code> e outros instaladores colocam programas do usuário).</li>
+  <li><code>~/bin</code>: o jeito antigo, mais fácil de ver (não é oculta).</li>
+</ul>
+
+<p>No Ubuntu e no Debian, o arquivo <code>~/.profile</code> já acrescenta essas pastas ao <code>PATH</code>, <strong>se elas existirem</strong> quando você entra no sistema. Veja o que acontece:</p>
+
+<pre class="term">$ echo "$PATH"
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+$ mkdir -p ~/.local/bin
+$ mv ola.sh ~/.local/bin/
+$ ola.sh
+bash: ola.sh: comando não encontrado          « a pasta foi criada depois do login
+$ source ~/.profile                           « relê o .profile (ou feche e abra o terminal)
+$ echo "$PATH"
+/home/ana/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+$ type ola.sh
+ola.sh é /home/ana/.local/bin/ola.sh
+$ cd Imagens
+$ ola.sh
+Olá, ana!
+Você está em: /home/ana/Imagens
+Esta pasta tem 2 itens.</pre>
+
+<p>Linha por linha: o <code>PATH</code> não tinha a pasta; o <code>mkdir -p</code> criou <code>~/.local/bin</code> (o <code>-p</code> cria as pastas do meio e não reclama se já existir); o <code>mv</code> moveu o script para lá; a primeira tentativa falhou porque o <code>.profile</code> só olha as pastas quando você entra no sistema; depois de reler o <code>.profile</code>, a pasta apareceu no começo do <code>PATH</code>, o <code>type</code> mostra onde o Bash achou o comando, e <code>ola.sh</code> funciona de qualquer lugar.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th><code>~/.local/bin</code> e <code>~/bin</code> no PATH?</th></tr>
+<tr><td>Ubuntu, Debian</td><td>Sim, pelo <code>~/.profile</code>, se a pasta existir no login.</td></tr>
+<tr><td>Fedora</td><td>Sim, pelo <code>~/.bashrc</code> padrão.</td></tr>
+<tr><td>Arch, macOS e outros</td><td>Não. Acrescente no <code>~/.bashrc</code>: <code>export PATH="$HOME/.local/bin:$PATH"</code></td></tr>
+</table>
+</div>
+
+<p>Como o <code>PATH</code> funciona por dentro, e como escolher um nome que não esconda um comando do sistema, está em <a href="path.html">PATH e Onde os Comandos Moram</a>.</p>
+
+<hr>
+
+<h2>Formas diferentes de criar o arquivo</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td>nano</td><td><code>nano ola.sh</code></td><td>Você está começando e quer editar no próprio terminal.</td></tr>
+<tr><td>VS Code / editor gráfico</td><td><code>code ola.sh</code></td><td>Scripts maiores: cores, avisos de erro e (com a extensão do ShellCheck) dicas.</td></tr>
+<tr><td>vim</td><td><code>vim ola.sh</code></td><td>Você já conhece o vim, ou está num servidor sem nada além dele.</td></tr>
+<tr><td><code>cat &gt; arq &lt;&lt;'EOF'</code></td><td>(como nesta aula)</td><td>Você vai colar um script pronto, ou criar um script de dentro de outro script.</td></tr>
+<tr><td><code>printf … &gt; arq</code></td><td><code>printf '#!/usr/bin/env bash\necho oi\n' &gt; oi.sh</code></td><td>Scripts de uma ou duas linhas, em uma linha só.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="ola.sh">
+<p class="try-task"><strong>Brinque:</strong> este é o <code>ola.sh</code>. Clique em Rodar. Depois acrescente uma linha <code>echo "Hoje é dia de estudar Bash."</code> no fim, ou um comentário seu, e rode de novo.</p>
+<pre class="script">#!/usr/bin/env bash
+# ola.sh — meu primeiro script
+# Cumprimenta quem rodou e diz onde a pessoa está.
+
+echo "Olá, $USER!"
+echo "Você está em: $PWD"
+echo "Esta pasta tem $(ls | wc -l) itens."   # conta as linhas do ls
+</pre>
+</div>
+
+<div class="try" data-goal="exec:~/bomdia.sh,out:Bom dia" data-solucao="printf '#!/usr/bin/env bash\necho &quot;Bom dia&quot;\n' &gt; bomdia.sh;;chmod +x bomdia.sh;;./bomdia.sh">
+<p class="try-task"><strong>Missão:</strong> crie do zero o script <code>bomdia.sh</code>, com o shebang e uma linha que mostra <code>Bom dia</code>. Como este terminal não tem editor, use <code>printf '#!/usr/bin/env bash\necho "Bom dia"\n' &gt; bomdia.sh</code>. Depois dê permissão de execução e rode com <code>./bomdia.sh</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Permissão negada"</strong>
+<pre class="term">$ ./ola.sh
+bash: ./ola.sh: Permissão negada
+$ echo $?
+126</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não tem permissão de execução.</p>
+<p><strong>Como confirmar:</strong> <code>ls -l ola.sh</code> mostra <code>-rw-rw-r--</code>, sem nenhum <code>x</code>.</p>
+<p><strong>Como resolver:</strong> <code>chmod +x ola.sh</code>. Se o arquivo está num pendrive ou partição do Windows (que não guardam permissões), rode com <code>bash ola.sh</code> (veja <a href="executar.html">Formas de Executar</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"comando não encontrado"</strong>
+<pre class="term">$ ola.sh
+bash: ola.sh: comando não encontrado
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> sem barra no nome, o Bash procurou só nas pastas do <code>PATH</code>, e o script está na pasta atual.</p>
+<p><strong>Como resolver:</strong> rode com <code>./ola.sh</code>, ou mova o script para <code>~/.local/bin</code> (seção acima).</p>
+</div>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente" com <code>./</code></strong>
+<pre class="term" data-cwd="~/Documentos">$ ./ola.sh
+bash: ./ola.sh: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> você está em outra pasta, ou o nome está diferente (maiúsculas contam: <code>Ola.sh</code> não é <code>ola.sh</code>).</p>
+<p><strong>Como confirmar:</strong> <code>pwd</code> e <code>ls</code>. <strong>Como resolver:</strong> vá para a pasta do script com <code>cd</code> ou use o caminho certo (<code>../ola.sh</code>, <code>~/ola.sh</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>"/bin/bash^M: interpretador incorreto"</strong>
+<pre class="term">$ ./bomdia.sh
+bash: ./bomdia.sh: /bin/bash^M: interpretador incorreto: Arquivo ou diretório inexistente
+$ echo $?
+126</pre>
+<p>Com <code>#!/usr/bin/env bash</code>, o mesmo problema aparece assim:</p>
+<pre class="term">$ ./bomdia2.sh
+env: ‘bash\r’: Arquivo ou diretório inexistente
+env: usa -[v]S para passar opções em linhas shebang</pre>
+<p><strong>O que aconteceu:</strong> o arquivo foi salvo com o <strong>fim de linha do Windows</strong>. No Windows, cada linha termina com dois caracteres invisíveis, <code>\r\n</code>; no Linux, só com <code>\n</code>. O <code>\r</code> sobrando vira parte do nome: o sistema procura um programa chamado <code>bash</code> + <code>\r</code>, que não existe. O <code>^M</code> e o <code>\r</code> são duas formas de mostrar esse caractere. Acontece com arquivos criados no Bloco de Notas, baixados de e-mail ou copiados de um editor configurado para Windows.</p>
+<p><strong>Como confirmar:</strong> o <code>cat -A</code> mostra os invisíveis: <code>$</code> é o fim de linha e <code>^M</code> é o <code>\r</code>. O <code>file</code> também avisa:</p>
+<pre class="term">$ cat -A bomdia.sh
+#!/bin/bash^M$
+echo "Bom dia"^M$                « ^M antes de cada fim de linha
+$ file bomdia.sh
+bomdia.sh: Bourne-Again shell script, ASCII text executable, with CRLF line terminators</pre>
+<p><strong>Como resolver:</strong> apague o <code>\r</code> do fim de cada linha com o <code>sed</code> (ou com <code>dos2unix bomdia.sh</code>, se estiver instalado). No VS Code, clique em "CRLF" na barra de baixo e troque para "LF".</p>
+<pre class="term">$ sed -i 's/\r$//' bomdia.sh
+$ cat -A bomdia.sh
+#!/bin/bash$
+echo "Bom dia"$
+$ ./bomdia.sh
+Bom dia</pre>
+<p>No <code>sed</code>: <code>-i</code> altera o próprio arquivo; <code>s/\r$//</code> troca (<code>s</code>) um <code>\r</code> no fim da linha (<code>$</code>) por nada.</p>
+</div>
+
+<div class="cenario">
+<strong>"interpretador incorreto" com o shebang digitado errado</strong>
+<pre class="term">$ ./digitado.sh
+bash: ./digitado.sh: /bin/bahs: interpretador incorreto: Arquivo ou diretório inexistente
+$ head -n 1 digitado.sh
+#!/bin/bahs                       « "bahs" em vez de "bash"</pre>
+<p><strong>O que aconteceu:</strong> o programa que o shebang aponta não existe. A mensagem cita o caminho exato que foi procurado; compare letra por letra. Com <code>env</code>, o erro seria <code>env: ‘bahs’: Arquivo ou diretório inexistente</code>.</p>
+<p><strong>Como resolver:</strong> corrija a primeira linha para <code>#!/usr/bin/env bash</code>. Ela precisa ser a linha 1, começar com <code>#!</code> sem espaço antes e não pode vir depois de uma linha em branco.</p>
+</div>
+
+<div class="cenario">
+<strong>Digitei <code>cat &gt; ola.sh</code> e o terminal "travou"</strong>
+<p><strong>O que aconteceu:</strong> sem o <code>&lt;&lt;'EOF'</code>, o <code>cat</code> fica esperando você digitar o conteúdo, sem mostrar prompt. Não travou: está gravando cada linha que você digita.</p>
+<p><strong>Como resolver:</strong> digite as linhas do script e, numa linha vazia, aperte <kbd>Ctrl</kbd>+<kbd>D</kbd> (fim da entrada). O arquivo é gravado com o que você digitou. Se quiser desistir, <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+</div>
+
+<div class="cenario">
+<strong>Rodei e não apareceu nada</strong>
+<p><strong>O que aconteceu:</strong> o script só tem comandos que não mostram nada (atribuir variáveis, <code>cd</code>, <code>mkdir</code>…), ou o arquivo está vazio.</p>
+<p><strong>Como confirmar:</strong> <code>cat ola.sh</code> mostra o conteúdo; <code>echo $?</code> logo depois de rodar diz se terminou bem (<code>0</code>). Para ver cada linha sendo executada, rode com <code>bash -x ola.sh</code> (veja <a href="depuracao.html">Depurar</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>O que é</th><th>Exemplo</th></tr>
+<tr><td><code>#!/usr/bin/env bash</code></td><td>Shebang: roda o arquivo com o <code>bash</code> do <code>PATH</code></td><td>Primeira linha do script</td></tr>
+<tr><td><code>#!/bin/bash</code></td><td>Shebang com caminho fixo</td><td>Primeira linha do script</td></tr>
+<tr><td><code># texto</code></td><td>Comentário até o fim da linha</td><td><code># faz o backup</code></td></tr>
+<tr><td><code>chmod +x arq</code></td><td>Dá permissão de execução</td><td><code>chmod +x ola.sh</code></td></tr>
+<tr><td><code>./arq</code></td><td>Roda o arquivo da pasta atual</td><td><code>./ola.sh</code></td></tr>
+<tr><td><code>~/.local/bin</code>, <code>~/bin</code></td><td>Pastas pessoais para scripts que rodam pelo nome</td><td><code>mv ola.sh ~/.local/bin/</code></td></tr>
+<tr><td><code>cat -A arq</code></td><td>Mostra caracteres invisíveis (<code>^M</code> = <code>\r</code>)</td><td><code>cat -A ola.sh</code></td></tr>
+<tr><td><code>sed -i 's/\r$//' arq</code></td><td>Converte fim de linha do Windows para Linux</td><td><code>sed -i 's/\r$//' ola.sh</code></td></tr>
+<tr><td>Código 126</td><td>Existe, mas não pode ser executado</td><td>Faltou <code>chmod +x</code>; shebang errado</td></tr>
+<tr><td>Código 127</td><td>Comando não encontrado</td><td>Faltou <code>./</code>; nome errado</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A primeira linha</h3>
+<p>Complete o shebang recomendado neste guia:</p>
+<div class="ex-code"><input data-answer="#!/usr/bin/env bash|#! /usr/bin/env bash" aria-label="shebang"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Permissão</h3>
+<p>Complete para dar permissão de execução ao script <code>limpa.sh</code>:</p>
+<div class="ex-code">chmod <input data-answer="+x|u+x|a+x|755|700" aria-label="permissão"> limpa.sh</div>
+</div>
+
+<div class="exercise">
+<h3>3. Rodar da pasta atual</h3>
+<p>O script <code>limpa.sh</code> está na pasta atual e já tem permissão. Complete para rodá-lo:</p>
+<div class="ex-code"><input data-answer="./limpa.sh|bash limpa.sh" aria-label="comando"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Ao rodar <code>./relatorio.sh</code> aparece <code>bash: ./relatorio.sh: /bin/bash^M: interpretador incorreto</code>. Qual é a causa?</p>
+<label><input type="radio" name="q4"> O Bash não está instalado.</label>
+<label><input type="radio" name="q4"> Falta o <code>chmod +x</code>.</label>
+<label><input type="radio" name="q4"> O arquivo tem fim de linha do Windows (<code>\r\n</code>).</label>
+<label><input type="radio" name="q4"> O nome do arquivo tem espaço.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. A Ana digitou <code>ola.sh</code> (sem <code>./</code>) na pasta onde o script está e recebeu "comando não encontrado". Por quê?</p>
+<label><input type="radio" name="q5"> Porque o script não tem permissão de execução.</label>
+<label><input type="radio" name="q5"> Porque, sem barra no nome, o Bash procura só nas pastas do <code>PATH</code>, e a pasta atual não está lá.</label>
+<label><input type="radio" name="q5"> Porque scripts só rodam com <code>bash ola.sh</code>.</label>
+<label><input type="radio" name="q5"> Porque falta a extensão <code>.bash</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Qual linha é um comentário inteiro, ignorado pelo Bash?</p>
+<label><input type="radio" name="q6"> <code># apaga os temporários</code></label>
+<label><input type="radio" name="q6"> <code>echo "# apaga os temporários"</code></label>
+<label><input type="radio" name="q6"> <code>echo apaga#temporarios</code></label>
+<label><input type="radio" name="q6"> <code>rm *.tmp</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Um script é um arquivo de texto com comandos; o Bash executa de cima para baixo.</li>
+  <li>A primeira linha é o shebang: <code>#!/usr/bin/env bash</code>. O resto depois de <code>#</code> são comentários.</li>
+  <li><code>chmod +x arquivo</code> uma vez; depois <code>./arquivo</code>. Sem o <code>x</code>: "Permissão negada" (126). Sem o <code>./</code>: "comando não encontrado" (127).</li>
+  <li>Para rodar pelo nome, de qualquer pasta, guarde em <code>~/.local/bin</code> (ou <code>~/bin</code>).</li>
+  <li><code>^M</code> no erro = fim de linha do Windows: confira com <code>cat -A</code> e corrija com <code>sed -i 's/\r$//'</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

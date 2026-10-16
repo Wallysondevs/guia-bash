@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Formas de Executar — ./script, bash, source, PATH, bash -c e exec | Guia Bash</title>
+<meta name="description" content="As formas de executar um script Bash: ./script.sh, bash script.sh, source e ponto, pelo PATH, bash -c e exec. Qual precisa de chmod +x, qual roda em outro processo e por que o cd dentro do script não muda a sua pasta.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Formas de Executar</span></h1>
+
+<p class="intro">Existe mais de um jeito de rodar um script, e eles <strong>não</strong> são equivalentes. Alguns abrem um Bash novo, separado do seu; outro executa as linhas dentro do próprio terminal em que você está. Essa diferença explica um dos mistérios mais comuns de quem começa: "coloquei um <code>cd</code> no script e a minha pasta não mudou".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As seis formas: <code>./script.sh</code>, <code>bash script.sh</code>, <code>source</code> (e o ponto <code>.</code>), pelo <code>PATH</code>, <code>bash -c</code> e <code>exec</code>.</li>
+  <li>Qual precisa de <code>chmod +x</code> e qual roda num processo separado.</li>
+  <li>Por que o <code>cd</code> e as variáveis de um script "somem" quando ele termina, e como usar <code>source</code> quando você quer que fiquem.</li>
+  <li>O que são <code>$0</code> e <code>$BASH_SOURCE</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Conceito: processo pai e processo filho</h2>
+<p>Cada programa que roda no computador é um <strong>processo</strong>, com um número de identificação, o <strong>PID</strong> (<em>process ID</em>). O terminal em que você digita é um processo <code>bash</code>. A variável especial <code>$$</code> guarda o PID do Bash atual.</p>
+
+<p>Quando você roda um script do jeito "normal", o seu Bash cria um <strong>Bash filho</strong>: um processo novo, que lê o script, executa e termina. O filho recebe uma <em>cópia</em> do ambiente do pai, mas tudo o que ele muda (pasta atual, variáveis) morre com ele. É como mandar alguém fazer um serviço em outra sala: ele pode arrumar a sala dele, mas a sua continua igual.</p>
+
+<pre class="syntax">  ./vai.sh  (processo filho)                 source vai.sh  (mesmo processo)
+
+  seu bash (PID 25786)                       seu bash (PID 25786)
+     │                                          │
+     └──► bash filho (PID 25791)                └──► lê vai.sh e executa
+            cd ~/Documentos                            cd ~/Documentos
+            cor=azul                                   cor=azul
+            termina ✗ (leva tudo junto)             você continua em Documentos, cor=azul</pre>
+
+<p>Vamos provar com um script que muda de pasta, cria uma variável e mostra o próprio PID:</p>
+
+<pre class="file" data-file="vai.sh">#!/usr/bin/env bash
+# vai.sh — entra em Documentos e cria uma variável
+cd ~/Documentos
+cor=azul
+echo "Dentro do script: estou em $PWD, cor=$cor, PID $$"
+</pre>
+
+<p>Os números de PID abaixo mudam a cada vez que você roda; o que importa é comparar se são iguais ou diferentes.</p>
+
+<hr>
+
+<h2>Forma 1: <code>./script.sh</code></h2>
+<p>É a forma que você viu em <a href="script-primeiro.html">Seu Primeiro Script</a>. O sistema lê o shebang (<code>#!/usr/bin/env bash</code>) e inicia o interpretador indicado. Por isso exige a permissão de execução.</p>
+
+<dl class="anatomy">
+  <dt>./</dt><dd>O caminho: o arquivo está na pasta atual.</dd>
+  <dt>vai.sh</dt><dd>O script. Precisa ter o <code>x</code> (<code>chmod +x</code>) e um shebang.</dd>
+</dl>
+
+<pre class="term">$ echo "Meu shell: PID $$"
+Meu shell: PID 25786
+$ chmod +x vai.sh
+$ ./vai.sh
+Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 25791     « outro PID: é um filho
+$ pwd
+/home/ana                                                                « você não saiu do lugar
+$ echo "cor=$cor"
+cor=                                                                     « a variável não existe aqui</pre>
+
+<p>Dentro do script, o <code>cd</code> funcionou: o <code>$PWD</code> mostra <code>Documentos</code>. Mas isso aconteceu no processo filho (PID 25791). Quando ele terminou, a pasta e a variável dele sumiram. O seu terminal (PID 25786) continua em <code>/home/ana</code>, e <code>$cor</code> está vazia.</p>
+
+<div class="tip">
+<strong>Isso é uma proteção, não um defeito</strong>
+<p>Imagine se cada script que você roda pudesse mudar a sua pasta, apagar suas variáveis ou trocar o seu <code>PATH</code>. Rodar em processo separado garante que o script não bagunça o seu terminal.</p>
+</div>
+
+<hr>
+
+<h2>Forma 2: <code>bash script.sh</code></h2>
+<p>Aqui é você quem chama o Bash e entrega o arquivo para ele ler. O sistema não precisa "executar" o arquivo, só o Bash precisa lê-lo. Por isso <strong>não precisa</strong> de <code>chmod +x</code>, e o shebang é ignorado (quem vai ler já foi escolhido: o <code>bash</code>).</p>
+
+<dl class="anatomy">
+  <dt>bash</dt><dd>Inicia um Bash novo (um processo filho).</dd>
+  <dt>vai.sh</dt><dd>O arquivo que ele vai ler e executar. Basta poder lê-lo.</dd>
+</dl>
+
+<pre class="term">$ ls -l vai.sh
+-rw-rw-r-- 1 ana ana 156 out 15 10:30 vai.sh       « sem x
+$ ./vai.sh
+bash: ./vai.sh: Permissão negada
+$ bash vai.sh
+Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 25789     « funcionou, mesmo sem x
+$ pwd
+/home/ana</pre>
+
+<p>Continua sendo um filho (PID diferente), então o <code>cd</code> também não fica. É a forma ideal para testar um script rapidinho, para rodar arquivos de um pendrive (que não guarda permissões) e para escolher o interpretador na hora (<code>bash -x vai.sh</code>, para ver cada linha; veja <a href="depuracao.html">Depurar</a>).</p>
+
+<div class="warning">
+<strong><code>sh script.sh</code> não é a mesma coisa</strong>
+<p><code>sh</code> pode ser outro shell. No Debian e no Ubuntu, é o <code>dash</code>, que não entende recursos do Bash como <code>[[ ]]</code>:</p>
+<pre class="term">$ bash teste-sh.sh
+Ana começa com A
+$ sh teste-sh.sh
+teste-sh.sh: 3: [[: not found          « o dash não conhece [[</pre>
+<p>Se o script é de Bash, rode com <code>bash</code> ou com <code>./</code>. Veja <a href="portabilidade.html">POSIX sh e Bashismos</a>.</p>
+</div>
+
+<hr>
+
+<h2>Forma 3: <code>source script.sh</code> ou <code>. script.sh</code></h2>
+<p><code>source</code> (em inglês, "fonte", no sentido de "puxar de") manda o <strong>seu próprio Bash</strong> ler o arquivo e executar cada linha, como se você tivesse digitado. Não há processo filho. Então tudo o que o script muda, fica.</p>
+
+<dl class="anatomy">
+  <dt>source</dt><dd>Comando interno do Bash: "leia este arquivo e execute aqui mesmo".</dd>
+  <dt>vai.sh</dt><dd>O arquivo. Não precisa de <code>x</code> nem de shebang.</dd>
+</dl>
+
+<pre class="term">$ source vai.sh
+Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 25786     « o MESMO PID do seu shell
+$ pwd
+/home/ana/Documentos                                                    « agora você mudou de pasta
+$ echo "cor=$cor"
+cor=azul                                                                « e a variável ficou</pre>
+
+<p>O PID é o mesmo do terminal (25786): não houve filho. O <code>cd</code> e o <code>cor=azul</code> aconteceram no seu shell.</p>
+
+<p>O ponto <code>.</code> é o mesmo comando, com um nome mais curto e mais antigo (vem do <code>sh</code> original; <code>source</code> é o nome do Bash). Repare no espaço depois do ponto:</p>
+
+<pre class="term">$ cd
+$ unset cor
+$ . vai.sh
+Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 25786</pre>
+
+<dl class="anatomy">
+  <dt>.</dt><dd>O comando "ponto", igual ao <code>source</code>. Funciona também no <code>sh</code>.</dd>
+  <dt>vai.sh</dt><dd>O arquivo. Não confunda <code>. vai.sh</code> (ponto, espaço, nome) com <code>./vai.sh</code> (caminho).</dd>
+</dl>
+
+<h3>Para que serve, na prática</h3>
+<ul>
+  <li><strong>Recarregar a configuração do terminal</strong> depois de editar: <code>source ~/.bashrc</code>.</li>
+  <li><strong>Carregar variáveis</strong> de um arquivo de configuração, dentro de um script ou no terminal.</li>
+  <li><strong>Carregar funções</strong> de uma "biblioteca" (veja <a href="funcoes.html">Funções</a>).</li>
+</ul>
+
+<pre class="file" data-file="config.sh"># config.sh — configurações do projeto (para carregar com source)
+PROJETO="site"
+PASTA="$HOME/Documentos/projetos/site"
+</pre>
+
+<pre class="term">$ source config.sh
+$ echo "Projeto $PROJETO em $PASTA"
+Projeto site em /home/ana/Documentos/projetos/site</pre>
+
+<p>Esse arquivo não tem shebang nem <code>x</code>: ele não foi feito para ser executado, e sim para ser carregado.</p>
+
+<div class="warning">
+<strong><code>exit</code> num arquivo carregado com <code>source</code> fecha o seu terminal</strong>
+<p>Como as linhas rodam no seu shell, um <code>exit</code> lá dentro encerra o <strong>seu shell</strong>: a janela do terminal fecha. Num arquivo feito para <code>source</code>, use <code>return</code> para sair mais cedo.</p>
+</div>
+
+<div class="try" data-setup="printf 'cd ~/Documentos\ncor=azul\necho &quot;Dentro do script: estou em $PWD&quot;\n' &gt; vai.sh" data-goal="cwd:~/Documentos,var:cor=azul,ran:vai\.sh" data-solucao="source vai.sh">
+<p class="try-task"><strong>Missão:</strong> o arquivo <code>vai.sh</code> está na pasta da Ana. Rode-o primeiro com <code>bash vai.sh</code> e confira com <code>pwd</code> que você não saiu do lugar. Depois rode-o de um jeito que deixe você <strong>dentro de <code>Documentos</code></strong> e com a variável <code>cor</code> valendo <code>azul</code>.</p>
+</div>
+
+<hr>
+
+<h2>Forma 4: pelo nome, via <code>PATH</code></h2>
+<p>Se o script está numa pasta do <code>PATH</code> (como <code>~/bin</code> ou <code>~/.local/bin</code>), você roda só pelo nome, de qualquer pasta. Por dentro, é igual ao <code>./</code>: precisa de <code>x</code>, usa o shebang, e roda num processo filho.</p>
+
+<pre class="term">$ mkdir -p ~/bin; mv quem.sh ~/bin/
+$ source ~/.profile                « o .profile põe ~/bin no PATH se ela existir
+$ quem.sh
+$0          = /home/ana/bin/quem.sh
+BASH_SOURCE = /home/ana/bin/quem.sh</pre>
+
+<p>O <code>$0</code>, que você vai ver logo abaixo, mostra o caminho completo onde o Bash achou o script. Como o <code>PATH</code> funciona por dentro está em <a href="path.html">PATH e Onde os Comandos Moram</a>.</p>
+
+<hr>
+
+<h2>Forma 5: <code>bash -c 'comandos'</code></h2>
+<p>Não precisa nem de arquivo: o <code>-c</code> (de <em>command</em>) entrega um texto com comandos para um Bash novo executar. É muito usado quando outro programa precisa rodar um comando de shell (o <code>find -exec</code>, o <code>xargs</code>, o <code>sudo</code>, o <code>cron</code>).</p>
+
+<dl class="anatomy">
+  <dt>bash</dt><dd>Um Bash novo (filho).</dd>
+  <dt>-c</dt><dd>"O próximo argumento é o código a executar".</dd>
+  <dt>'echo "$0 recebeu: $1 e $2"'</dt><dd>O código, entre aspas simples para o <strong>seu</strong> shell não trocar os <code>$</code> antes da hora.</dd>
+  <dt>meuteste</dt><dd>O primeiro argumento depois do código vira o <code>$0</code> (o "nome" do mini-script).</dd>
+  <dt>maçã uva</dt><dd>Os seguintes viram <code>$1</code>, <code>$2</code>…</dd>
+</dl>
+
+<pre class="term">$ bash -c 'echo "Olá de um bash novo, PID $$"'
+Olá de um bash novo, PID 26035
+$ bash -c 'echo "$0 recebeu: $1 e $2"' meuteste maçã uva
+meuteste recebeu: maçã e uva
+$ bash -c 'cd /tmp; pwd'; pwd
+/tmp                                   « o filho foi para /tmp
+/home/ana                              « você continua em casa</pre>
+
+<hr>
+
+<h2>Forma 6: <code>exec</code></h2>
+<p><code>exec</code> não cria filho: ele <strong>troca</strong> o processo atual pelo comando. O Bash que rodou o <code>exec</code> deixa de existir, e o comando novo assume o lugar dele, com o mesmo PID. Tudo o que vinha depois do <code>exec</code> nunca roda:</p>
+
+<pre class="term">$ bash -c 'echo antes; exec echo "agora sou o echo"; echo "isto nunca roda"'
+antes
+agora sou o echo                       « a terceira parte sumiu: o bash virou o echo</pre>
+
+<p>No terminal, o uso mais comum é <code>exec bash</code>: troca o seu shell por um Bash novinho (relendo o <code>~/.bashrc</code>), sem empilhar um filho em cima do outro. Compare com digitar só <code>bash</code>:</p>
+
+<pre class="term">$ echo "PID: $$"
+PID: 36609
+$ bash                                 « abre um filho por cima
+$ echo "PID: $$"
+PID: 36610
+$ exit                                 « sai do filho e volta ao pai
+exit
+$ echo "PID: $$"
+PID: 36609
+$ exec bash                            « troca o shell, mesmo PID
+$ echo "PID: $$"
+PID: 36609</pre>
+
+<p>Em scripts, <code>exec</code> aparece no fim de "scripts de partida", que preparam o ambiente e depois se transformam no programa principal (<code>exec python3 app.py</code>). O <code>exec</code> também serve para redirecionar o próprio script, assunto de <a href="descritores.html">Descritores de Arquivo</a>.</p>
+
+<div class="warning">
+<strong>Não rode <code>exec</code> de algo que termina, direto no terminal</strong>
+<p><code>exec ls</code> no terminal mostra a lista e <strong>fecha a janela</strong>: o seu shell virou o <code>ls</code>, e o <code>ls</code> terminou.</p>
+</div>
+
+<hr>
+
+<h2>Qual usar? A tabela das diferenças</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Precisa de <code>chmod +x</code>?</th><th>Usa o shebang?</th><th>Roda em outro processo?</th><th><code>cd</code> e variáveis ficam no seu shell?</th><th>Use quando…</th></tr>
+<tr><td><code>./script.sh</code></td><td>Sim</td><td>Sim</td><td>Sim (filho)</td><td>Não</td><td>O jeito normal de rodar um script.</td></tr>
+<tr><td><code>bash script.sh</code></td><td>Não</td><td>Não (sempre bash)</td><td>Sim (filho)</td><td>Não</td><td>Testar, rodar sem <code>x</code>, usar <code>bash -x</code>.</td></tr>
+<tr><td><code>source script.sh</code> / <code>. script.sh</code></td><td>Não</td><td>Não</td><td><strong>Não</strong> (mesmo shell)</td><td><strong>Sim</strong></td><td>Carregar configurações e funções; <code>source ~/.bashrc</code>.</td></tr>
+<tr><td><code>script.sh</code> (pelo PATH)</td><td>Sim</td><td>Sim</td><td>Sim (filho)</td><td>Não</td><td>Seus scripts do dia a dia, de qualquer pasta.</td></tr>
+<tr><td><code>bash -c '…'</code></td><td>(não há arquivo)</td><td>—</td><td>Sim (filho)</td><td>Não</td><td>Um comando curto passado por outro programa.</td></tr>
+<tr><td><code>exec comando</code></td><td>Sim, se for um script</td><td>Sim</td><td>Não: <strong>substitui</strong> o atual</td><td>O shell atual deixa de existir</td><td>Fim de script de partida; <code>exec bash</code>.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quem sou eu? <code>$0</code> e <code>$BASH_SOURCE</code></h2>
+<p>Dentro de um script, <code>$0</code> guarda <strong>como o script foi chamado</strong>, e <code>${BASH_SOURCE[0]}</code> guarda <strong>o arquivo que está sendo lido</strong>. Quase sempre são iguais. A diferença aparece com <code>source</code>:</p>
+
+<pre class="file" data-file="quem.sh">#!/usr/bin/env bash
+echo "\$0          = $0"
+echo "BASH_SOURCE = ${BASH_SOURCE[0]}"
+</pre>
+
+<p>O <code>\$</code> com barra é só para o <code>echo</code> mostrar o texto <code>$0</code> literalmente, antes do valor.</p>
+
+<pre class="term">$ ./quem.sh
+$0          = ./quem.sh
+BASH_SOURCE = ./quem.sh
+$ bash quem.sh
+$0          = quem.sh                « exatamente o que você digitou depois do bash
+BASH_SOURCE = quem.sh
+$ source quem.sh
+$0          = bash                   « com source, $0 é o seu shell!
+BASH_SOURCE = quem.sh                « mas BASH_SOURCE continua sendo o arquivo
+$ echo $0
+bash</pre>
+
+<p>Por isso, para mensagens de uso (<code>Uso: $0 ARQUIVO</code>), o <code>$0</code> está ótimo. Para descobrir "em que arquivo estou", use <code>${BASH_SOURCE[0]}</code>. Comparando os dois, um arquivo sabe se foi rodado direto ou carregado com <code>source</code>:</p>
+
+<pre class="file" data-file="biblioteca.sh">#!/usr/bin/env bash
+saudar() { echo "Olá, $1!"; }
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  echo "Rodando direto: vou testar a função"
+  saudar teste
+fi
+</pre>
+
+<pre class="term">$ ./biblioteca.sh
+Rodando direto: vou testar a função
+Olá, teste!
+$ source biblioteca.sh                « carregado: o if não rodou, só a função foi criada
+$ saudar Ana
+Olá, Ana!</pre>
+
+<div class="tryscript" data-file="quem.sh" data-args="banana">
+<p class="try-task"><strong>Brinque:</strong> rode o script e veja o <code>$0</code>. Depois acrescente uma linha <code>echo "Primeiro argumento: $1"</code> e mude o argumento no campo. (O simulador roda com <code>bash quem.sh</code>.)</p>
+<pre class="script">#!/usr/bin/env bash
+echo "\$0          = $0"
+echo "BASH_SOURCE = ${BASH_SOURCE[0]}"
+</pre>
+</div>
+
+<hr>
+
+<h2>Antes de rodar: <code>bash -n</code> e <code>bash -x</code></h2>
+<p>Duas opções do <code>bash</code> que você vai usar muito. Elas têm uma aula própria, <a href="depuracao.html">Depurar</a>; aqui, só para conhecer:</p>
+<ul>
+  <li><code>bash -n script.sh</code> (de <em>noexec</em>): só <strong>confere a sintaxe</strong>, sem executar nada. Silêncio e código 0 = nenhum erro de escrita encontrado.</li>
+  <li><code>bash -x script.sh</code> (de <em>xtrace</em>): executa mostrando cada comando, já com as variáveis trocadas, numa linha que começa com <code>+</code>.</li>
+</ul>
+
+<pre class="term">$ bash -n vai.sh; echo $?
+0
+$ bash -x vai.sh
++ cd /home/ana/Documentos
++ cor=azul
++ echo 'Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 26044'
+Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 26044</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"O <code>cd</code> do meu script não funciona"</strong>
+<pre class="term">$ ./vai.sh
+Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 25791
+$ pwd
+/home/ana</pre>
+<p><strong>O que aconteceu:</strong> funcionou, mas no processo filho, que já terminou. A sua pasta é do seu shell, e um filho não muda o pai.</p>
+<p><strong>Como resolver:</strong> rode com <code>source vai.sh</code>. Ou, se for algo que você usa sempre, crie uma <a href="funcoes.html">função</a> ou um <a href="alias.html">alias</a> no <code>~/.bashrc</code>: eles rodam no seu shell.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada" com <code>./</code>, mas <code>bash script.sh</code> funciona</strong>
+<pre class="term">$ ./vai.sh
+bash: ./vai.sh: Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> falta o <code>x</code>. O <code>bash vai.sh</code> não precisa dele, porque só lê o arquivo.</p>
+<p><strong>Como resolver:</strong> <code>chmod +x vai.sh</code>. Se o arquivo está num pendrive ou disco do Windows, o <code>chmod</code> pode não ter efeito; use <code>bash vai.sh</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal fechou sozinho</strong>
+<p><strong>O que aconteceu:</strong> você rodou com <code>source</code> (ou <code>.</code>) um script que tem <code>exit</code>, ou rodou <code>exec</code> de um comando que termina. O <code>exit</code> encerrou o seu próprio shell.</p>
+<p><strong>Como resolver:</strong> rode scripts "normais" com <code>./</code> ou <code>bash</code>; deixe o <code>source</code> para arquivos de configuração. Num arquivo feito para <code>source</code>, troque <code>exit</code> por <code>return</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>[[: not found</code> ou erros estranhos que não acontecem no terminal</strong>
+<pre class="term">$ sh teste-sh.sh
+teste-sh.sh: 3: [[: not found</pre>
+<p><strong>O que aconteceu:</strong> o script foi rodado pelo <code>sh</code> (que no Debian/Ubuntu é o <code>dash</code>), e não pelo Bash. Também acontece quando o shebang é <code>#!/bin/sh</code>.</p>
+<p><strong>Como resolver:</strong> rode com <code>bash teste-sh.sh</code> ou <code>./teste-sh.sh</code>, e use <code>#!/usr/bin/env bash</code> no shebang.</p>
+</div>
+
+<div class="cenario">
+<strong>A variável do script não aparece no terminal (e não deu erro)</strong>
+<pre class="term">$ bash vai.sh
+Dentro do script: estou em /home/ana/Documentos, cor=azul, PID 25789
+$ echo "cor=$cor"
+cor=</pre>
+<p><strong>O que aconteceu:</strong> nada saiu errado: variáveis do filho não voltam para o pai. Nem com <code>export</code>: o <code>export</code> só passa do pai para os filhos, nunca o contrário (veja <a href="variaveis.html">Variáveis, Escopo e export</a>).</p>
+<p><strong>Como resolver:</strong> <code>source vai.sh</code>, ou faça o script <strong>mostrar</strong> o valor e capture com <code>cor=$(./script.sh)</code> (<a href="substituicao-comando.html">Substituição de Comando</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>./arq</code></td><td>Executa pelo caminho, usando o shebang (filho)</td><td><code>./ola.sh</code></td></tr>
+<tr><td><code>bash arq</code></td><td>Um Bash novo lê o arquivo (filho; sem <code>x</code>)</td><td><code>bash ola.sh</code></td></tr>
+<tr><td><code>source arq</code></td><td>Executa no shell atual</td><td><code>source ~/.bashrc</code></td></tr>
+<tr><td><code>. arq</code></td><td>O mesmo que <code>source</code> (também no <code>sh</code>)</td><td><code>. ./config.sh</code></td></tr>
+<tr><td><code>nome</code></td><td>Procura no <code>PATH</code> e executa (filho)</td><td><code>ola.sh</code></td></tr>
+<tr><td><code>bash -c 'cód' nome a b</code></td><td>Roda o código; <code>nome</code> vira <code>$0</code>, <code>a</code> vira <code>$1</code>…</td><td><code>bash -c 'echo $1' x oi</code></td></tr>
+<tr><td><code>exec cmd</code></td><td>Substitui o shell atual pelo comando</td><td><code>exec bash</code></td></tr>
+<tr><td><code>$$</code></td><td>PID do shell atual</td><td><code>echo $$</code></td></tr>
+<tr><td><code>$0</code></td><td>Como o script foi chamado (com <code>source</code>: o shell)</td><td><code>echo "Uso: $0 ARQ"</code></td></tr>
+<tr><td><code>${BASH_SOURCE[0]}</code></td><td>O arquivo que está sendo lido</td><td><code>dirname "${BASH_SOURCE[0]}"</code></td></tr>
+<tr><td><code>bash -n arq</code></td><td>Só confere a sintaxe</td><td><code>bash -n ola.sh</code></td></tr>
+<tr><td><code>bash -x arq</code></td><td>Mostra cada comando ao executar</td><td><code>bash -x ola.sh</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Rodar sem permissão de execução</h3>
+<p>O arquivo <code>relatorio.sh</code> não tem <code>x</code>. Complete para rodá-lo num Bash novo mesmo assim:</p>
+<div class="ex-code"><input data-answer="bash" aria-label="comando"> relatorio.sh</div>
+</div>
+
+<div class="exercise">
+<h3>2. Recarregar a configuração</h3>
+<p>Você editou o <code>~/.bashrc</code>. Complete para aplicar as mudanças no terminal atual, sem abrir outro:</p>
+<div class="ex-code"><input data-answer="source|." aria-label="comando"> ~/.bashrc</div>
+</div>
+
+<div class="exercise">
+<h3>3. O nome do mini-script</h3>
+<p>Complete para que o comando mostre <code>Olá, Carla</code>:</p>
+<div class="ex-code">bash -c 'echo "Olá, $1"' teste <input data-answer="Carla" aria-label="argumento"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O script <code>entra.sh</code> tem só a linha <code>cd /tmp</code>. A Ana roda <code>./entra.sh</code> e depois <code>pwd</code>. O que aparece?</p>
+<label><input type="radio" name="q4"> <code>/tmp</code>, porque o script mudou de pasta.</label>
+<label><input type="radio" name="q4"> Um erro, porque <code>cd</code> não funciona em scripts.</label>
+<label><input type="radio" name="q4"> A pasta em que ela já estava, porque o <code>cd</code> aconteceu num processo filho.</label>
+<label><input type="radio" name="q4"> Nada, o terminal fecha.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Qual forma executa o arquivo dentro do shell atual, deixando as variáveis criadas por ele?</p>
+<label><input type="radio" name="q5"> <code>bash config.sh</code></label>
+<label><input type="radio" name="q5"> <code>. config.sh</code></label>
+<label><input type="radio" name="q5"> <code>./config.sh</code></label>
+<label><input type="radio" name="q5"> <code>bash -c config.sh</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Dentro de um arquivo carregado com <code>source lib.sh</code>, quanto vale <code>$0</code> no terminal da Ana?</p>
+<label><input type="radio" name="q6"> <code>lib.sh</code></label>
+<label><input type="radio" name="q6"> <code>./lib.sh</code></label>
+<label><input type="radio" name="q6"> Vazio.</label>
+<label><input type="radio" name="q6"> <code>bash</code>, o nome do shell; o arquivo está em <code>${BASH_SOURCE[0]}</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>./script.sh</code> e o nome pelo <code>PATH</code> precisam de <code>x</code> e usam o shebang; <code>bash script.sh</code> não precisa de <code>x</code>.</li>
+  <li>Essas três formas rodam num <strong>processo filho</strong>: <code>cd</code> e variáveis do script somem quando ele termina.</li>
+  <li><code>source</code> (ou <code>.</code>) executa no seu shell: o que o arquivo muda, fica. Nada de <code>exit</code> nesses arquivos.</li>
+  <li><code>bash -c '…'</code> roda um código curto num Bash novo; <code>exec</code> troca o shell atual pelo comando.</li>
+  <li><code>$0</code> é como o script foi chamado; <code>${BASH_SOURCE[0]}</code> é o arquivo sendo lido.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
