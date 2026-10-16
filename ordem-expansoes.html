@@ -169,9 +169,9 @@ $ echo $((i++)) $((i++)) $i
 
 <p>E o valor de uma variável é colocado <strong>como texto</strong>; ele não é expandido de novo:</p>
 
-<pre class="term">$ y='$HOME'
+<pre class="term">$ y='custa $HOME reais'
 $ echo $y
-$HOME                  « o $ do valor não é procurado outra vez</pre>
+custa $HOME reais      « o $ do valor não é procurado outra vez</pre>
 
 <h3>④ Separação de palavras: só no que veio de uma expansão sem aspas</h3>
 <p>Depois da etapa ③, o Bash olha <strong>só para os pedaços que vieram de expansões</strong> (<code>$var</code>, <code>$(cmd)</code>, <code>$(( ))</code>) e que estavam <strong>sem aspas</strong>. Ele os parte em espaço, TAB e quebra de linha (os caracteres da variável <code>IFS</code>). Espaços repetidos viram um só:</p>
