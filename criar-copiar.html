@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash mkdir, touch, cp e mv — criar, copiar e mover | Guia Bash</title>
+<meta name="description" content="Aprenda a criar pastas e arquivos (mkdir, touch), copiar (cp) e mover ou renomear (mv) no terminal, com cada parte do comando explicada, o que o Bash faz antes (chaves, curingas, aspas), códigos de saída e os erros reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Criar, Copiar e Mover</span></h1>
+
+<p class="intro">Quatro comandos fazem quase todo o trabalho de organizar arquivos: <code>mkdir</code> cria pastas, <code>touch</code> cria arquivos vazios, <code>cp</code> copia e <code>mv</code> move ou renomeia. Eles não fazem parte do Bash: são programas separados. Mas o Bash trabalha <strong>antes</strong> deles, montando a lista de nomes que cada um recebe, e entender essa divisão de trabalho evita os erros mais comuns.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Criar pastas (inclusive várias e uma árvore inteira) com <code>mkdir</code> e arquivos com <code>touch</code>.</li>
+  <li>Copiar arquivos e pastas com <code>cp</code>, sem sobrescrever nada por engano (<code>-i</code>, <code>--update=none</code>, <code>-u</code>).</li>
+  <li>Por que renomear e mover são a mesma coisa para o <code>mv</code>.</li>
+  <li>Como o Bash ajuda: chaves <code>{a,b}</code>, curingas <code>*</code> e aspas em nomes com espaço.</li>
+  <li>Ler o código de saída (<code>echo $?</code>) e resolver os erros reais desses comandos.</li>
+</ul>
+</div>
+
+<p>Os exemplos acontecem na pasta pessoal da Ana (<code>/home/ana</code>, o <code>~</code>), a mesma do simulador. Você pode repetir tudo nas caixas "Experimente".</p>
+
+<hr>
+
+<h2>Quem faz o quê: o Bash e o programa</h2>
+<p>Quando você digita <code>mkdir aulas provas</code>, acontecem duas etapas:</p>
+<ol>
+  <li>O <strong>Bash</strong> lê a linha, separa as palavras nos espaços, expande chaves <code>{ }</code>, curingas <code>*</code> e variáveis <code>$x</code>, e tira as aspas.</li>
+  <li>Só então ele chama o <strong>programa</strong> <code>mkdir</code>, entregando a lista final de palavras: <code>aulas</code> e <code>provas</code>.</li>
+</ol>
+<p>O <code>mkdir</code> nunca vê as chaves, os asteriscos nem as aspas que você digitou. Ele recebe só o resultado. Guarde isso: quase todo erro desta aula é uma diferença entre o que você <em>quis</em> dizer e a lista que o Bash <em>montou</em>. Para ver essa lista, troque o comando por <code>echo</code>, que apenas repete o que recebeu.</p>
+
+<pre class="term">$ type mkdir cp mv touch
+mkdir é /usr/bin/mkdir          « programas de verdade, em /usr/bin
+cp é /usr/bin/cp
+mv é /usr/bin/mv
+touch é /usr/bin/touch</pre>
+
+<p>O <code>type</code> (veja <a href="ajuda.html">Obtendo Ajuda</a>) mostra que nenhum dos quatro é um comando interno do Bash: são programas do pacote GNU coreutils.</p>
+
+<hr>
+
+<h2>mkdir: criar uma pasta</h2>
+<p><code>mkdir</code> vem de <em>make directory</em>, "criar diretório". Diretório é o nome técnico de pasta.</p>
+
+<dl class="anatomy">
+  <dt>mkdir</dt><dd>O programa que cria pastas.</dd>
+  <dt>estudos</dt><dd>O <strong>argumento</strong>: o nome da pasta nova. Sem <code>/</code> no começo, ela é criada dentro da pasta atual.</dd>
+</dl>
+
+<pre class="term">$ mkdir estudos
+$ ls
+'Área de trabalho'   Downloads   frutas.txt   Modelos   Público
+ Documentos          estudos     Imagens      Música    Vídeos      « "estudos" apareceu</pre>
+
+<p>O <code>mkdir</code> <strong>não respondeu nada</strong>. Nos programas do Linux, silêncio é sucesso: eles só falam quando dá errado ou quando você pede. Para ter certeza, além do <code>ls</code>, existe o <strong>código de saída</strong>, um número que todo comando devolve ao Bash e que fica guardado em <code>$?</code>:</p>
+
+<pre class="term">$ mkdir estudos
+mkdir: cannot create directory ‘estudos’: Arquivo existe
+$ echo $?
+1                                      « diferente de 0: deu errado</pre>
+
+<p>Na segunda vez a pasta já existia, e o código foi <code>1</code>. Quando dá certo, o código é <code>0</code>. A mensagem mistura inglês e português porque a tradução do coreutils ainda não está completa; você verá a mesma coisa no seu terminal. O <code>$?</code> tem uma aula própria: <a href="codigo-saida.html">Código de Saída</a>.</p>
+
+<h3>Pedindo para falar: <code>-v</code></h3>
+<p>A opção <code>-v</code> (de <em>verbose</em>, "detalhado") faz o <code>mkdir</code> contar o que fez. Opções começam com hífen e mudam o comportamento do programa.</p>
+
+<pre class="term">$ mkdir -v aulas
+mkdir: foi criado o diretório 'aulas'</pre>
+
+<h3>Várias pastas de uma vez</h3>
+<p>Cada palavra separada por espaço vira um argumento, e o <code>mkdir</code> cria uma pasta para cada um:</p>
+
+<pre class="term" data-cwd="~/estudos">$ mkdir jan fev mar
+$ ls
+fev  jan  mar</pre>
+
+<h3>Nome com espaço: o Bash separa antes</h3>
+<p>Como o Bash separa as palavras nos espaços, um nome com espaço vira <strong>dois</strong> argumentos:</p>
+
+<pre class="term" data-cwd="~/estudos">$ mkdir Meus Projetos
+$ ls
+fev  jan  mar  Meus  Projetos          « duas pastas!</pre>
+
+<p>Para o Bash tratar o nome como uma palavra só, use aspas. Elas são lidas pelo Bash e removidas; o <code>mkdir</code> recebe <code>Meus Projetos</code> inteiro, sem aspas:</p>
+
+<pre class="term" data-cwd="~/estudos">$ rmdir Meus Projetos                 « desfaz o engano (rmdir apaga pastas vazias)
+$ mkdir "Meus Projetos"
+$ ls
+ fev   jan   mar  'Meus Projetos'</pre>
+
+<p>Agora o <code>ls</code> mostra o nome entre aspas simples: é o jeito dele dizer "isto é um nome só, com espaço". As aspas não fazem parte do nome. Você vai estudar todos os tipos de aspas em <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<h3>Pastas dentro de pastas: <code>-p</code></h3>
+<p>Sem opções, o <code>mkdir</code> só cria o <strong>último</strong> nível do caminho. Se uma pasta do meio não existe, ele recusa:</p>
+
+<pre class="term">$ mkdir site/css
+mkdir: cannot create directory ‘site/css’: Arquivo ou diretório inexistente
+$ echo $?
+1</pre>
+
+<p>A opção <code>-p</code> (de <em>parents</em>, "pais") cria todas as pastas que faltam no caminho, e <strong>não reclama</strong> se a pasta já existir:</p>
+
+<dl class="anatomy">
+  <dt>mkdir</dt><dd>O programa.</dd>
+  <dt>-pv</dt><dd>Duas opções juntas: <code>-p</code> (cria os pais) e <code>-v</code> (conta o que fez). <code>-pv</code> é o mesmo que <code>-p -v</code>.</dd>
+  <dt>site/css</dt><dd>O caminho completo desejado.</dd>
+</dl>
+
+<pre class="term">$ mkdir -pv site/css
+mkdir: foi criado o diretório 'site'
+mkdir: foi criado o diretório 'site/css'
+$ mkdir -p site/css
+$ echo $?
+0                                      « já existia, e mesmo assim é sucesso</pre>
+
+<div class="tip">
+<strong>Em scripts, prefira <code>mkdir -p</code></strong>
+<p>Ele garante que a pasta exista, sem quebrar o script se ela já estiver lá. Isso deixa o script seguro para rodar duas vezes.</p>
+</div>
+
+<h3>Uma árvore inteira com chaves</h3>
+<p>As <strong>chaves</strong> são uma expansão do Bash: <code>loja/{src,docs}</code> vira <code>loja/src loja/docs</code> antes de o programa rodar. Com o <code>echo</code> na frente, você vê exatamente a lista que o <code>mkdir</code> vai receber:</p>
+
+<pre class="term">$ echo mkdir -p loja/{src,docs,testes/{unidade,integracao}}
+mkdir -p loja/src loja/docs loja/testes/unidade loja/testes/integracao
+$ mkdir -pv loja/{src,docs,testes/{unidade,integracao}}
+mkdir: foi criado o diretório 'loja'
+mkdir: foi criado o diretório 'loja/src'
+mkdir: foi criado o diretório 'loja/docs'
+mkdir: foi criado o diretório 'loja/testes'
+mkdir: foi criado o diretório 'loja/testes/unidade'
+mkdir: foi criado o diretório 'loja/testes/integracao'</pre>
+
+<p>Repare que as chaves podem ficar uma dentro da outra (<code>testes/{unidade,integracao}</code>). Para conferir a árvore, o <code>find</code> lista tudo o que há dentro de uma pasta:</p>
+
+<pre class="term">$ find loja
+loja
+loja/testes
+loja/testes/integracao
+loja/testes/unidade
+loja/src
+loja/docs</pre>
+
+<p>As chaves funcionam com qualquer comando, e têm sua própria aula: <a href="chaves.html">Chaves {a,b} e {1..10}</a>. Ali você aprende também as sequências, como <code>aula{01..12}</code>.</p>
+
+<hr>
+
+<h2>touch: criar arquivos vazios</h2>
+<p><code>touch</code> quer dizer "tocar". A função original é atualizar a data de modificação de um arquivo ("tocar" nele). Se o arquivo não existe, ele cria um vazio, e por isso é o jeito mais comum de criar arquivos.</p>
+
+<dl class="anatomy">
+  <dt>touch</dt><dd>O programa.</dd>
+  <dt>anotacoes.txt</dt><dd>O arquivo a criar, ou a "tocar" se já existir.</dd>
+</dl>
+
+<pre class="term">$ touch anotacoes.txt
+$ echo $?
+0
+$ ls -l anotacoes.txt
+-rw-rw-r-- 1 ana ana 0 out 15 10:30 anotacoes.txt      « tamanho 0: vazio</pre>
+
+<p>A coluna com o <code>0</code> é o tamanho em bytes. As colunas do <code>ls -l</code> são explicadas uma a uma em <a href="ls.html">Listar (ls)</a>.</p>
+
+<h3>Vários arquivos, com chaves e com aspas</h3>
+<pre class="term" data-cwd="~/estudos">$ touch "lista de compras.txt" notas-aula.txt
+$ touch capitulo{1..3}.md
+$ ls
+ capitulo1.md   fev                     mar
+ capitulo2.md   jan                    'Meus Projetos'
+ capitulo3.md  'lista de compras.txt'   notas-aula.txt</pre>
+
+<p>Três palavras para o Bash: o nome entre aspas (com espaços), <code>notas-aula.txt</code> e, na segunda linha, as três geradas por <code>capitulo{1..3}.md</code>.</p>
+
+<h3>O touch não apaga o conteúdo</h3>
+<p>Se o arquivo já existe, o <code>touch</code> só muda a data. O conteúdo fica intacto:</p>
+
+<pre class="term">$ ls -l frutas.txt
+-rw-rw-r-- 1 ana ana 47 out 14 16:05 frutas.txt
+$ touch frutas.txt
+$ ls -l frutas.txt
+-rw-rw-r-- 1 ana ana 47 out 15 10:30 frutas.txt      « mesmo tamanho; só a data mudou
+$ wc -l frutas.txt
+7 frutas.txt                                         « as 7 linhas continuam lá</pre>
+
+<p>Com <code>-d</code> (de <em>date</em>) você escolhe a data. É útil para testar scripts que apagam "arquivos antigos":</p>
+
+<pre class="term">$ touch -d "2026-01-01 08:00" antigo.log
+$ ls -l antigo.log
+-rw-rw-r-- 1 ana ana 0 jan  1  2026 antigo.log</pre>
+
+<h3>Outras formas de criar um arquivo</h3>
+<p>O <code>touch</code> só cria arquivos vazios. Para já escrever algo, o próprio Bash cria o arquivo com um <strong>redirecionamento</strong>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Cuidado</th></tr>
+<tr><td><code>touch arq.txt</code></td><td>Cria vazio, ou só atualiza a data</td><td>Nunca apaga conteúdo</td></tr>
+<tr><td><code>echo "texto" &gt; arq.txt</code></td><td>Cria com uma linha</td><td><strong>Apaga</strong> o que havia antes</td></tr>
+<tr><td><code>echo "texto" &gt;&gt; arq.txt</code></td><td>Acrescenta uma linha no fim</td><td>Seguro: não apaga nada</td></tr>
+<tr><td><code>&gt; arq.txt</code></td><td>Cria vazio, ou <strong>esvazia</strong> um existente</td><td>Apaga sem perguntar</td></tr>
+</table>
+</div>
+<p>O <code>&gt;</code> e o <code>&gt;&gt;</code> são assunto de <a href="redirecionamento.html">Redirecionamento</a>.</p>
+
+<div class="try" data-goal="dir:~/curso/aulas,dir:~/curso/exercicios,dir:~/curso/provas,file:~/curso/aulas/aula1.txt,file:~/curso/aulas/aula2.txt,file:~/curso/aulas/aula3.txt" data-solucao="mkdir -p curso/{aulas,exercicios,provas};;touch curso/aulas/aula{1..3}.txt">
+<p class="try-task"><strong>Missão:</strong> com <strong>um único</strong> <code>mkdir</code>, crie a pasta <code>curso</code> contendo <code>aulas</code>, <code>exercicios</code> e <code>provas</code>. Depois, com um único <code>touch</code>, crie <code>aula1.txt</code>, <code>aula2.txt</code> e <code>aula3.txt</code> dentro de <code>curso/aulas</code>. Dica: teste antes com <code>echo</code> na frente; confira no fim com <code>find curso</code>.</p>
+</div>
+
+<hr>
+
+<h2>cp: copiar arquivos</h2>
+<p><code>cp</code> vem de <em>copy</em>, "copiar". Ele tem duas formas, e o que muda é o <strong>último</strong> argumento:</p>
+
+<pre class="syntax">cp ORIGEM NOVO-NOME            « uma cópia, com outro nome
+cp ORIGEM... PASTA/            « uma ou mais cópias dentro de uma pasta que já existe</pre>
+
+<h3>Forma 1: cópia com outro nome</h3>
+<dl class="anatomy">
+  <dt>cp</dt><dd>O programa.</dd>
+  <dt>frutas.txt</dt><dd>A <strong>origem</strong>: o arquivo que já existe.</dd>
+  <dt>frutas-copia.txt</dt><dd>O <strong>destino</strong>: o nome da cópia. Se já existir um arquivo com esse nome, ele é <strong>substituído sem aviso</strong>.</dd>
+</dl>
+
+<pre class="term">$ cp frutas.txt frutas-copia.txt
+$ echo $?
+0
+$ ls -l frutas.txt frutas-copia.txt
+-rw-rw-r-- 1 ana ana 47 out 15 10:30 frutas-copia.txt   « a cópia ganha a data de agora
+-rw-rw-r-- 1 ana ana 47 out 14 16:05 frutas.txt</pre>
+
+<p>A cópia tem o mesmo tamanho (47 bytes), mas a data é a do momento da cópia. Mais adiante, o <code>-a</code> muda isso.</p>
+
+<h3>Forma 2: copiar para dentro de uma pasta</h3>
+<p>Quando o último argumento é uma pasta que existe, as cópias vão para dentro dela, com o mesmo nome. A opção <code>-v</code> mostra cada cópia no formato <code>'origem' -&gt; 'destino'</code>:</p>
+
+<pre class="term">$ cp -v frutas.txt Documentos/notas.txt Imagens/
+'frutas.txt' -&gt; 'Imagens/frutas.txt'
+'Documentos/notas.txt' -&gt; 'Imagens/notas.txt'</pre>
+
+<div class="tip">
+<strong>Termine o nome da pasta com <code>/</code></strong>
+<p>A barra no fim deixa claro que o destino é uma pasta. Se a pasta não existir, você recebe um erro em vez de um arquivo com o nome errado:</p>
+<pre class="term">$ cp frutas.txt Docs/
+cp: não foi possível criar arquivo comum 'Docs/': Não é um diretório
+$ cp frutas.txt Docs
+$ ls -l Docs
+-rw-rw-r-- 1 ana ana 47 out 15 10:30 Docs            « sem a barra: virou um ARQUIVO chamado Docs</pre>
+</div>
+
+<h3>Copiar com curinga: quem expande é o Bash</h3>
+<p>O <code>*</code> quer dizer "qualquer sequência de caracteres". O Bash troca <code>relatorio-*.txt</code> pelos nomes que existem e casam com o padrão, em ordem alfabética, e o <code>cp</code> recebe a lista pronta:</p>
+
+<pre class="term">$ touch relatorio-{jan,fev,mar}.txt
+$ mkdir backup-2026
+$ echo cp -v relatorio-*.txt backup-2026/
+cp -v relatorio-fev.txt relatorio-jan.txt relatorio-mar.txt backup-2026/
+$ cp -v relatorio-*.txt backup-2026/
+'relatorio-fev.txt' -&gt; 'backup-2026/relatorio-fev.txt'
+'relatorio-jan.txt' -&gt; 'backup-2026/relatorio-jan.txt'
+'relatorio-mar.txt' -&gt; 'backup-2026/relatorio-mar.txt'</pre>
+
+<p>Os curingas têm aula própria: <a href="curingas.html">Curingas (*, ?, [ ])</a>.</p>
+
+<h3>O truque do backup: <code>cp arquivo{,.bak}</code></h3>
+<p>Antes de editar um arquivo importante, faça uma cópia de segurança. Com chaves, você não precisa digitar o nome duas vezes: <code>{,.bak}</code> tem duas opções, "nada" e ".bak".</p>
+
+<pre class="term">$ echo cp frutas.txt{,.bak}
+cp frutas.txt frutas.txt.bak
+$ cp -v frutas.txt{,.bak}
+'frutas.txt' -&gt; 'frutas.txt.bak'</pre>
+
+<hr>
+
+<h2>Não sobrescrever por engano: <code>-i</code>, <code>--update=none</code>, <code>-u</code></h2>
+<p>Por padrão, o <code>cp</code> substitui o destino em silêncio. Se <code>Documentos/frutas.txt</code> já existia com outro conteúdo, ele se perdeu. Três opções mudam isso:</p>
+
+<h3><code>-i</code>: perguntar antes</h3>
+<p><code>-i</code> vem de <em>interactive</em>. Antes de substituir, o <code>cp</code> pergunta. Responda <code>s</code> (sim) para substituir; qualquer outra coisa mantém o arquivo antigo.</p>
+
+<pre class="term">$ cp -i frutas.txt Documentos/
+cp: sobrescrever 'Documentos/frutas.txt'? n
+$ echo $?
+1                                       « recusou: código 1</pre>
+
+<h3><code>--update=none</code>: nunca sobrescrever</h3>
+<p>Para pular, sem perguntar, os arquivos que já existem no destino, use <code>--update=none</code>. A forma curta antiga, <code>-n</code> (<em>no-clobber</em>, "não destruir"), ainda funciona, mas o coreutils atual avisa que ela pode mudar:</p>
+
+<pre class="term">$ cp -n frutas.txt Documentos/
+cp: warning: behavior of -n is non-portable and may change in future; use --update=none instead
+$ cp --update=none frutas.txt Documentos/
+$ echo $?
+0                                       « nada copiado, sem aviso, e não é erro</pre>
+
+<h3><code>-u</code>: só se a origem for mais nova</h3>
+<p><code>-u</code> (de <em>update</em>, "atualizar") copia apenas quando o destino não existe ou é <strong>mais antigo</strong> que a origem. É o jeito simples de "sincronizar" uma cópia:</p>
+
+<pre class="term">$ cp -uv frutas.txt Documentos/         « nada aparece: a cópia já estava em dia
+$ touch frutas.txt
+$ cp -uv frutas.txt Documentos/
+'frutas.txt' -&gt; 'Documentos/frutas.txt' « agora a origem é mais nova</pre>
+
+<hr>
+
+<h2>Copiar pastas: <code>-r</code> e <code>-a</code></h2>
+<p>Sem opção, o <code>cp</code> se recusa a copiar uma pasta:</p>
+
+<pre class="term">$ cp Documentos/projetos backup
+cp: -r não especificado; omitindo o diretório 'Documentos/projetos'
+$ echo $?
+1</pre>
+
+<p><code>-r</code> (de <em>recursive</em>, "recursivo") copia a pasta com tudo o que há dentro, nível por nível:</p>
+
+<pre class="term">$ cp -rv Documentos/projetos copia2
+'Documentos/projetos' -&gt; 'copia2'
+'Documentos/projetos/site' -&gt; 'copia2/site'
+'Documentos/projetos/site/index.html' -&gt; 'copia2/site/index.html'
+'Documentos/projetos/site/style.css' -&gt; 'copia2/site/style.css'
+'Documentos/projetos/backup.sh' -&gt; 'copia2/backup.sh'</pre>
+
+<div class="warning">
+<strong>A segunda vez é diferente da primeira</strong>
+<p>Se o destino <strong>não existe</strong>, a cópia ganha o nome do destino. Se ele <strong>já existe</strong>, a pasta é copiada para <em>dentro</em> dele. Rodar o mesmo comando duas vezes cria uma pasta a mais:</p>
+<pre class="term">$ cp -r Documentos/projetos backup
+$ ls backup
+backup.sh  site
+$ cp -r Documentos/projetos backup
+$ ls backup
+backup.sh  projetos  site                « apareceu backup/projetos!</pre>
+<p>Para copiar só o <strong>conteúdo</strong> de uma pasta para outra que já existe, use <code>origem/.</code> (o ponto é "esta pasta"): <code>cp -r Documentos/projetos/. backup/</code>.</p>
+</div>
+
+<h3><code>-a</code>: a cópia fiel</h3>
+<p><code>-a</code> (de <em>archive</em>, "arquivar") copia recursivamente <strong>e</strong> preserva datas, permissões e links. Use para backups, quando a data original importa:</p>
+
+<pre class="term">$ cp Documentos/notas.txt n1.txt
+$ cp -a Documentos/notas.txt n2.txt
+$ ls -l n1.txt n2.txt
+-rw-rw-r-- 1 ana ana 69 out 15 10:30 n1.txt     « cp comum: data de agora
+-rw-rw-r-- 1 ana ana 69 out 14 17:40 n2.txt     « cp -a: data original</pre>
+
+<div class="try" data-goal="dir:~/projetos-backup/site,file:~/projetos-backup/backup.sh,file:~/projetos-backup/site/index.html,absent:~/projetos-backup/projetos" data-solucao="cp -a Documentos/projetos projetos-backup">
+<p class="try-task"><strong>Missão:</strong> faça uma cópia fiel (com as datas originais) da pasta <code>Documentos/projetos</code> com o nome <code>projetos-backup</code>, na sua pasta pessoal. Confira com <code>ls -l projetos-backup</code>. Cuidado: se rodar duas vezes, aparece <code>projetos-backup/projetos</code> e a missão não conta.</p>
+</div>
+
+<hr>
+
+<h2>mv: mover e renomear</h2>
+<p><code>mv</code> vem de <em>move</em>, "mover". Para o sistema, <strong>renomear é mover</strong> um arquivo para um nome novo. Por isso não existe um comando "rename" básico: o <code>mv</code> faz as duas coisas, com as mesmas duas formas do <code>cp</code>.</p>
+
+<h3>Renomear</h3>
+<dl class="anatomy">
+  <dt>mv</dt><dd>O programa.</dd>
+  <dt>lista.txt</dt><dd>O nome atual.</dd>
+  <dt>compras.txt</dt><dd>O nome novo. Como não é uma pasta existente, o <code>mv</code> entende "renomear".</dd>
+</dl>
+
+<pre class="term">$ cp frutas.txt lista.txt
+$ mv lista.txt compras.txt
+$ echo $?
+0
+$ ls lista.txt compras.txt
+ls: não foi possível acessar 'lista.txt': Arquivo ou diretório inexistente
+compras.txt                             « o nome antigo sumiu, o novo existe</pre>
+
+<p>Renomear com chaves funciona como o backup: <code>notas{.txt,.md}</code> vira <code>notas.txt notas.md</code>.</p>
+
+<pre class="term">$ echo mv notas{.txt,.md}
+mv notas.txt notas.md
+$ mv -v notas{.txt,.md}
+renomeado 'notas.txt' -&gt; 'notas.md'</pre>
+
+<h3>Mover para uma pasta</h3>
+<p>Quando o último argumento é uma pasta que existe, os arquivos vão para dentro dela:</p>
+
+<pre class="term">$ mkdir fotos
+$ mv -v Downloads/foto.jpg Imagens/ferias.jpg fotos/
+renomeado 'Downloads/foto.jpg' -&gt; 'fotos/foto.jpg'
+renomeado 'Imagens/ferias.jpg' -&gt; 'fotos/ferias.jpg'</pre>
+
+<p>O <code>-v</code> do <code>mv</code> diz "renomeado" mesmo quando o arquivo mudou de pasta, porque, para ele, é a mesma operação.</p>
+
+<h3>Pastas não precisam de <code>-r</code></h3>
+<p>Ao contrário do <code>cp</code>, o <code>mv</code> move ou renomeia uma pasta inteira sem opção nenhuma. Ele não copia nada: só muda o endereço.</p>
+
+<pre class="term">$ mv fotos imagens-viagem               « renomeia a pasta
+$ mv -v imagens-viagem Imagens/          « move a pasta para dentro de Imagens
+renomeado 'imagens-viagem' -&gt; 'Imagens/imagens-viagem'</pre>
+
+<div class="warning">
+<strong>O <code>mv</code> também sobrescreve em silêncio</strong>
+<p>Se o destino já existe, o arquivo antigo é substituído e se perde, com código <code>0</code>:</p>
+<pre class="term">$ echo "versão nova" &gt; a.txt
+$ echo "versão velha importante" &gt; b.txt
+$ mv a.txt b.txt
+$ echo $?
+0
+$ cat b.txt
+versão nova                            « a "versão velha importante" acabou</pre>
+<p>Use <code>mv -i</code> (pergunta) ou <code>mv -n</code> (nunca sobrescreve) quando não tiver certeza. No <code>mv</code>, o <code>-n</code> não gera aviso.</p>
+<pre class="term">$ mv -i frutas.txt Documentos/
+mv: sobrescrever 'Documentos/frutas.txt'? n
+$ echo $?
+1</pre>
+</div>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer…</th><th>Use</th><th>Por quê</th></tr>
+<tr><td>Uma pasta (talvez com pais)</td><td><code>mkdir -p caminho</code></td><td>Cria o que falta e não falha se já existir</td></tr>
+<tr><td>Vários nomes parecidos</td><td><code>mkdir rel-{jan,fev}</code></td><td>O Bash gera os nomes; eles não precisam existir</td></tr>
+<tr><td>Arquivo vazio</td><td><code>touch arq</code></td><td>Nunca apaga conteúdo</td></tr>
+<tr><td>Arquivo com texto</td><td><code>echo "x" &gt; arq</code></td><td>Cria e escreve (mas apaga o anterior)</td></tr>
+<tr><td>Cópia rápida de um arquivo</td><td><code>cp arq{,.bak}</code></td><td>Backup antes de editar</td></tr>
+<tr><td>Cópia de pasta</td><td><code>cp -r</code></td><td>Copia tudo dentro</td></tr>
+<tr><td>Backup fiel</td><td><code>cp -a</code></td><td>Mantém datas e permissões</td></tr>
+<tr><td>Copiar sem risco</td><td><code>cp -i</code> ou <code>cp --update=none</code></td><td>Pergunta / pula o que existe</td></tr>
+<tr><td>Atualizar uma cópia</td><td><code>cp -u</code></td><td>Só copia o que mudou</td></tr>
+<tr><td>Renomear ou mover</td><td><code>mv</code> (com <code>-i</code> na dúvida)</td><td>Muda o endereço, sem copiar</td></tr>
+</table>
+</div>
+
+<div class="try" data-setup="mkdir trabalho;;printf 'Relatório de outubro\n' &gt; trabalho/relatorio.txt;;cd trabalho" data-goal="file:~/trabalho/arquivo/relatorio.txt.bak,file:~/trabalho/relatorio-out.txt,absent:~/trabalho/relatorio.txt,absent:~/trabalho/relatorio.txt.bak" data-solucao="cp relatorio.txt{,.bak};;mv relatorio.txt relatorio-out.txt;;mkdir arquivo;;mv relatorio.txt.bak arquivo/">
+<p class="try-task"><strong>Missão:</strong> você está em <code>~/trabalho</code>, onde há um <code>relatorio.txt</code>. (1) Faça um backup chamado <code>relatorio.txt.bak</code>. (2) Renomeie <code>relatorio.txt</code> para <code>relatorio-out.txt</code>. (3) Crie a pasta <code>arquivo</code> e mova o backup para dentro dela. Confira com <code>ls -R</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Arquivo existe"</strong>
+<pre class="term">$ mkdir estudos
+mkdir: cannot create directory ‘estudos’: Arquivo existe</pre>
+<p><strong>O que aconteceu:</strong> já existe uma pasta, ou um arquivo, com esse nome.</p>
+<p><strong>Como confirmar:</strong> <code>ls -ld estudos</code>. Se a linha começa com <code>d</code>, é uma pasta; com <code>-</code>, é um arquivo.</p>
+<p><strong>Como resolver:</strong> se você só queria garantir que a pasta exista, use <code>mkdir -p estudos</code>. Se é um arquivo, escolha outro nome.</p>
+</div>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente" no mkdir ou no touch</strong>
+<pre class="term">$ mkdir projetos/2026/janeiro
+mkdir: cannot create directory ‘projetos/2026/janeiro’: Arquivo ou diretório inexistente
+$ touch semnada/a.txt
+touch: não foi possível tocar 'semnada/a.txt': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> uma pasta do meio do caminho não existe. O <code>touch</code> nunca cria pastas.</p>
+<p><strong>Como resolver:</strong> crie o caminho antes com <code>mkdir -p projetos/2026</code>, ou de uma vez: <code>mkdir -p projetos/2026/janeiro</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Não é um diretório"</strong>
+<pre class="term">$ mkdir frutas.txt/x
+mkdir: cannot create directory ‘frutas.txt/x’: Não é um diretório</pre>
+<p><strong>O que aconteceu:</strong> uma parte do caminho é um <strong>arquivo</strong>, e arquivos não podem conter nada.</p>
+<p><strong>Como resolver:</strong> confira o caminho com <code>ls -ld frutas.txt</code> e corrija o nome.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada"</strong>
+<pre class="term">$ mkdir trancada/x
+mkdir: cannot create directory ‘trancada/x’: Permissão negada
+$ touch trancada/a.txt
+touch: não foi possível tocar 'trancada/a.txt': Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> você não tem permissão de escrita naquela pasta. Fora da sua pasta pessoal (por exemplo, em <code>/etc</code> ou <code>/usr</code>), quase tudo é do administrador, e a mensagem é a mesma.</p>
+<p><strong>Como confirmar:</strong> <code>ls -ld trancada</code> mostra as permissões (<code>dr-xr-xr-x</code>: sem <code>w</code>, sem escrita).</p>
+<p><strong>Como resolver:</strong> trabalhe dentro da sua pasta pessoal. Para pastas do sistema, é preciso ser administrador, o que foge desta aula.</p>
+</div>
+
+<div class="cenario">
+<strong>"-r não especificado; omitindo o diretório"</strong>
+<pre class="term">$ cp Documentos/projetos backup
+cp: -r não especificado; omitindo o diretório 'Documentos/projetos'</pre>
+<p><strong>O que aconteceu:</strong> a origem é uma pasta, e o <code>cp</code> só copia pastas com <code>-r</code> (ou <code>-a</code>).</p>
+<p><strong>Como resolver:</strong> <code>cp -r Documentos/projetos backup</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"alvo '…': Arquivo ou diretório inexistente": o nome com espaço</strong>
+<pre class="term">$ cp frutas.txt Área de trabalho/
+cp: alvo 'trabalho/': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> sem aspas, o Bash entregou <strong>quatro</strong> argumentos ao <code>cp</code>: <code>frutas.txt</code>, <code>Área</code>, <code>de</code> e <code>trabalho/</code>. Com mais de uma origem, o último argumento tem que ser uma pasta, e <code>trabalho/</code> não existe.</p>
+<p><strong>Como confirmar:</strong> <code>echo cp frutas.txt Área de trabalho/</code> mostra as palavras separadas.</p>
+<p><strong>Como resolver:</strong> aspas em volta do nome: <code>cp frutas.txt "Área de trabalho/"</code>. A tecla <kbd>Tab</kbd> completa e já coloca as barras no lugar (veja <a href="completar.html">Completar com Tab</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"falta o operando arquivo de destino"</strong>
+<pre class="term">$ cp frutas.txt
+cp: falta o operando arquivo de destino após 'frutas.txt'
+Tente "cp --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> o <code>cp</code> (e o <code>mv</code>) precisa de pelo menos dois nomes: origem e destino. Às vezes você digitou os dois, mas uma variável vazia ou um curinga que não casou com nada sumiu com um deles.</p>
+<p><strong>Como resolver:</strong> informe o destino. Para "copiar para a pasta atual", o destino é <code>.</code>: <code>cp Documentos/notas.txt .</code></p>
+</div>
+
+<div class="cenario">
+<strong>Outros recados do cp e do mv</strong>
+<pre class="term">$ cp naoexiste.txt x.txt
+cp: não foi possível obter estado de 'naoexiste.txt': Arquivo ou diretório inexistente
+$ cp frutas.txt frutas.txt
+cp: 'frutas.txt' e 'frutas.txt' são o mesmo arquivo
+$ mv Documentos Documentos/projetos/
+mv: não é possível mover 'Documentos' para um subdiretório de si mesmo, 'Documentos/projetos/Documentos'</pre>
+<p>"Obter estado" é a tradução de <em>stat</em>, ler as informações do arquivo: a origem não existe (confira o nome com <code>ls</code> ou use <kbd>Tab</kbd>). Os outros dois são pedidos impossíveis: copiar um arquivo sobre ele mesmo e colocar uma pasta dentro dela própria.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada… deu certo?</strong>
+<p><strong>O que aconteceu:</strong> esses quatro programas ficam em silêncio quando funcionam. Isso também vale para <code>cp -u</code> e <code>cp --update=none</code> quando eles decidem <em>não</em> copiar.</p>
+<p><strong>Como confirmar:</strong> <code>echo $?</code> logo depois (0 = sucesso), ou repita com <code>-v</code> para ver o que foi feito.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<h3>mkdir e touch</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando / opção</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>mkdir -p</code></td><td>Cria as pastas que faltam; não reclama se já existir</td><td><code>mkdir -p a/b/c</code></td></tr>
+<tr><td><code>mkdir -v</code></td><td>Mostra cada pasta criada</td><td><code>mkdir -v fotos</code></td></tr>
+<tr><td><code>touch</code></td><td>Cria arquivo vazio ou atualiza a data</td><td><code>touch a.txt b.txt</code></td></tr>
+<tr><td><code>touch -d</code></td><td>Usa a data informada</td><td><code>touch -d "2026-01-01" a.txt</code></td></tr>
+</table>
+</div>
+<h3>cp e mv</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Em</th><th>O que faz</th></tr>
+<tr><td><code>-v</code></td><td>cp, mv</td><td>Mostra cada arquivo (<code>'origem' -&gt; 'destino'</code>)</td></tr>
+<tr><td><code>-i</code></td><td>cp, mv</td><td>Pergunta antes de sobrescrever; recusar dá código 1</td></tr>
+<tr><td><code>--update=none</code></td><td>cp, mv</td><td>Nunca sobrescreve, sem perguntar</td></tr>
+<tr><td><code>-n</code></td><td>cp, mv</td><td>Forma antiga de "não sobrescrever" (no <code>cp</code> gera aviso)</td></tr>
+<tr><td><code>-u</code></td><td>cp, mv</td><td>Só age se a origem for mais nova que o destino</td></tr>
+<tr><td><code>-r</code></td><td>cp</td><td>Copia pastas, com tudo dentro</td></tr>
+<tr><td><code>-a</code></td><td>cp</td><td>Como <code>-r</code>, preservando datas, permissões e links</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Um caminho que ainda não existe</h3>
+<p>A pasta <code>trabalho</code> não existe. Complete para criar <code>trabalho/2026/relatorios</code> sem erro:</p>
+<div class="ex-code">mkdir <input data-answer="-p|-pv|-vp|--parents" aria-label="opção"> trabalho/2026/relatorios</div>
+</div>
+
+<div class="exercise">
+<h3>2. Backup com chaves</h3>
+<p>Complete para copiar <code>config.txt</code> para <code>config.txt.bak</code>, sem repetir o nome:</p>
+<div class="ex-code">cp config.txt<input data-answer="{,.bak}" aria-label="chaves"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Copiar uma pasta</h3>
+<p>Complete para copiar a pasta <code>site</code> inteira para <code>site-velho</code>:</p>
+<div class="ex-code">cp <input data-answer="-r|-a|-R|-rv|-av" aria-label="opção"> site site-velho</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. A Ana digitou <code>mkdir Fotos de Família</code>. O que aconteceu?</p>
+<label><input type="radio" name="q4"> Foi criada a pasta "Fotos de Família".</label>
+<label><input type="radio" name="q4"> Foram criadas três pastas: <code>Fotos</code>, <code>de</code> e <code>Família</code>.</label>
+<label><input type="radio" name="q4"> Deu erro, porque nomes de pasta não podem ter espaço.</label>
+<label><input type="radio" name="q4"> O <code>mkdir</code> perguntou qual nome usar.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Existem <code>a.txt</code> e <code>b.txt</code>. O que acontece com <code>mv a.txt b.txt</code>?</p>
+<label><input type="radio" name="q5"> Dá erro "Arquivo existe".</label>
+<label><input type="radio" name="q5"> O <code>mv</code> pergunta se pode sobrescrever.</label>
+<label><input type="radio" name="q5"> <code>a.txt</code> passa a se chamar <code>b.txt</code> e o <code>b.txt</code> antigo se perde, com código 0.</label>
+<label><input type="radio" name="q5"> Os dois arquivos são juntados num só.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Em <code>cp relatorio-*.txt backup/</code>, quem troca o <code>*</code> pelos nomes dos arquivos?</p>
+<label><input type="radio" name="q6"> O Bash, antes de chamar o <code>cp</code>.</label>
+<label><input type="radio" name="q6"> O <code>cp</code>, ao ler os argumentos.</label>
+<label><input type="radio" name="q6"> O sistema de arquivos, ao abrir a pasta.</label>
+<label><input type="radio" name="q6"> Ninguém: o <code>cp</code> procura um arquivo chamado <code>relatorio-*.txt</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>mkdir</code> cria pastas; <code>-p</code> cria o caminho inteiro e não falha se já existir.</li>
+  <li><code>touch</code> cria arquivos vazios e nunca apaga conteúdo.</li>
+  <li><code>cp origem destino</code> copia; pastas exigem <code>-r</code> (ou <code>-a</code>, que preserva datas).</li>
+  <li><code>mv</code> renomeia e move; pastas não precisam de opção.</li>
+  <li><code>cp</code> e <code>mv</code> sobrescrevem em silêncio: use <code>-i</code> ou <code>--update=none</code> na dúvida.</li>
+  <li>Chaves, curingas e aspas são do Bash, que monta a lista de nomes antes do programa rodar. Teste com <code>echo</code>.</li>
+  <li>Silêncio é sucesso; confirme com <code>echo $?</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
