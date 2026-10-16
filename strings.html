@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Strings — receitas para manipular texto sem programas externos | Guia Bash</title>
+<meta name="description" content="Receitas resolvidas para manipular strings no Bash puro: tamanho, contém, começa e termina com, maiúsculas, substring, trocar, aparar espaços, repetir, preencher com zeros, dividir e juntar, e quando usar sed, awk ou tr.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Manipular Strings</span></h1>
+
+<p class="intro">Uma <strong>string</strong> (em inglês, "cordão", uma sequência de caracteres) é qualquer texto guardado numa variável: um nome, uma data, uma linha de CSV. Esta página é um <strong>livro de receitas</strong>: para cada tarefa do dia a dia (saber o tamanho, ver se contém algo, trocar, aparar espaços, dividir…) você encontra a solução em Bash puro, testada, e a explicação de cada pedaço.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Testar textos: tamanho, vazio, contém, começa com, termina com, ignorando maiúsculas.</li>
+  <li>Transformar: maiúsculas e minúsculas, recortar, trocar, aparar espaços das pontas.</li>
+  <li>Montar: repetir um caractere, preencher com zeros ou espaços, dividir por separador e juntar um array.</li>
+  <li>Quando o Bash puro é a melhor escolha e quando chamar <code>sed</code>, <code>awk</code> ou <code>tr</code>.</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>De onde vêm os <code>${…}</code></strong>
+<p>Quase todas as receitas usam a <strong>expansão de parâmetros</strong>, as formas <code>${variável…}</code>. A teoria completa (o que cada símbolo quer dizer, <code>#</code> × <code>##</code>, <code>%</code> × <code>%%</code>) está em <a href="expansao-parametros.html">Expansão de Parâmetros</a>. Aqui vamos direto ao uso.</p>
+</div>
+
+<hr>
+
+<h2>Por que "sem programas externos"?</h2>
+<p>Muita gente aprende a mexer em texto com <code>echo "$s" | tr a-z A-Z</code> ou <code>echo "$s" | sed 's/x/y/'</code>. Funciona, mas cada <code>|</code> e cada <code>$( )</code> faz o Bash <strong>criar um processo novo</strong> e carregar outro programa. Para uma string só, ninguém percebe. Dentro de um laço que roda mil vezes, a diferença aparece. No laboratório do guia, converter um texto para maiúsculas 1000 vezes levou:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Tempo (1000 vezes)</th></tr>
+<tr><td><code>x=${s^^}</code> (Bash puro)</td><td>cerca de 0,005 s</td></tr>
+<tr><td><code>x=$(tr a-z A-Z &lt;&lt;&lt; "$s")</code></td><td>cerca de 2 s</td></tr>
+</table>
+</div>
+
+<p>Os números exatos mudam de computador para computador, mas a proporção (centenas de vezes) se mantém. Por isso, para <strong>uma variável</strong>, prefira o Bash puro. Para <strong>um arquivo inteiro</strong>, o contrário: <code>sed</code>, <code>awk</code> e <code>tr</code> são muito mais rápidos que um laço em Bash (veja a tabela no fim).</p>
+
+<hr>
+
+<h2>1. Testar</h2>
+
+<h3>Tamanho de uma string</h3>
+<dl class="anatomy">
+  <dt>${#</dt><dd>"Quantos caracteres tem…" (o <code>#</code> lembra "número").</dd>
+  <dt>s</dt><dd>…a variável <code>s</code>.</dd>
+  <dt>}</dt><dd>Fecha a expansão.</dd>
+</dl>
+<pre class="term">$ s="Estudar Bash"
+$ echo "${#s}"
+12                       « o espaço também conta
+$ cidade="São Paulo"
+$ echo "${#cidade}"
+9                        « conta letras, não bytes: o "ã" vale 1</pre>
+
+<p>O Bash conta <strong>caracteres</strong> porque a máquina da Ana usa <code>LANG=pt_BR.UTF-8</code>. Com <code>LANG=C</code>, o "ã" contaria como 2 (são 2 bytes em UTF-8).</p>
+
+<h3>Está vazia? Tem texto?</h3>
+<pre class="term">$ x=""
+$ [[ -z $x ]] &amp;&amp; echo "vazia"
+vazia                    « -z = zero caracteres
+$ arquivo="relatorio-final.odt"
+$ [[ -n $arquivo ]] &amp;&amp; echo "tem texto"
+tem texto                « -n = não vazia (non-zero)</pre>
+
+<h3>Contém um pedaço de texto?</h3>
+<p>Dentro de <code>[[ ]]</code>, o lado direito do <code>==</code> é um <strong>padrão</strong>, com os mesmos <a href="curingas.html">curingas</a> que você usa com arquivos. <code>*</code> quer dizer "qualquer coisa, inclusive nada". Então <code>*final*</code> = "qualquer coisa, final, qualquer coisa".</p>
+
+<dl class="anatomy">
+  <dt>[[</dt><dd>Abre o teste (veja <a href="testes.html">Testes</a>).</dd>
+  <dt>$arquivo</dt><dd>O texto que vamos examinar.</dd>
+  <dt>==</dt><dd>"Casa com o padrão…"</dd>
+  <dt>*final*</dt><dd>O padrão, <strong>sem aspas</strong> (com aspas os <code>*</code> viram asteriscos de verdade).</dd>
+  <dt>]]</dt><dd>Fecha o teste. O código de saída é 0 (casou) ou 1 (não casou).</dd>
+</dl>
+
+<pre class="term">$ arquivo="relatorio-final.odt"
+$ [[ $arquivo == *final* ]] &amp;&amp; echo "contém final"
+contém final
+$ [[ $arquivo == *rascunho* ]]; echo $?
+1                        « não contém: código 1, e nada aparece</pre>
+
+<p>Quando o pedaço procurado está numa variável, coloque <strong>só a variável</strong> entre aspas, deixando os <code>*</code> de fora. Assim, se a variável tiver um <code>*</code> ou <code>?</code>, ele é procurado literalmente:</p>
+
+<pre class="term">$ sub="final"
+$ [[ $arquivo == *"$sub"* ]] &amp;&amp; echo "achou $sub"
+achou final</pre>
+
+<h3>Começa com… / termina com…</h3>
+<pre class="term">$ [[ $arquivo == relatorio* ]] &amp;&amp; echo "começa com relatorio"
+começa com relatorio
+$ [[ $arquivo == *.odt ]] &amp;&amp; echo "termina com .odt"
+termina com .odt
+$ [[ $arquivo != *.pdf ]] &amp;&amp; echo "não é pdf"
+não é pdf                « != é o "não casa"</pre>
+
+<p>Para testes mais exigentes ("só dígitos", "formato de data"), use expressões regulares: <a href="regex.html">Regex com [[ =~ ]]</a>.</p>
+
+<h3>Comparar ignorando maiúsculas e minúsculas</h3>
+<p>Duas formas. A primeira converte os dois lados para minúsculas antes de comparar; a segunda liga a opção <code>nocasematch</code> (<em>no case match</em>, "casar sem caixa"):</p>
+
+<pre class="term">$ a="Recife"; b="RECIFE"
+$ [[ $a == "$b" ]] &amp;&amp; echo iguais || echo diferentes
+diferentes
+$ [[ ${a,,} == "${b,,}" ]] &amp;&amp; echo iguais || echo diferentes
+iguais                   « os dois viraram "recife"
+$ shopt -s nocasematch
+$ [[ $a == "$b" ]] &amp;&amp; echo iguais || echo diferentes
+iguais
+$ shopt -u nocasematch   « desligue depois: ela afeta também o case e o =~</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Qual usar?</th></tr>
+<tr><td><code>[[ ${a,,} == "${b,,}" ]]</code></td><td>Uma comparação só. Não muda nada no resto do script.</td></tr>
+<tr><td><code>shopt -s nocasematch</code></td><td>Um bloco inteiro de comparações (por exemplo, um <code>case</code> com muitas respostas "sim", "SIM", "Sim"…).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>2. Transformar</h2>
+
+<h3>Maiúsculas e minúsculas</h3>
+<pre class="term">$ nome="ana maria"
+$ echo "${nome^^}"
+ANA MARIA                « ^^ = tudo maiúsculo
+$ echo "${nome^}"
+Ana maria                « ^ = só a primeira letra
+$ grito="BOM DIA"
+$ echo "${grito,,}"
+bom dia                  « ,, = tudo minúsculo</pre>
+
+<p>Para lembrar: o <code>^</code> aponta para cima (maiúscula), a <code>,</code> fica embaixo (minúscula). Dobrado, vale para a string toda. As formas <code>${nome@U}</code> (<em>upper</em>), <code>${nome@u}</code> e <code>${nome@L}</code> (<em>lower</em>) fazem o mesmo que <code>^^</code>, <code>^</code> e <code>,,</code>.</p>
+
+<p><strong>Receita: primeira letra de cada palavra maiúscula.</strong> O <code>${…^}</code> aplicado a um array vale para <strong>cada elemento</strong>. Então basta dividir o nome em palavras:</p>
+
+<pre class="term">$ nome="ana maria da silva"
+$ read -ra partes &lt;&lt;&lt; "$nome"
+$ echo "${partes[@]^}"
+Ana Maria Da Silva</pre>
+
+<p>O <code>read -ra</code> divide o texto em palavras e guarda no array <code>partes</code>, como explicado em "Dividir por separador", mais abaixo.</p>
+
+<h3>Pegar um pedaço (substring)</h3>
+<dl class="anatomy">
+  <dt>${data</dt><dd>A variável.</dd>
+  <dt>:5</dt><dd>Começa na posição 5. A primeira posição é a <strong>0</strong>.</dd>
+  <dt>:2}</dt><dd>Pega 2 caracteres. Sem esse número, vai até o fim.</dd>
+</dl>
+
+<pre class="term">$ data="2026-10-15"
+$ echo "${data:0:4}"
+2026                     « posições 0,1,2,3
+$ echo "${data:5:2}"
+10                       « o mês
+$ echo "${data: -2}"
+15                       « os 2 últimos (o espaço antes do - é obrigatório)
+$ echo "${data:5}"
+10-15                    « da posição 5 até o fim</pre>
+
+<p>Para conferir as posições, conte assim:</p>
+<pre class="syntax">  2 0 2 6 - 1 0 - 1 5
+  0 1 2 3 4 5 6 7 8 9</pre>
+
+<h3>Trocar um texto por outro</h3>
+<pre class="term">$ frase="banana com banana"
+$ echo "${frase/banana/maçã}"
+maçã com banana          « uma barra: só a primeira
+$ echo "${frase//banana/maçã}"
+maçã com maçã            « duas barras: todas
+$ echo "${frase// /_}"
+banana_com_banana        « trocar espaços por _</pre>
+
+<p>A variável <code>frase</code> não muda: a expansão só produz um texto novo. Para guardar, atribua: <code>frase="${frase// /_}"</code>.</p>
+
+<h3>Nome de arquivo, extensão e pasta</h3>
+<p>Quatro receitas que aparecem em quase todo script que mexe com arquivos:</p>
+<pre class="term">$ caminho="Documentos/projetos/backup.sh"
+$ echo "${caminho##*/}"
+backup.sh                « só o nome (como o basename)
+$ echo "${caminho%/*}"
+Documentos/projetos      « só a pasta (como o dirname)
+$ arquivo="relatorio-final.odt"
+$ echo "${arquivo%.*}"
+relatorio-final          « sem a extensão
+$ echo "${arquivo##*.}"
+odt                      « só a extensão</pre>
+
+<h3>Aparar espaços das pontas (<em>trim</em>)</h3>
+<p>Texto vindo de arquivos ou digitado pelo usuário costuma ter espaços sobrando no começo e no fim. Os colchetes no <code>echo</code> abaixo mostram onde a string começa e termina:</p>
+
+<pre class="term">$ s="   Estudar Bash   "
+$ echo "[$s]"
+[   Estudar Bash   ]
+$ read -r limpo &lt;&lt;&lt; "$s"
+$ echo "[$limpo]"
+[Estudar Bash]           « pontas limpas, espaço do meio mantido</pre>
+
+<p><strong>Por que funciona:</strong> o <code>read</code> descarta os espaços e tabs das pontas (são os separadores do <code>IFS</code> padrão). Com uma variável só, o resto da linha fica inteiro. É a forma mais curta, mas só serve para uma linha.</p>
+
+<p>A forma "clássica", que funciona com qualquer texto, usa duas expansões aninhadas:</p>
+
+<pre class="term">$ s="${s#"${s%%[![:space:]]*}"}"
+$ s="${s%"${s##*[![:space:]]}"}"
+$ echo "[$s]"
+[Estudar Bash]</pre>
+
+<dl class="anatomy">
+  <dt>${s%%[![:space:]]*}</dt><dd>Apaga tudo a partir do primeiro caractere que <strong>não</strong> é espaço (<code>[!…]</code> = "não"). Sobra só o espaço do começo.</dd>
+  <dt>${s#"…"}</dt><dd>Remove esse espaço do começo de <code>s</code>. As aspas fazem o espaço ser removido como texto, não como padrão.</dd>
+  <dt>${s##*[![:space:]]}</dt><dd>Na segunda linha, o mesmo raciocínio ao contrário: sobra só o espaço do fim…</dd>
+  <dt>${s%"…"}</dt><dd>…que é removido do fim.</dd>
+</dl>
+
+<p>Com a opção <code>extglob</code> ligada (veja <a href="curingas.html">Curingas</a>), fica mais legível: <code>+([[:space:]])</code> = "um ou mais espaços".</p>
+
+<pre class="term">$ shopt -s extglob
+$ t="   Estudar Bash   "
+$ t="${t##+([[:space:]])}"; t="${t%%+([[:space:]])}"
+$ echo "[$t]"
+[Estudar Bash]</pre>
+
+<div class="try" data-setup="arquivo=&quot;Relatorio Final.ODT&quot;" data-goal="var:novo=relatorio_final.odt" data-solucao="novo=&quot;${arquivo,,}&quot;;;novo=&quot;${novo// /_}&quot;">
+<p class="try-task"><strong>Missão:</strong> a variável <code>arquivo</code> já existe e vale <code>Relatorio Final.ODT</code> (confira com <code>echo "$arquivo"</code>). Crie a variável <code>novo</code> com o mesmo nome, mas todo em minúsculas e com <code>_</code> no lugar do espaço: <code>relatorio_final.odt</code>. Use só Bash puro (pode fazer em dois passos).</p>
+</div>
+
+<hr>
+
+<h2>3. Montar</h2>
+
+<h3>Repetir um caractere</h3>
+<p>Útil para linhas de separação em relatórios:</p>
+<pre class="term">$ printf '%.0s-' {1..20}; echo
+--------------------</pre>
+
+<dl class="anatomy">
+  <dt>printf</dt><dd>Formata e imprime. Se houver mais argumentos que formatos, ele <strong>repete o formato</strong> para cada um (veja <a href="printf.html">printf</a>).</dd>
+  <dt>'%.0s-'</dt><dd><code>%.0s</code> = "imprima o argumento com precisão 0", ou seja, nenhum caractere dele. Depois, um <code>-</code>.</dd>
+  <dt>{1..20}</dt><dd>Gera 20 argumentos (1 2 3 … 20) por <a href="chaves.html">expansão de chaves</a>. O valor não importa, só a quantidade.</dd>
+  <dt>; echo</dt><dd>Só para quebrar a linha no fim.</dd>
+</dl>
+
+<p>Se o tamanho estiver numa variável (<code>{1..$n}</code> <strong>não</strong> funciona, porque as chaves são expandidas antes das variáveis), use <code>%*s</code>: ele imprime N espaços, que depois trocamos pelo caractere:</p>
+
+<pre class="term">$ printf -v linha '%*s' 20 ''
+$ echo "${linha// /=}"
+====================</pre>
+
+<p>O <code>printf -v linha</code> guarda o resultado na variável <code>linha</code> em vez de mostrar.</p>
+
+<h3>Preencher à esquerda (zeros ou espaços)</h3>
+<pre class="term">$ printf '%05d\n' 42
+00042                    « 5 dígitos, completando com zeros
+$ printf 'foto-%03d.jpg\n' 7
+foto-007.jpg             « nomes que ficam em ordem no ls
+$ printf '[%10s]\n' Ana
+[       Ana]             « 10 colunas, alinhado à direita
+$ printf '[%-10s]\n' Ana
+[Ana       ]             « o - alinha à esquerda
+$ printf -v cod '%05d' 42
+$ echo "$cod"
+00042                    « guardado numa variável</pre>
+
+<p>No <code>%05d</code>: <code>0</code> = complete com zeros, <code>5</code> = largura, <code>d</code> = número inteiro (<em>decimal</em>).</p>
+
+<h3>Dividir por um separador</h3>
+<dl class="anatomy">
+  <dt>IFS=,</dt><dd>Só para este comando, o separador de campos (<em>Internal Field Separator</em>) é a vírgula.</dd>
+  <dt>read</dt><dd>Lê uma linha e divide nos separadores.</dd>
+  <dt>-r</dt><dd>Não trata a barra invertida <code>\</code> como especial (<em>raw</em>, cru). Use sempre.</dd>
+  <dt>-a campos</dt><dd>Guarda cada pedaço num elemento do <a href="arrays.html">array</a> <code>campos</code>.</dd>
+  <dt>&lt;&lt;&lt; "$linha"</dt><dd>Uma <a href="heredoc.html">here-string</a>: o texto a ler.</dd>
+</dl>
+
+<pre class="term">$ linha="Ana,29,Recife,9.5"
+$ IFS=, read -ra campos &lt;&lt;&lt; "$linha"
+$ declare -p campos
+declare -a campos=([0]="Ana" [1]="29" [2]="Recife" [3]="9.5")
+$ echo "${campos[2]}"
+Recife</pre>
+
+<p>Quando você sabe quantos campos são, dê um nome a cada um, sem array. Espaços dentro dos campos ("Porto Alegre") são mantidos, porque o separador agora é só a vírgula:</p>
+
+<pre class="term">$ IFS=, read -r nome idade cidade nota &lt;&lt;&lt; "Elisa,27,Porto Alegre,10.0"
+$ echo "$nome tem $idade anos e mora em $cidade"
+Elisa tem 27 anos e mora em Porto Alegre</pre>
+
+<p>Para dividir o arquivo inteiro, linha a linha, veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a> e <a href="mapfile.html">mapfile</a>.</p>
+
+<h3>Juntar um array com um separador</h3>
+<p>O inverso: o <code>"${a[*]}"</code> (com <code>*</code> e entre aspas) junta os elementos usando o <strong>primeiro caractere do <code>IFS</code></strong>. Mudando o <code>IFS</code> dentro de parênteses (um <a href="subshell.html">subshell</a>), a mudança não "vaza" para o resto:</p>
+
+<pre class="term">$ frutas=(banana maçã uva)
+$ (IFS=,; echo "${frutas[*]}")
+banana,maçã,uva</pre>
+
+<p>Num script, a forma mais limpa é uma função com <code>local IFS</code>:</p>
+
+<pre class="term">$ juntar() { local IFS=$1; shift; echo "$*"; }
+$ juntar / usr local bin
+usr/local/bin</pre>
+
+<p>O <code>IFS</code> só usa <strong>um</strong> caractere. Para juntar com <code>", "</code> (vírgula e espaço), use o <code>printf</code> e corte a sobra do fim:</p>
+
+<pre class="term">$ printf -v lista '%s, ' "${frutas[@]}"
+$ echo "${lista%, }"
+banana, maçã, uva</pre>
+
+<div class="warning">
+<strong>Não mude o <code>IFS</code> "solto"</strong>
+<p>Um <code>IFS=,</code> sozinho numa linha vale para o resto do shell: daí em diante, toda variável sem aspas é dividida em vírgulas, não em espaços. Use <code>( … )</code>, <code>local IFS</code> ou o <code>IFS=, read …</code> na mesma linha do comando. Se já mudou, <code>unset IFS</code> volta ao comportamento padrão.</p>
+</div>
+
+<h3>Percorrer caractere a caractere</h3>
+<pre class="term">$ s="maçã"
+$ for ((i=0; i&lt;${#s}; i++)); do echo "$i: ${s:i:1}"; done
+0: m
+1: a
+2: ç
+3: ã</pre>
+
+<p>O laço vai de 0 até o tamanho menos 1, e <code>${s:i:1}</code> pega 1 caractere na posição <code>i</code>. Os acentos funcionam porque o Bash conta caracteres, não bytes.</p>
+
+<h3>Contar quantas vezes uma letra aparece</h3>
+<pre class="term">$ frase="banana com banana"
+$ so_a="${frase//[^a]/}"
+$ echo "${#so_a}"
+6</pre>
+<p>O <code>${frase//[^a]/}</code> apaga tudo o que <strong>não</strong> é "a" (<code>[^a]</code>); o que sobra é "aaaaaa", e o tamanho disso é a contagem.</p>
+
+<div class="tryscript" data-file="inverter.sh" data-args="Bash" data-goal="out:hsaB">
+<p class="try-task"><strong>Missão:</strong> o script deveria mostrar a palavra recebida <strong>de trás para frente</strong>, mas o laço está percorrendo do começo para o fim, e a saída sai igual à entrada. Mude o <code>for</code> para começar no último caractere e ir até o 0. Com o argumento <code>Bash</code>, a saída deve ser <code>hsaB</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+palavra=$1
+invertida=""
+for ((i=0; i&lt;${#palavra}; i++)); do
+  invertida+="${palavra:i:1}"
+done
+echo "$invertida"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+palavra=$1
+invertida=""
+for ((i=${#palavra}-1; i&gt;=0; i--)); do
+  invertida+="${palavra:i:1}"
+done
+echo "$invertida"
+</pre>
+</div>
+
+<hr>
+
+<h2>4. Mostrar com segurança: <code>@Q</code>, <code>@E</code>, <code>@A</code></h2>
+<p>Os operadores com <code>@</code> (<em>transformações</em>) devolvem a string de outro jeito:</p>
+
+<pre class="term">$ s="it's ok"
+$ echo "${s@Q}"
+'it'\''s ok'             « Q = com aspas, pronta para colar num comando
+$ t='uva\tpera'
+$ echo "$t"
+uva\tpera
+$ echo "${t@E}"
+uva	pera                « E = interpreta \t, \n… como em $'…'
+$ cidade="Porto Alegre"
+$ echo "${cidade@A}"
+cidade='Porto Alegre'    « A = a atribuição que recria a variável</pre>
+
+<p>O <code>@Q</code> é ótimo para mensagens de depuração: ele deixa visíveis espaços nas pontas e caracteres estranhos. Os detalhes estão em <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</p>
+
+<hr>
+
+<h2>Bash puro × <code>sed</code>/<code>awk</code>/<code>tr</code>: qual usar?</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tarefa</th><th>Numa variável (Bash puro)</th><th>Num arquivo ou fluxo (programa)</th></tr>
+<tr><td>Tamanho</td><td><code>${#s}</code></td><td><code>wc -m</code> (caracteres por arquivo)</td></tr>
+<tr><td>Contém</td><td><code>[[ $s == *abc* ]]</code></td><td><code>grep -q abc arq</code></td></tr>
+<tr><td>Maiúsculas</td><td><code>${s^^}</code></td><td><code>tr a-z A-Z &lt; arq</code> (só ASCII) ou <code>sed 's/.*/\U&amp;/'</code></td></tr>
+<tr><td>Trocar texto</td><td><code>${s//velho/novo}</code></td><td><code>sed 's/velho/novo/g' arq</code></td></tr>
+<tr><td>Recortar</td><td><code>${s:5:2}</code></td><td><code>cut -c6-7 arq</code></td></tr>
+<tr><td>Campo N de um CSV</td><td><code>IFS=, read -ra c &lt;&lt;&lt; "$s"; echo "${c[2]}"</code></td><td><code>cut -d, -f3 arq</code> ou <code>awk -F, '{print $3}' arq</code></td></tr>
+<tr><td>Aparar espaços</td><td><code>read -r s &lt;&lt;&lt; "$s"</code></td><td><code>sed 's/^[[:space:]]*//; s/[[:space:]]*$//' arq</code></td></tr>
+<tr><td>Nome / pasta</td><td><code>${p##*/}</code> / <code>${p%/*}</code></td><td><code>basename</code> / <code>dirname</code></td></tr>
+<tr><td>Contas e colunas</td><td>—</td><td><code>awk</code></td></tr>
+</table>
+</div>
+
+<p>Um detalhe da linha "Maiúsculas": o <code>tr a-z A-Z</code> só conhece as 26 letras sem acento. O Bash respeita o idioma da máquina:</p>
+
+<pre class="term">$ s="maçã"
+$ echo "${s^^}"
+MAÇÃ
+$ tr a-z A-Z &lt;&lt;&lt; "$s"
+MAçã                     « o ç e o ã ficaram minúsculos</pre>
+
+<p><strong>A regra:</strong> o texto já está numa variável? Bash puro. Vai processar um arquivo de muitas linhas? Um programa só, rodando uma vez sobre o arquivo inteiro (<code>sed</code>, <code>awk</code>, <code>grep</code>, <code>cut</code>), é muito mais rápido do que um laço <code>while read</code> com expansões. Esses programas são apresentados em <a href="ferramentas-texto.html">grep, sed, awk e cia.</a></p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O "contém" nunca dá certo</strong>
+<pre class="term">$ [[ $arquivo == "*final*" ]] &amp;&amp; echo sim || echo não
+não</pre>
+<p><strong>O que aconteceu:</strong> com o padrão entre aspas, os <code>*</code> perdem o poder de curinga. O Bash procurou a string "*final*" com asteriscos de verdade.</p>
+<p><strong>Como resolver:</strong> tire as aspas do padrão: <code>[[ $arquivo == *final* ]]</code>. Se o texto procurado estiver numa variável, aspas só nela: <code>*"$sub"*</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Pedi os 2 últimos caracteres e veio a string inteira</strong>
+<pre class="term">$ echo "${data:-2}"
+2026-10-15</pre>
+<p><strong>O que aconteceu:</strong> sem espaço, <code>:-</code> é outra expansão: "valor padrão se estiver vazia". Como <code>data</code> não está vazia, voltou inteira.</p>
+<p><strong>Como resolver:</strong> espaço antes do menos, <code>${data: -2}</code>, ou parênteses, <code>${data:(-2)}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"número octal inválido" no printf</strong>
+<pre class="term">$ printf '%05d\n' 08
+bash: printf: 08: número octal inválido
+00000
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> um número que começa com 0 é lido como <strong>octal</strong> (base 8), em que não existem os dígitos 8 e 9. Acontece muito com meses e dias ("08", "09") tirados de datas.</p>
+<p><strong>Como resolver:</strong> diga que é base 10 numa conta: <code>printf '%02d\n' "$((10#$mes))"</code>. Ou, se o número já está com zeros, nem passe pelo <code>%d</code>: use <code>%s</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"bad substitution" no Mac</strong>
+<pre class="term" data-host="macbook" data-title="Terminal do macOS (ilustrativo)">$ echo "${nome^^}"
+bash: ${nome^^}: bad substitution</pre>
+<p><strong>O que aconteceu:</strong> o <code>/bin/bash</code> do macOS é o 3.2, e <code>^^</code>, <code>,,</code> só existem a partir do <span class="versao">bash 4.0+</span>; os <code>@U</code>, <code>@L</code>, <code>@u</code> chegaram no <span class="versao">bash 5.1+</span>. A saída acima é ilustrativa.</p>
+<p><strong>Como resolver:</strong> instale um Bash atual ou use <code>tr '[:lower:]' '[:upper:]' &lt;&lt;&lt; "$nome"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Depois de juntar um array, o script inteiro ficou estranho</strong>
+<p><strong>O que aconteceu:</strong> você fez <code>IFS=,</code> numa linha sozinha e esqueceu de desfazer. As variáveis sem aspas passaram a ser divididas em vírgulas.</p>
+<p><strong>Como confirmar:</strong> <code>echo "${IFS@Q}"</code> mostra <code>','</code> em vez do padrão <code>$' \t\n'</code>.</p>
+<p><strong>Como resolver:</strong> <code>unset IFS</code>, e da próxima vez mude o <code>IFS</code> dentro de <code>( )</code> ou com <code>local</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Receita</th><th>Código</th><th>Com <code>s="Estudar Bash"</code></th></tr>
+<tr><td>Tamanho</td><td><code>${#s}</code></td><td><code>12</code></td></tr>
+<tr><td>Vazia? / Não vazia?</td><td><code>[[ -z $s ]]</code> / <code>[[ -n $s ]]</code></td><td>falso / verdadeiro</td></tr>
+<tr><td>Contém</td><td><code>[[ $s == *Bash* ]]</code></td><td>verdadeiro</td></tr>
+<tr><td>Começa / termina com</td><td><code>[[ $s == Est* ]]</code> / <code>[[ $s == *sh ]]</code></td><td>verdadeiro / verdadeiro</td></tr>
+<tr><td>Maiúsculas / minúsculas</td><td><code>${s^^}</code> / <code>${s,,}</code></td><td><code>ESTUDAR BASH</code> / <code>estudar bash</code></td></tr>
+<tr><td>Substring</td><td><code>${s:0:7}</code> / <code>${s: -4}</code></td><td><code>Estudar</code> / <code>Bash</code></td></tr>
+<tr><td>Trocar (primeira / todas)</td><td><code>${s/a/@}</code> / <code>${s//a/@}</code></td><td><code>Estud@r Bash</code> / <code>Estud@r B@sh</code></td></tr>
+<tr><td>Aparar pontas</td><td><code>read -r s &lt;&lt;&lt; "$s"</code></td><td>—</td></tr>
+<tr><td>Repetir</td><td><code>printf '%.0s-' {1..20}</code></td><td>—</td></tr>
+<tr><td>Zeros à esquerda</td><td><code>printf '%05d' 42</code></td><td><code>00042</code></td></tr>
+<tr><td>Dividir</td><td><code>IFS=, read -ra a &lt;&lt;&lt; "$s"</code></td><td>—</td></tr>
+<tr><td>Juntar</td><td><code>(IFS=,; echo "${a[*]}")</code></td><td>—</td></tr>
+<tr><td>Mostrar com aspas</td><td><code>${s@Q}</code></td><td><code>'Estudar Bash'</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só a extensão</h3>
+<p>Complete para mostrar <code>pdf</code> a partir de <code>f="manual.pdf"</code>:</p>
+<div class="ex-code">echo "${f<input data-answer="##*.|#*." aria-label="expansão">}"</div>
+</div>
+
+<div class="exercise">
+<h3>2. Tudo maiúsculo</h3>
+<p>Complete para mostrar <code>RECIFE</code> a partir de <code>c="Recife"</code>:</p>
+<div class="ex-code">echo "${c<input data-answer="^^|@U" aria-label="operador">}"</div>
+</div>
+
+<div class="exercise">
+<h3>3. Dividir o CSV</h3>
+<p>Complete para dividir <code>linha</code> nas vírgulas, guardando os pedaços no array <code>c</code>:</p>
+<div class="ex-code"><input data-answer="IFS=," aria-label="separador"> read -ra c &lt;&lt;&lt; "$linha"</div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Com <code>s="relatorio.odt"</code>, qual teste é verdadeiro?</p>
+<label><input type="radio" name="q4"> <code>[[ $s == "*.odt" ]]</code></label>
+<label><input type="radio" name="q4"> <code>[[ $s == *.pdf ]]</code></label>
+<label><input type="radio" name="q4"> <code>[ $s == *.odt ]</code></label>
+<label><input type="radio" name="q4"> <code>[[ $s == *.odt ]]</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Você precisa trocar "http" por "https" em todas as linhas de um arquivo de 50 mil linhas. O que é melhor?</p>
+<label><input type="radio" name="q5"> Um laço <code>while read</code> com <code>${linha//http/https}</code>.</label>
+<label><input type="radio" name="q5"> <code>sed 's/http:/https:/g' arquivo</code>.</label>
+<label><input type="radio" name="q5"> <code>mapfile</code> e depois <code>echo</code> de cada elemento.</label>
+<label><input type="radio" name="q5"> <code>tr http https &lt; arquivo</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Testes de texto: <code>${#s}</code>, <code>-z</code>/<code>-n</code>, e <code>[[ $s == padrão ]]</code> com o padrão <strong>sem</strong> aspas.</li>
+  <li>Transformações: <code>^^</code> <code>,,</code> <code>:início:tamanho</code> <code>//velho/novo</code> <code>##*/</code> <code>%.*</code>.</li>
+  <li>Aparar: <code>read -r s &lt;&lt;&lt; "$s"</code>. Repetir e preencher: <code>printf</code>.</li>
+  <li>Dividir com <code>IFS=, read -ra</code>; juntar com <code>"${a[*]}"</code> e o <code>IFS</code> num subshell ou <code>local</code>.</li>
+  <li>Numa variável, Bash puro; num arquivo inteiro, <code>sed</code>/<code>awk</code>/<code>grep</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
