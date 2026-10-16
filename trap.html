@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash trap e Sinais — limpar ao sair, Ctrl+C, ERR e DEBUG | Guia Bash</title>
+<meta name="description" content="Aprenda o que são sinais (INT, TERM, HUP, KILL…) e como o trap do Bash reage a eles: limpar arquivos temporários com trap EXIT e mktemp, perguntar antes de sair no Ctrl+C, mostrar a linha do erro com ERR, DEBUG, RETURN, trap -p e kill.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">trap e Sinais</span></h1>
+
+<p class="intro">Um <strong>sinal</strong> é um aviso curto que o sistema (ou outro programa) manda para um processo: "pare", "o terminal fechou", "aperte o freio". O comando <code>trap</code> (<em>armadilha</em>) deixa o seu script <strong>capturar</strong> esses avisos e rodar um código antes de reagir. O uso mais importante é simples: <strong>limpar a bagunça</strong> (arquivos temporários, travas) sempre que o script terminar, dê certo ou dê errado.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que são os sinais mais comuns (INT, TERM, HUP, KILL…) e de onde eles vêm.</li>
+  <li>A apagar arquivos temporários com <code>mktemp</code> + <code>trap … EXIT</code>, o padrão mais útil desta aula.</li>
+  <li>A perguntar "Tem certeza?" quando alguém aperta Ctrl+C.</li>
+  <li>A mostrar onde o script falhou com <code>trap … ERR</code>, <code>$LINENO</code> e <code>$BASH_COMMAND</code>.</li>
+  <li>A listar, desfazer e ignorar traps (<code>trap -p</code>, <code>trap - SINAL</code>, <code>trap '' SINAL</code>), e por que o KILL não pode ser capturado.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que é um sinal</h2>
+<p>Quando você aperta <kbd>Ctrl</kbd>+<kbd>C</kbd> no terminal, você não "digita" nada para o programa: o terminal manda a ele o sinal <strong>INT</strong> (<em>interrupt</em>, interromper). O comportamento padrão da maioria dos sinais é <strong>matar o processo</strong>. Por isso o Ctrl+C para um script no meio do caminho, deixando para trás o que ele não terminou de fazer.</p>
+
+<p>Cada sinal tem um nome e um número. O comando interno <code>kill -l</code> (<em>list</em>) mostra todos:</p>
+
+<pre class="term">$ kill -l
+ 1) SIGHUP	 2) SIGINT	 3) SIGQUIT	 4) SIGILL	 5) SIGTRAP
+ 6) SIGABRT	 7) SIGBUS	 8) SIGFPE	 9) SIGKILL	10) SIGUSR1
+11) SIGSEGV	12) SIGUSR2	13) SIGPIPE	14) SIGALRM	15) SIGTERM
+16) SIGSTKFLT	17) SIGCHLD	18) SIGCONT	19) SIGSTOP	20) SIGTSTP
+…                                              « encurtado: seguem os sinais de tempo real, 34 a 64</pre>
+
+<p>O prefixo <code>SIG</code> é opcional: <code>SIGINT</code>, <code>INT</code> e <code>2</code> são o mesmo sinal. Você só precisa conhecer alguns:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sinal</th><th>Nº</th><th>Quem manda / quando</th><th>Padrão</th><th>Dá para capturar?</th></tr>
+<tr><td><code>HUP</code></td><td>1</td><td>O terminal foi fechado (<em>hang up</em>, "desligar o telefone"). Muitos serviços usam para "releia a configuração".</td><td>Termina</td><td>Sim</td></tr>
+<tr><td><code>INT</code></td><td>2</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> no terminal.</td><td>Termina</td><td>Sim</td></tr>
+<tr><td><code>QUIT</code></td><td>3</td><td><kbd>Ctrl</kbd>+<kbd>\</kbd> no terminal.</td><td>Termina e grava <em>core dump</em></td><td>Sim</td></tr>
+<tr><td><code>KILL</code></td><td>9</td><td><code>kill -9</code>: "morra agora", último recurso.</td><td>Termina</td><td><strong>Não</strong></td></tr>
+<tr><td><code>USR1</code>, <code>USR2</code></td><td>10, 12</td><td>Livres, para o seu programa usar como quiser (<em>user</em>).</td><td>Termina</td><td>Sim</td></tr>
+<tr><td><code>PIPE</code></td><td>13</td><td>Escreveu num pipe cujo leitor já saiu (<code>… | head</code>).</td><td>Termina</td><td>Sim</td></tr>
+<tr><td><code>TERM</code></td><td>15</td><td><code>kill</code> sem opção, desligamento do sistema, <code>systemctl stop</code>: "termine, por favor".</td><td>Termina</td><td>Sim</td></tr>
+<tr><td><code>STOP</code> / <code>TSTP</code></td><td>19 / 20</td><td>Pausar. <kbd>Ctrl</kbd>+<kbd>Z</kbd> manda TSTP (veja <a href="jobs.html">Jobs</a>).</td><td>Pausa</td><td>STOP não; TSTP sim</td></tr>
+<tr><td><code>CONT</code></td><td>18</td><td><code>fg</code>/<code>bg</code>: continuar o que estava pausado.</td><td>Continua</td><td>Sim</td></tr>
+</table>
+</div>
+
+<p>Além dos sinais de verdade, o <code>trap</code> do Bash conhece quatro <strong>eventos</strong> do próprio shell, que não vêm de fora:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Evento</th><th>Quando o trap roda</th></tr>
+<tr><td><code>EXIT</code> (ou <code>0</code>)</td><td>Quando o shell/script termina, por qualquer motivo: fim do arquivo, <code>exit</code>, erro com <code>set -e</code>, Ctrl+C, TERM.</td></tr>
+<tr><td><code>ERR</code></td><td>Quando um comando falha (as mesmas regras do <code>set -e</code>).</td></tr>
+<tr><td><code>DEBUG</code></td><td>Antes de <strong>cada</strong> comando simples.</td></tr>
+<tr><td><code>RETURN</code></td><td>Quando uma função (ou um <code>source</code>) termina.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>A sintaxe do <code>trap</code></h2>
+<pre class="syntax">trap 'COMANDOS' SINAL [SINAL…]</pre>
+
+<dl class="anatomy">
+  <dt>trap</dt><dd>Comando interno: "quando chegar este sinal, rode isto".</dd>
+  <dt>'COMANDOS'</dt><dd>O código a rodar, entre <strong>aspas simples</strong> (o motivo está mais abaixo). Pode ser o nome de uma função.</dd>
+  <dt>SINAL</dt><dd>Um ou mais nomes: <code>EXIT</code>, <code>INT</code>, <code>TERM</code>…</dd>
+</dl>
+
+<p>O primeiro exemplo é no próprio terminal. Pedimos para o shell dizer "recebi TERM" e mandamos o sinal para ele mesmo (<code>$$</code> é o número do processo do shell atual, o <strong>PID</strong>):</p>
+
+<pre class="term">$ trap 'echo recebi TERM' TERM
+$ kill -TERM $$
+recebi TERM                                    « o trap rodou
+$ echo "ainda estou aqui"
+ainda estou aqui                               « e o shell não morreu: o trap substituiu o padrão</pre>
+
+<p>Repare na última linha: quando você captura um sinal, o comportamento padrão (morrer) <strong>não</strong> acontece mais. Se você quer que o script termine, o trap precisa ter um <code>exit</code>.</p>
+
+<hr>
+
+<h2>Limpar ao sair: <code>mktemp</code> + <code>trap … EXIT</code></h2>
+<p>Scripts muitas vezes precisam de um arquivo de rascunho. Dois cuidados: o nome deve ser <strong>único</strong> (para dois scripts não usarem o mesmo arquivo) e o arquivo precisa ser <strong>apagado no fim</strong>, mesmo se o script falhar.</p>
+
+<h3>Criar o arquivo temporário: <code>mktemp</code></h3>
+<p><code>mktemp</code> (<em>make temporary</em>) cria um arquivo vazio com nome aleatório em <code>/tmp</code>, só com permissão para você, e mostra o nome. Você guarda esse nome numa variável:</p>
+
+<pre class="term">$ mktemp
+/tmp/tmp.Cj1guHJHnV                            « os X do modelo viram letras aleatórias
+$ mktemp -d
+/tmp/tmp.4UDv9VHo11                            « -d: cria uma pasta em vez de um arquivo
+$ mktemp /tmp/relatorio.XXXXXX.txt
+/tmp/relatorio.Rxae7c.txt                      « modelo próprio: os XXXXXX são trocados
+$ mktemp -t backup.XXXX
+/tmp/backup.qpGT                               « -t: o modelo vai para a pasta temporária ($TMPDIR ou /tmp)</pre>
+
+<p>Os nomes mudam a cada vez; é justamente essa a ideia.</p>
+
+<h3>Apagar sempre: <code>trap … EXIT</code></h3>
+<pre class="file" data-file="tmp1.sh">#!/usr/bin/env bash
+set -euo pipefail
+tmp=$(mktemp)
+trap 'rm -f -- "$tmp"; echo "limpeza: apaguei $tmp" &gt;&amp;2' EXIT
+echo "trabalhando com $tmp"
+sort frutas.txt &gt; "$tmp"
+uniq -c "$tmp"
+ls nada.txt
+echo "nunca chega aqui"
+</pre>
+
+<dl class="anatomy">
+  <dt>tmp=$(mktemp)</dt><dd>Cria o arquivo e guarda o nome dele em <code>tmp</code>.</dd>
+  <dt>trap '…' EXIT</dt><dd>Registra a limpeza logo depois de criar o arquivo. Ela vai rodar quando o script terminar, seja como for.</dd>
+  <dt>rm -f -- "$tmp"</dt><dd>Apaga o arquivo. <code>-f</code> não reclama se ele já sumiu; <code>--</code> protege contra nomes estranhos.</dd>
+  <dt>ls nada.txt</dt><dd>Um erro de propósito: com <code>set -e</code>, o script para aqui.</dd>
+</dl>
+
+<pre class="term">$ bash tmp1.sh
+trabalhando com /tmp/tmp.UBwMIbL0Uy
+      3 banana
+      1 laranja
+      2 maçã
+      1 uva
+ls: não foi possível acessar 'nada.txt': Arquivo ou diretório inexistente
+limpeza: apaguei /tmp/tmp.UBwMIbL0Uy           « o trap rodou depois do erro
+$ echo $?
+2                                              « o código do erro (o do ls) é mantido
+$ ls /tmp                                      « nada aparece: a pasta ficou vazia</pre>
+
+<p>O script falhou na linha do <code>ls</code>, e mesmo assim o rascunho foi apagado. O código de saída continuou sendo o do erro (2): o trap de <code>EXIT</code> não "engole" a falha, a não ser que você chame <code>exit</code> com outro número dentro dele.</p>
+
+<div class="tip">
+<strong>Por que aspas simples no trap?</strong>
+<p>Com aspas simples, <code>$tmp</code> só é lido <strong>quando o trap roda</strong>. Com aspas duplas, ele é trocado pelo valor <strong>na hora em que você escreve o trap</strong>. Aqui daria no mesmo, mas se a variável mudar depois (ou ainda estiver vazia), as aspas duplas apagariam o arquivo errado. Prefira sempre aspas simples. O <a href="shellcheck.html">ShellCheck</a> avisa (SC2064).</p>
+</div>
+
+<h3>Uma função de limpeza</h3>
+<p>Quando há várias coisas a desfazer, escreva uma <a href="funcoes.html">função</a> e passe o nome dela ao trap. Uma pasta temporária (<code>mktemp -d</code>) simplifica: tudo vai dentro dela e um <code>rm -rf</code> limpa de uma vez.</p>
+
+<pre class="file" data-file="modelo.sh">#!/usr/bin/env bash
+set -euo pipefail
+
+trabalho=$(mktemp -d)
+limpar() {
+  rm -rf -- "$trabalho"
+}
+trap limpar EXIT
+
+# … o resto do script usa "$trabalho/arquivo1", "$trabalho/arquivo2" …
+</pre>
+
+<div class="tryscript" data-file="rascunho.sh" data-goal="src:\btrap\b,absent:~/rascunho.txt,err:limpeza feita">
+<p class="try-task"><strong>Missão:</strong> este script cria <code>~/rascunho.txt</code> e falha antes de apagá-lo. Acrescente, logo depois da linha <code>rascunho=…</code>, um <code>trap</code> de <code>EXIT</code> que apague o arquivo e mostre <code>limpeza feita</code> na saída de erro. Rode: o erro do <code>ls</code> continua, mas o rascunho deve sumir.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+rascunho=~/rascunho.txt
+sort frutas.txt &gt; "$rascunho"
+uniq -c "$rascunho"
+ls nada.txt
+echo "fim"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+rascunho=~/rascunho.txt
+trap 'rm -f -- "$rascunho"; echo "limpeza feita" &gt;&amp;2' EXIT
+sort frutas.txt &gt; "$rascunho"
+uniq -c "$rascunho"
+ls nada.txt
+echo "fim"
+</pre>
+</div>
+
+<hr>
+
+<h2>Ctrl+C: perguntar "Tem certeza?"</h2>
+<p>Um script longo pode querer confirmar antes de parar. Capture o <code>INT</code> com uma função que pergunta:</p>
+
+<pre class="file" data-file="contagem.sh">#!/usr/bin/env bash
+perguntar() {
+  echo
+  read -rp "Tem certeza que quer parar? [s/N] " resp
+  if [[ $resp == [sS] ]]; then
+    echo "Saindo a pedido."
+    exit 130
+  fi
+  echo "Continuando..."
+}
+trap perguntar INT
+
+for i in 1 2 3 4 5; do
+  echo "passo $i de 5"
+  sleep 1
+done
+echo "Terminei."
+</pre>
+
+<p>Esta sessão foi feita num terminal de verdade, apertando Ctrl+C duas vezes (o terminal mostra <code>^C</code>):</p>
+
+<pre class="term">$ bash contagem.sh
+passo 1 de 5
+passo 2 de 5
+^C                                             « primeiro Ctrl+C
+Tem certeza que quer parar? [s/N] n
+Continuando...
+passo 3 de 5
+passo 4 de 5
+^C                                             « segundo Ctrl+C
+Tem certeza que quer parar? [s/N] s
+Saindo a pedido.
+$ echo $?
+130</pre>
+
+<dl class="anatomy">
+  <dt>echo</dt><dd>Pula uma linha, porque o <code>^C</code> deixa o cursor no meio.</dd>
+  <dt>read -rp "…" resp</dt><dd>Pergunta e guarda a resposta (<a href="read.html">read</a>).</dd>
+  <dt>[[ $resp == [sS] ]]</dt><dd>Aceita <code>s</code> ou <code>S</code>. Qualquer outra coisa (até Enter vazio) é "não", como indica o <code>N</code> maiúsculo em <code>[s/N]</code>.</dd>
+  <dt>exit 130</dt><dd>Sai com o código combinado para Ctrl+C: 128 + 2 (o número do INT).</dd>
+</dl>
+
+<p>Sem o trap, o primeiro Ctrl+C já mata o script, e o código também é 130:</p>
+
+<pre class="term">$ bash semtrap.sh
+passo 1 de 5
+passo 2 de 5
+^C
+$ echo $?
+130</pre>
+
+<div class="warning">
+<strong>O trap espera o comando atual terminar</strong>
+<p>O Bash só roda o trap <strong>entre</strong> um comando e outro. Aqui funcionou rápido porque o Ctrl+C também interrompe o <code>sleep</code> (os dois recebem o sinal). Mas um <code>kill -TERM</code> mandado só para o script, enquanto ele espera um <code>sleep 300</code>, só é atendido depois dos 300 segundos. Para reagir na hora, rode o comando demorado em segundo plano e espere com <code>wait</code>: <code>sleep 300 &amp; wait $!</code> (veja <a href="jobs.html">Jobs</a>).</p>
+</div>
+
+<hr>
+
+<h2>Mandar sinais: <code>kill</code></h2>
+<p>Apesar do nome, <code>kill</code> não só "mata": ele <strong>manda um sinal</strong> para um processo, identificado pelo PID. Sem opção, manda <code>TERM</code>.</p>
+
+<dl class="anatomy">
+  <dt>kill PID</dt><dd>Manda TERM: "termine, por favor".</dd>
+  <dt>kill -HUP PID</dt><dd>Escolhe o sinal pelo nome (também vale <code>-SIGHUP</code>, <code>-s HUP</code> ou <code>-1</code>).</dd>
+  <dt>kill -TERM $$</dt><dd>Manda para o próprio shell. <code>$!</code> é o PID do último comando posto em segundo plano.</dd>
+</dl>
+
+<p>Para ver vários sinais sendo capturados, a Ana fez um script que fica rodando por uns segundos e responde a cada um:</p>
+
+<pre class="file" data-file="vigia.sh">#!/usr/bin/env bash
+# vigia.sh — fica rodando e reage a sinais
+trap 'echo "[vigia] HUP: relendo a configuração"' HUP
+trap 'echo "[vigia] USR1: estou vivo, PID $$"' USR1
+trap 'echo "[vigia] TERM: encerrando com calma"; exit 0' TERM
+echo "[vigia] começando, PID $$"
+for ((i = 1; i &lt;= 30; i++)); do
+  sleep 0.2
+done
+echo "[vigia] acabou o tempo"
+</pre>
+
+<p>Ela roda o vigia em segundo plano (<code>&amp;</code>) e manda os sinais com <code>kill</code>. As mensagens do vigia aparecem misturadas com os prompts, porque ele escreve no mesmo terminal enquanto ela digita:</p>
+
+<pre class="term">$ bash vigia.sh &amp;
+[1] 46726                                      « número do job e PID do vigia
+$ sleep 0.5
+[vigia] começando, PID 46726
+$ kill -HUP $!
+$ sleep 0.5
+[vigia] HUP: relendo a configuração
+$ kill -USR1 $!
+$ sleep 0.5
+[vigia] USR1: estou vivo, PID 46726
+$ kill $!                                      « sem opção = TERM
+$ wait $!
+[vigia] TERM: encerrando com calma
+$ echo $?
+0                                              « o trap saiu com exit 0</pre>
+
+<h3>E se ninguém capturar? O código 128 + N</h3>
+<p>Quando um processo morre por causa de um sinal, o Bash informa o código <strong>128 + número do sinal</strong>. Com isso, quem chamou sabe que não foi um erro comum:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Sinal</th><th>Situação típica</th></tr>
+<tr><td>129</td><td>HUP (1)</td><td>O terminal fechou.</td></tr>
+<tr><td>130</td><td>INT (2)</td><td>Ctrl+C.</td></tr>
+<tr><td>137</td><td>KILL (9)</td><td><code>kill -9</code>, ou o sistema matou por falta de memória.</td></tr>
+<tr><td>141</td><td>PIPE (13)</td><td>Pipe quebrado (<code>… | head</code>).</td></tr>
+<tr><td>143</td><td>TERM (15)</td><td><code>kill</code> comum.</td></tr>
+</table>
+</div>
+
+<pre class="file" data-file="term1.sh">#!/usr/bin/env bash
+trap 'echo "EXIT: limpando"' EXIT
+echo "vou me mandar um TERM"
+kill -TERM $$
+echo "depois do kill"
+</pre>
+
+<pre class="term">$ bash term1.sh
+vou me mandar um TERM
+EXIT: limpando                                 « o TERM não foi capturado, mas o EXIT rodou
+$ echo $?
+143                                            « 128 + 15</pre>
+
+<p>Uma boa notícia do Bash: mesmo morrendo por um sinal que você <strong>não</strong> capturou (como TERM ou INT), ele roda o trap de <code>EXIT</code> antes. Por isso, para limpeza, <code>trap limpar EXIT</code> sozinho costuma bastar. Em outros shells (como o <code>dash</code>, que é o <code>sh</code> do Debian/Ubuntu) isso não é garantido; lá, escreva <code>trap limpar EXIT INT TERM</code>.</p>
+
+<h3>O KILL não pode ser capturado</h3>
+<pre class="file" data-file="kill9.sh">#!/usr/bin/env bash
+trap 'echo "peguei o KILL?"' KILL
+echo "trap aceito? código $?"
+trap -p KILL
+kill -KILL $$
+echo "depois"
+</pre>
+
+<pre class="term">$ bash kill9.sh
+trap aceito? código 0                          « o Bash não reclama…
+trap -- 'echo "peguei o KILL?"' SIGKILL        « …e até lista o trap…
+$ echo $?
+137                                            « …mas ele nunca roda</pre>
+
+<p>O <code>KILL</code> (e o <code>STOP</code>) são tratados pelo próprio sistema operacional, sem passar pelo programa. É a garantia de que sempre dá para parar um processo travado, mas também significa que <strong>nenhuma limpeza acontece</strong>. Por isso, use <code>kill -9</code> só depois de tentar <code>kill</code> (TERM) e esperar um pouco.</p>
+
+<hr>
+
+<h2>Onde o script falhou? <code>trap … ERR</code></h2>
+<p>Com <code>set -e</code>, o script para em silêncio. O evento <code>ERR</code> roda <strong>quando um comando falha</strong>, e duas variáveis dizem onde:</p>
+
+<dl class="anatomy">
+  <dt>$LINENO</dt><dd>O número da linha que está rodando. Dentro do trap de ERR, é a linha do comando que falhou.</dd>
+  <dt>$BASH_COMMAND</dt><dd>O texto do comando que estava rodando.</dd>
+  <dt>$?</dt><dd>No começo do trap, o código do comando que falhou.</dd>
+  <dt>set -E</dt><dd>(<code>errtrace</code>) Faz o trap de ERR valer também dentro de funções e de <code>$( )</code>. Sem ele, erros dentro de funções não disparam o trap.</dd>
+</dl>
+
+<pre class="file" data-file="err1.sh">#!/usr/bin/env bash
+set -eEuo pipefail
+trap 'echo "${0##*/}: erro na linha $LINENO: \"$BASH_COMMAND\" devolveu $?" &gt;&amp;2' ERR
+
+contar() {
+  grep -c kiwi frutas.txt
+}
+echo "começando"
+contar
+echo "fim"
+</pre>
+
+<pre class="term">$ bash err1.sh
+começando
+0                                              « o grep -c imprime 0, mas devolve 1
+err1.sh: erro na linha 6: "grep -c kiwi frutas.txt" devolveu 1
+$ echo $?
+1</pre>
+
+<p>Agora a falha silenciosa ganhou endereço: linha 6, dentro da função <code>contar</code>, o <code>grep</code> devolveu 1. Repare no <code>-E</code> grudado em <code>set -eEuo pipefail</code>: sem ele, o trap não veria o erro dentro da função.</p>
+
+<div class="tryscript" data-file="copiar.sh" data-goal="src:trap.*ERR,err:erro na linha 5">
+<p class="try-task"><strong>Missão:</strong> acrescente, na linha 3 (a que está em branco), um trap de <code>ERR</code> que mostre <code>erro na linha N</code> na saída de erro, usando <code>$LINENO</code>. Rode: deve aparecer <code>erro na linha 5</code>, a linha do <code>cp</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+
+echo "copiando..."
+cp nada.txt copia.txt
+echo "pronto"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+trap 'echo "erro na linha $LINENO" &gt;&amp;2' ERR
+echo "copiando..."
+cp nada.txt copia.txt
+echo "pronto"
+</pre>
+</div>
+
+<hr>
+
+<h2><code>DEBUG</code> e <code>RETURN</code></h2>
+<p>O evento <code>DEBUG</code> roda <strong>antes de cada comando</strong>. Serve para acompanhar o script passo a passo:</p>
+
+<pre class="file" data-file="debug.sh">#!/usr/bin/env bash
+trap 'echo "  [linha $LINENO] vai rodar: $BASH_COMMAND"' DEBUG
+nome=Ana
+total=$(wc -l &lt; frutas.txt)
+echo "$nome tem $total frutas"
+</pre>
+
+<pre class="term">$ bash debug.sh
+  [linha 3] vai rodar: nome=Ana
+  [linha 4] vai rodar: total=$(wc -l &lt; frutas.txt)
+  [linha 5] vai rodar: echo "$nome tem $total frutas"
+Ana tem 7 frutas</pre>
+
+<p>Repare que o <code>$BASH_COMMAND</code> mostra o comando <strong>antes</strong> das expansões (<code>$nome</code> ainda aparece como <code>$nome</code>). Para ver os valores trocados, use <code>set -x</code>. Os dois estão em <a href="depuracao.html">Depurar</a>, inclusive um "passo a passo" que espera Enter antes de cada linha.</p>
+
+<p>O evento <code>RETURN</code> roda quando uma função termina. Definido <strong>dentro</strong> da função, vale só para ela:</p>
+
+<pre class="file" data-file="retorno.sh">#!/usr/bin/env bash
+saudar() {
+  trap 'echo "  (saindo de ${FUNCNAME[0]})"' RETURN
+  echo "Olá, $1"
+}
+saudar Ana
+saudar Bruno
+</pre>
+
+<pre class="term">$ bash retorno.sh
+Olá, Ana
+  (saindo de saudar)
+Olá, Bruno
+  (saindo de saudar)</pre>
+
+<p>Na prática, <code>RETURN</code> é raro: ele serve para desfazer algo que a função mudou (voltar de um <code>cd</code>, religar uma opção).</p>
+
+<hr>
+
+<h2>Ver, desfazer e ignorar traps</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>trap -p</code> (ou só <code>trap</code>)</td><td>Lista os traps definidos, no formato de comando (dá para copiar e colar).</td></tr>
+<tr><td><code>trap -p INT</code></td><td>Mostra só o trap de INT.</td></tr>
+<tr><td><code>trap - INT</code></td><td>Remove o trap: INT volta ao comportamento padrão.</td></tr>
+<tr><td><code>trap '' INT</code></td><td><strong>Ignora</strong> o sinal: Ctrl+C não faz nada. Programas que o script chamar também vão ignorá-lo.</td></tr>
+<tr><td><code>trap -l</code></td><td>Lista os nomes de sinais (igual a <code>kill -l</code>).</td></tr>
+</table>
+</div>
+
+<pre class="term">$ trap 'echo tchau' EXIT
+$ trap -p
+trap -- 'echo tchau' EXIT
+$ trap - EXIT
+$ trap -p                                      « nada listado: nenhum trap</pre>
+
+<p>Ignorar um sinal é útil para proteger um trecho que não pode ser interrompido pela metade (por exemplo, enquanto troca um arquivo de configuração pelo novo):</p>
+
+<pre class="file" data-file="ignora.sh">#!/usr/bin/env bash
+trap '' INT
+echo "Ctrl+C desligado durante a parte crítica"
+trap -p INT
+trap - INT
+echo "de volta ao normal:"
+trap -p INT
+echo "(nada listado = comportamento padrão)"
+</pre>
+
+<pre class="term">$ bash ignora.sh
+Ctrl+C desligado durante a parte crítica
+trap -- '' SIGINT
+de volta ao normal:
+(nada listado = comportamento padrão)</pre>
+
+<hr>
+
+<h2>Formas de limpar: qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Problema / vantagem</th><th>Use quando</th></tr>
+<tr><td><code>rm "$tmp"</code> no fim do script</td><td>Não roda se o script falhar, sair antes ou levar Ctrl+C.</td><td>Nunca como única limpeza.</td></tr>
+<tr><td><code>rm</code> antes de cada <code>exit</code></td><td>Fácil esquecer um; repetição.</td><td>Evite.</td></tr>
+<tr><td><code>trap limpar EXIT</code></td><td>Roda sempre (menos com KILL). No Bash, cobre também INT e TERM.</td><td><strong>O padrão.</strong></td></tr>
+<tr><td><code>trap limpar EXIT INT TERM</code></td><td>Necessário em <code>sh</code>/<code>dash</code>. No Bash, a limpeza pode rodar duas vezes (use <code>rm -f</code>, que não se importa).</td><td>Scripts <a href="portabilidade.html">POSIX</a>.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"especificação de sinal inválida"</strong>
+<pre class="term">$ trap 'echo x' NADA
+bash: trap: NADA: especificação de sinal inválida
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o nome do sinal está errado. Um erro comum é inverter a ordem: <code>trap EXIT 'rm …'</code> (o sinal tem que vir <strong>depois</strong> do comando).</p>
+<p><strong>Como resolver:</strong> confira o nome com <code>trap -l</code> e escreva <code>trap 'COMANDOS' SINAL</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O trap apagou o arquivo errado (ou nada)</strong>
+<p><strong>O que aconteceu:</strong> o trap foi escrito com aspas duplas antes de a variável receber valor: <code>trap "rm -f $tmp" EXIT</code> seguido de <code>tmp=$(mktemp)</code>. O trap ficou <code>rm -f </code>, sem nome.</p>
+<p><strong>Como confirmar:</strong> rode <code>trap -p EXIT</code> no script: você vê o comando exatamente como ficou guardado.</p>
+<p><strong>Como resolver:</strong> use aspas simples e defina o trap <strong>depois</strong> do <code>mktemp</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Definir o trap duas vezes apagou o primeiro</strong>
+<p><strong>O que aconteceu:</strong> cada sinal tem <strong>um</strong> trap. <code>trap 'rm -f a' EXIT</code> e depois <code>trap 'rm -f b' EXIT</code> deixa só o segundo.</p>
+<p><strong>Como resolver:</strong> use uma função <code>limpar</code> que apaga tudo, ou guarde os arquivos numa pasta de <code>mktemp -d</code> e apague a pasta.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>kill</code> não fez o script parar na hora</strong>
+<p><strong>O que aconteceu:</strong> o script estava esperando um comando demorado (<code>sleep</code>, <code>wget</code>…) em primeiro plano, e o Bash só roda traps entre comandos.</p>
+<p><strong>Como resolver:</strong> espere o comando com <code>cmd &amp; wait $!</code>: o <code>wait</code> é interrompido pelo sinal e o trap roda na hora. Se o processo está mesmo travado, <code>kill -9 PID</code> (sem limpeza).</p>
+</div>
+
+<div class="cenario">
+<strong>O trap de ERR não disparou dentro da função</strong>
+<p><strong>O que aconteceu:</strong> sem <code>set -E</code> (<code>errtrace</code>), funções, <code>$( )</code> e subshells não herdam o trap de ERR.</p>
+<p><strong>Como resolver:</strong> acrescente <code>-E</code>: <code>set -eEuo pipefail</code>. Lembre também que o ERR segue as exceções do <code>set -e</code>: falhas dentro de <code>if</code> ou antes de <code>||</code> não o disparam (<a href="modo-estrito.html">Modo Estrito</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>trap 'cmd' SINAL…</code></td><td>Roda <code>cmd</code> quando o sinal/evento chegar.</td></tr>
+<tr><td><code>trap limpar EXIT</code></td><td>Roda a função <code>limpar</code> ao terminar.</td></tr>
+<tr><td><code>trap '' SINAL</code></td><td>Ignora o sinal.</td></tr>
+<tr><td><code>trap - SINAL</code></td><td>Volta ao comportamento padrão.</td></tr>
+<tr><td><code>trap -p [SINAL]</code></td><td>Lista os traps.</td></tr>
+<tr><td><code>trap -l</code>, <code>kill -l</code></td><td>Lista os sinais.</td></tr>
+<tr><td><code>kill [-SINAL] PID</code></td><td>Manda um sinal (padrão: TERM).</td></tr>
+<tr><td><code>$$</code> / <code>$!</code></td><td>PID do shell atual / do último processo em segundo plano.</td></tr>
+<tr><td><code>mktemp</code>, <code>mktemp -d</code></td><td>Cria arquivo/pasta temporária com nome único.</td></tr>
+<tr><td><code>$LINENO</code>, <code>$BASH_COMMAND</code></td><td>Linha e comando atuais (úteis em ERR e DEBUG).</td></tr>
+<tr><td><code>set -E</code></td><td>O trap de ERR vale dentro de funções e subshells.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Apagar o temporário ao sair</h3>
+<p>Complete para apagar o arquivo de <code>$tmp</code> quando o script terminar:</p>
+<div class="ex-code">trap 'rm -f -- "$tmp"' <input data-answer="EXIT|0" aria-label="evento"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Desligar o Ctrl+C</h3>
+<p>Complete para que o Ctrl+C seja ignorado:</p>
+<div class="ex-code">trap <input data-answer="''|&quot;&quot;" aria-label="comando vazio"> INT</div>
+</div>
+
+<div class="exercise">
+<h3>3. Código de um processo morto por TERM</h3>
+<p>Um script foi encerrado por <code>kill</code> (TERM, sinal 15) sem capturá-lo. Qual código o Bash mostra em <code>$?</code>?</p>
+<div class="ex-code">$? = <input data-answer="143" aria-label="código"></div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Qual sinal <strong>não</strong> pode ser capturado nem ignorado pelo <code>trap</code>?</p>
+<label><input type="radio" name="q4"> INT</label>
+<label><input type="radio" name="q4"> TERM</label>
+<label><input type="radio" name="q4"> HUP</label>
+<label><input type="radio" name="q4"> KILL</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Por que o comando do trap deve ficar entre aspas simples?</p>
+<label><input type="radio" name="q5"> Porque o <code>trap</code> não aceita aspas duplas.</label>
+<label><input type="radio" name="q5"> Para que as variáveis sejam lidas quando o trap rodar, e não quando ele for definido.</label>
+<label><input type="radio" name="q5"> Para que o trap rode mais rápido.</label>
+<label><input type="radio" name="q5"> Para o trap valer também dentro de funções.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">6. Um script tem <code>set -e</code> e <code>trap limpar EXIT</code>. Um comando falha com código 2. O que acontece?</p>
+<label><input type="radio" name="q6"> O script para e <code>limpar</code> não roda.</label>
+<label><input type="radio" name="q6"> <code>limpar</code> roda e o script devolve 0.</label>
+<label><input type="radio" name="q6"> <code>limpar</code> roda e o script devolve 2.</label>
+<label><input type="radio" name="q6"> O script continua, porque o trap "segura" o erro.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Sinais são avisos ao processo: INT (Ctrl+C), TERM (<code>kill</code>), HUP (terminal fechou), KILL (não capturável). Quem morre por sinal sai com 128 + N.</li>
+  <li><code>trap 'cmd' SINAL</code> troca o comportamento padrão pelo seu código; para terminar, o trap precisa de <code>exit</code>.</li>
+  <li>O padrão mais útil: <code>tmp=$(mktemp)</code> + <code>trap 'rm -f -- "$tmp"' EXIT</code>, com aspas simples.</li>
+  <li><code>trap … ERR</code> com <code>$LINENO</code> e <code>$BASH_COMMAND</code> (e <code>set -E</code>) mostra onde o script falhou; <code>DEBUG</code> roda antes de cada comando.</li>
+  <li><code>trap -p</code> lista, <code>trap - SINAL</code> desfaz, <code>trap '' SINAL</code> ignora.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
