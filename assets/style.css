@@ -2,8 +2,8 @@
    Guia Ubuntu — estilos
    ========================================================= */
 :root {
-  --accent: #d70a53;
-  --accent-hover: #a8083f;
+  --accent: #2e7d32;
+  --accent-hover: #1b5e20;
   --accent-text: #ffffff;
   --aubergine: #1d1d21;
   --bg: #ffffff;
@@ -33,9 +33,9 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --accent: #f0507f;
-    --accent-hover: #ff7aa0;
-    --accent-text: #1a0d08;
+    --accent: #6cc070;
+    --accent-hover: #8fd892;
+    --accent-text: #0b1a0b;
     --bg: #17171a;
     --text: #e8e7e3;
     --muted: #a5a49e;
@@ -63,9 +63,9 @@
 }
 
 :root[data-theme="dark"] {
-  --accent: #f0507f;
-  --accent-hover: #ff7aa0;
-  --accent-text: #1a0d08;
+  --accent: #6cc070;
+  --accent-hover: #8fd892;
+  --accent-text: #0b1a0b;
   --bg: #17171a;
   --text: #e8e7e3;
   --muted: #a5a49e;
@@ -125,7 +125,7 @@ img { max-width: 100%; }
 .brand-mark {
   display: grid; place-items: center;
   width: 30px; height: 30px; border-radius: 50%;
-  background: #d70a53; color: #fff; font-size: 15px;
+  background: #2e7d32; color: #fff; font-size: 15px;
 }
 .topbar .spacer { flex: 1; }
 .top-links { display: flex; gap: 2px; margin-left: 12px; }
@@ -499,7 +499,7 @@ pre.term {
   white-space: pre;
 }
 .term-win .copy-btn { top: 5px; right: 8px; background: transparent; color: #d4d4d8; border-color: rgba(255,255,255,.25); }
-.term-win .copy-btn:hover { color: #fff; border-color: #d70a53; }
+.term-win .copy-btn:hover { color: #fff; border-color: #2e7d32; }
 .t-u, .c-u { color: #8ae234; font-weight: 700; }
 .t-d, .c-d { color: #729fcf; font-weight: 700; }
 .t-c { color: #ffffff; }
@@ -508,7 +508,7 @@ pre.term {
   margin-left: 6px;
   padding: 0 6px;
   border-radius: 4px;
-  background: #d70a53;
+  background: #2e7d32;
   color: #fff;
   font: 600 12.5px system-ui, sans-serif;
   user-select: none;
@@ -541,7 +541,7 @@ pre.term {
   font: 12.5px system-ui, sans-serif;
   cursor: pointer;
 }
-.sim-btn:hover { color: #fff; border-color: #d70a53; }
+.sim-btn:hover { color: #fff; border-color: #2e7d32; }
 .sim-screen {
   height: 320px;
   overflow-y: auto;
@@ -560,7 +560,7 @@ pre.term {
   background: transparent;
   color: #ffffff;
   font: inherit;
-  caret-color: #d70a53;
+  caret-color: #2e7d32;
 }
 .sim-status { margin: 8px 0 0; font-weight: 600; color: var(--muted); }
 .sim-status.ok { color: var(--ok); }
@@ -609,13 +609,13 @@ dl.anatomy dt {
 }
 dl.anatomy dt::before { content: attr(data-n) ". "; color: var(--muted); }
 dl.anatomy dd { margin: 0; }
-.anat-0 { border-color: #d70a53; } .anat-parte.anat-0 { background: rgba(215,10,83,.28); }
+.anat-0 { border-color: #2e7d32; } .anat-parte.anat-0 { background: rgba(46,125,50,.28); }
 .anat-1 { border-color: #8ae234; } .anat-parte.anat-1 { background: rgba(138,226,52,.18); }
 .anat-2 { border-color: #729fcf; } .anat-parte.anat-2 { background: rgba(114,159,207,.22); }
 .anat-3 { border-color: #fce94f; } .anat-parte.anat-3 { background: rgba(252,233,79,.16); }
 .anat-4 { border-color: #ad7fa8; } .anat-parte.anat-4 { background: rgba(173,127,168,.25); }
 .anat-5 { border-color: #34e2e2; } .anat-parte.anat-5 { background: rgba(52,226,226,.16); }
-.anat-parte.anat-0::after { background: #d70a53; color: #fff; }
+.anat-parte.anat-0::after { background: #2e7d32; color: #fff; }
 .anat-parte.anat-1::after { background: #8ae234; color: #1a1a1a; }
 .anat-parte.anat-2::after { background: #729fcf; color: #1a1a1a; }
 .anat-parte.anat-3::after { background: #fce94f; color: #1a1a1a; }
