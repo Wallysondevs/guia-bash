@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash O que é — shell, história e o que ele faz | Guia Bash</title>
+<meta name="description" content="O que é o Bash: o que é um shell, a história do Bourne shell ao Bash (Bourne-Again SHell, GNU, 1989), o que ele faz entre você e o sistema (lê, expande, executa) e a diferença entre Bash, sh, zsh, fish e PowerShell.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">O que é o Bash</span></h1>
+
+<p class="intro">O Bash é o programa que entende o que você digita no terminal e manda o sistema fazer. Ele é, ao mesmo tempo, um jeito de conversar com o computador, um comando de cada vez, e uma linguagem de programação para escrever scripts. Nesta aula você vai entender de onde ele veio e o que ele faz com cada linha que você digita.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é um <strong>shell</strong> e onde ele fica entre você e o sistema.</li>
+  <li>A história do Bash: do Bourne shell ao "Bourne-Again SHell" do projeto GNU.</li>
+  <li>Os três passos que o Bash faz com cada linha: <strong>ler, expandir e executar</strong>.</li>
+  <li>A diferença entre Bash, <code>sh</code>, zsh, fish e PowerShell.</li>
+  <li>O que você vai conseguir fazer ao terminar este curso.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que é um shell</h2>
+<p>O coração de um sistema operacional é o <strong>kernel</strong> (em inglês, "núcleo", como o caroço de uma fruta). É ele que fala com o disco, a memória, o teclado e a tela. Mas o kernel não conversa com pessoas: ele só recebe pedidos de outros programas.</p>
+<p>O <strong>shell</strong> ("casca", em inglês) é a camada em volta desse núcleo. É um programa que recebe os seus pedidos em forma de texto, traduz para o que o sistema entende e mostra o resultado. O nome vem da imagem: o kernel é o miolo, o shell é a casca por onde você toca nele.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Camada</th><th>Quem é</th><th>O que faz</th></tr>
+<tr><td>Você</td><td>A pessoa no teclado</td><td>Digita <code>wc -l frutas.txt</code> e aperta <kbd>Enter</kbd>.</td></tr>
+<tr><td>Terminal</td><td>A janela (GNOME Terminal, Terminal do macOS, Windows Terminal…)</td><td>Mostra as letras e entrega o que você digitou ao shell.</td></tr>
+<tr><td><strong>Shell</strong></td><td><strong>O Bash</strong></td><td>Lê a linha, entende, prepara e manda executar o programa <code>wc</code>.</td></tr>
+<tr><td>Programas</td><td><code>wc</code>, <code>ls</code>, <code>grep</code>…</td><td>Fazem o trabalho: aqui, contar as linhas.</td></tr>
+<tr><td>Kernel</td><td>Linux, o núcleo do macOS…</td><td>Abre o arquivo, lê o disco, roda o programa.</td></tr>
+</table>
+</div>
+
+<p>Terminal e shell parecem a mesma coisa, mas são programas diferentes: o terminal é a janela, o shell é quem entende os comandos. A próxima aula, <a href="terminal-shell.html">Terminal, Shell e Console</a>, separa bem esses nomes.</p>
+
+<hr>
+
+<h2>Um pouco de história</h2>
+<p>O Bash não surgiu do nada. Ele é o herdeiro de uma família de shells do sistema Unix, criado nos anos 1970:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ano</th><th>Shell</th><th>O que trouxe</th></tr>
+<tr><td>1971</td><td>Thompson shell (<code>sh</code>)</td><td>O primeiro shell do Unix, de Ken Thompson. Só rodava comandos, quase sem programação.</td></tr>
+<tr><td>1978</td><td>C shell (<code>csh</code>)</td><td>De Bill Joy. Inventou o histórico (<code>!!</code>) e os apelidos (<code>alias</code>), mas tinha uma sintaxe parecida com a linguagem C.</td></tr>
+<tr><td>1979</td><td><strong>Bourne shell</strong> (<code>sh</code>)</td><td>Escrito por Stephen Bourne, nos Bell Labs. Trouxe variáveis, <code>if</code>, <code>for</code>, <code>while</code>, <code>case</code>: virou uma linguagem de script de verdade.</td></tr>
+<tr><td>1983</td><td>Korn shell (<code>ksh</code>)</td><td>De David Korn. Juntou o Bourne shell com as comodidades do C shell.</td></tr>
+<tr><td><strong>1989</strong></td><td><strong>Bash</strong></td><td>Escrito por Brian Fox para o projeto GNU. Compatível com o Bourne shell, com as melhores ideias do csh e do ksh.</td></tr>
+<tr><td>1992</td><td>POSIX <code>sh</code></td><td>Uma norma que define como um <code>sh</code> deve se comportar, para scripts rodarem em qualquer Unix.</td></tr>
+</table>
+</div>
+
+<h3>Por que "Bourne-Again"?</h3>
+<p>Nos anos 1980, o <strong>projeto GNU</strong>, de Richard Stallman, estava construindo um sistema operacional inteiro feito de <strong>software livre</strong> (que qualquer um pode usar, estudar, mudar e distribuir). O Bourne shell pertencia à AT&amp;T e não podia ser copiado livremente, então o GNU precisava do seu próprio shell. Brian Fox o escreveu, e a primeira versão pública saiu em <strong>junho de 1989</strong>. Desde o começo dos anos 1990, quem cuida do Bash é Chet Ramey.</p>
+<p>O nome é um trocadilho: <strong>B</strong>ourne-<strong>A</strong>gain <strong>SH</strong>ell. Em inglês, <em>born again</em> é "nascido de novo". O Bash é o Bourne shell renascido, agora livre.</p>
+<p>Quando o kernel Linux apareceu, em 1991, ele foi juntado às ferramentas GNU, e o Bash virou o shell padrão de quase todas as distribuições Linux. Por isso, até hoje, "aprender terminal" e "aprender Bash" são quase a mesma coisa.</p>
+
+<h3>As versões mais importantes</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Versão</th><th>Ano</th><th>Por que importa</th></tr>
+<tr><td>1.0</td><td>1989</td><td>A primeira versão pública.</td></tr>
+<tr><td>2.0</td><td>1996</td><td>Arrays, <code>$( )</code> mais completo, muitas opções novas.</td></tr>
+<tr><td>3.2</td><td>2006</td><td>A última versão com a licença GPLv2. É a que o macOS ainda traz em <code>/bin/bash</code>.</td></tr>
+<tr><td>4.0</td><td>2009</td><td>Arrays associativos, <code>mapfile</code>, <code>${x,,}</code>, <code>**</code>. Licença GPLv3.</td></tr>
+<tr><td>5.0 / 5.1 / 5.2</td><td>2019 / 2020 / 2022</td><td>Variáveis como <code>EPOCHSECONDS</code> e <code>SRANDOM</code>, muitas correções.</td></tr>
+<tr><td><strong>5.3</strong></td><td><strong>2025</strong></td><td>A versão deste guia. Ubuntu 26.04, Fedora e Arch já usam.</td></tr>
+</table>
+</div>
+<p>Você vai ver qual versão tem e como atualizar em <a href="onde-tem-bash.html">Bash em Cada Sistema</a>. As novidades em detalhe ficam em <a href="novidades.html">Novidades do Bash 5</a>.</p>
+
+<div class="try" data-goal="outre:5\.\d+\.\d+" data-solucao="echo $BASH_VERSION">
+<p class="try-task"><strong>Missão:</strong> descubra a versão do Bash da máquina da Ana. Digite <code>echo $BASH_VERSION</code>. A variável <code>BASH_VERSION</code> é preenchida pelo próprio Bash quando ele começa.</p>
+</div>
+
+<pre class="term">$ echo $BASH_VERSION
+5.3.9(1)-release                   « versão 5.3, correção 9, versão de lançamento (release)</pre>
+
+<hr>
+
+<h2>O que o Bash faz com cada linha</h2>
+<p>Quando você aperta <kbd>Enter</kbd>, o Bash não entrega a linha ao programa do jeito que você digitou. Antes, ele faz um trabalho de preparação. Pense num garçom que anota o pedido "o de sempre para a mesa 3": antes de levar à cozinha, ele troca "o de sempre" pelo prato certo. O Bash faz igual.</p>
+
+<ol class="passo">
+  <li><strong>Lê</strong> a linha que você digitou, até o <kbd>Enter</kbd>. Se ela estiver incompleta (uma aspa aberta, por exemplo), ele pede o resto mostrando <code>&gt;</code>.</li>
+  <li><strong>Separa em palavras</strong>, usando os espaços. A primeira palavra é o nome do comando; as outras são opções e argumentos.</li>
+  <li><strong>Expande</strong>: troca os "atalhos" pelo que eles representam. <code>$USER</code> vira <code>ana</code>, <code>~</code> vira <code>/home/ana</code>, <code>*.txt</code> vira a lista de arquivos que terminam em <code>.txt</code>.</li>
+  <li><strong>Executa</strong>: se o comando é interno do Bash (como <code>echo</code> e <code>cd</code>), ele mesmo faz; se é um programa (como <code>wc</code>), ele procura o arquivo do programa e manda o sistema rodá-lo.</li>
+  <li><strong>Espera e guarda o resultado</strong>: quando o comando termina, o Bash guarda o código de saída em <code>$?</code> e mostra o prompt de novo.</li>
+</ol>
+
+<h3>Vendo a expansão acontecer</h3>
+<p>Primeiro, três comandos com "atalhos". Repare que o <code>echo</code> não mostra <code>$USER</code>, <code>*.txt</code> nem <code>~</code>: ele mostra o que o Bash colocou no lugar deles.</p>
+
+<pre class="term">$ echo Olá, $USER
+Olá, ana                                 « $USER virou o nome da usuária
+$ echo Arquivos de texto: *.txt
+Arquivos de texto: frutas.txt            « *.txt virou a lista de arquivos .txt
+$ echo Pasta pessoal: ~
+Pasta pessoal: /home/ana                 « ~ virou o caminho da pasta pessoal</pre>
+
+<p>Quem fez essas trocas não foi o <code>echo</code>: foi o Bash, antes de chamar o <code>echo</code>. Dá para provar. O comando <code>set -x</code> liga o "modo de rastreio": a partir dele, o Bash mostra cada comando <strong>depois</strong> das expansões, numa linha que começa com <code>+</code>.</p>
+
+<dl class="anatomy">
+  <dt>set</dt><dd>Comando interno do Bash que liga e desliga opções do próprio shell.</dd>
+  <dt>-x</dt><dd>A opção <em>xtrace</em> ("rastrear a execução"): mostrar cada comando antes de rodá-lo, já expandido. <code>set +x</code> desliga.</dd>
+</dl>
+
+<pre class="term">$ set -x
+$ echo Olá, $USER, você tem *.txt em ~
++ echo Olá, ana, você tem frutas.txt em /home/ana      « o que o echo realmente recebeu
+Olá, ana, você tem frutas.txt em /home/ana             « o que o echo mostrou
+$ set +x
++ set +x                                               « o próprio set +x ainda aparece no rastro</pre>
+
+<p>A linha com <code>+</code> é o comando como o Bash o entregou ao <code>echo</code>: sem <code>$USER</code>, sem <code>*</code>, sem <code>~</code>. Essa ideia, "o shell prepara a linha antes de executar", explica a maioria das surpresas do Bash, e você vai reencontrá-la em <a href="curingas.html">Curingas</a>, <a href="aspas.html">Aspas</a> e <a href="ordem-expansoes.html">A Ordem das Expansões</a>. O <code>set -x</code> também é a ferramenta número um para achar erros em scripts (<a href="depuracao.html">Depurar</a>).</p>
+
+<div class="try" data-goal="ran:^\s*set -x,outre:frutas\.txt" data-solucao="set -x;;echo *.txt">
+<p class="try-task"><strong>Missão:</strong> ligue o rastreio com <code>set -x</code> e rode <code>echo *.txt</code>. Compare a linha com <code>+</code> e a resposta. Depois desligue com <code>set +x</code>.</p>
+</div>
+
+<h3>Comando interno ou programa?</h3>
+<p>No passo 4, o Bash decide quem vai trabalhar. Alguns comandos fazem parte do próprio Bash (os <strong>comandos internos</strong>, em inglês <em>builtins</em>); outros são programas separados, arquivos guardados no disco. O comando <code>type -t</code> conta o que cada nome é:</p>
+
+<pre class="term">$ type -t echo wc for
+builtin                            « echo: comando interno do Bash
+file                               « wc: um programa, um arquivo no disco
+keyword                            « for: palavra-chave da linguagem do Bash</pre>
+
+<p>Para você, que digita, a diferença quase não aparece. Mas ela explica por que <code>man cd</code> não funciona e <code>help cd</code> funciona (veja <a href="ajuda.html">Obtendo Ajuda</a>), e é o tema de <a href="sintaxe.html">Anatomia de um Comando</a> e <a href="path.html">PATH</a>.</p>
+
+<hr>
+
+<h2>Uma linguagem de comandos e de script</h2>
+<p>O Bash tem duas caras, e as duas usam exatamente a mesma linguagem:</p>
+<ul>
+  <li><strong>Interativo</strong>: você digita um comando, ele responde, você digita outro. É o uso do dia a dia no terminal.</li>
+  <li><strong>Script</strong>: você escreve os comandos num arquivo e o Bash executa o arquivo inteiro, do começo ao fim, sem você ficar digitando.</li>
+</ul>
+
+<p>No terminal, a Ana pode repetir um comando para cada fruta com um laço <code>for</code>, tudo numa linha:</p>
+
+<pre class="term">$ nome=Ana
+$ for fruta in banana uva; do echo "$nome gosta de $fruta"; done
+Ana gosta de banana
+Ana gosta de uva</pre>
+
+<p>Os mesmos recursos vão para dentro de um arquivo. Este script conta as linhas de cada arquivo <code>.txt</code> da pasta:</p>
+
+<pre class="file" data-file="conta.sh">#!/usr/bin/env bash
+# conta.sh: quantas linhas tem cada arquivo .txt desta pasta
+for arquivo in *.txt; do
+  linhas=$(wc -l &lt; "$arquivo")
+  echo "$arquivo tem $linhas linhas"
+done
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>#!/usr/bin/env bash</code></td><td>Diz ao sistema que este arquivo é um script do Bash.</td></tr>
+<tr><td><code># conta.sh: …</code></td><td>Comentário: tudo depois de <code>#</code> é ignorado. Serve para pessoas.</td></tr>
+<tr><td><code>for arquivo in *.txt; do</code></td><td>Para cada arquivo <code>.txt</code>, guarda o nome em <code>arquivo</code> e roda o bloco.</td></tr>
+<tr><td><code>linhas=$(wc -l &lt; "$arquivo")</code></td><td>Conta as linhas e guarda o número em <code>linhas</code>.</td></tr>
+<tr><td><code>echo "…"</code></td><td>Mostra o resultado.</td></tr>
+<tr><td><code>done</code></td><td>Fim do bloco que se repete.</td></tr>
+</table>
+</div>
+
+<p>Com uma cópia do <code>notas.txt</code> na pasta, a Ana roda o script:</p>
+<pre class="term">$ cp Documentos/notas.txt .
+$ bash conta.sh
+frutas.txt tem 7 linhas
+notas.txt tem 4 linhas</pre>
+
+<p>Tudo o que você aprender digitando no terminal serve para scripts, e vice-versa. O Nível 1 deste guia é o uso interativo; o Nível 2 começa em <a href="script-primeiro.html">Seu Primeiro Script</a>.</p>
+
+<hr>
+
+<h2>Bash × sh × zsh × fish × PowerShell</h2>
+<p>O Bash não é o único shell. Você vai esbarrar nestes nomes:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Shell</th><th>Onde aparece</th><th>Parecido com o Bash?</th><th>Bom saber</th></tr>
+<tr><td><strong>Bash</strong></td><td>Padrão na maioria dos Linux; WSL; Git Bash</td><td>—</td><td>O shell deste guia. O mais usado em scripts e tutoriais.</td></tr>
+<tr><td><code>sh</code> (POSIX)</td><td><code>/bin/sh</code> de todo Unix. No Debian/Ubuntu é o <code>dash</code>; no Fedora, o próprio Bash em modo compatível</td><td>É um "subconjunto": o Bash entende tudo do <code>sh</code>, mas o <code>sh</code> não entende tudo do Bash</td><td>Scripts com <code>#!/bin/sh</code> não podem usar recursos só do Bash, como <code>[[ ]]</code> e <code>{1..3}</code>. Veja <a href="portabilidade.html">POSIX sh e Bashismos</a>.</td></tr>
+<tr><td><code>zsh</code></td><td>Padrão do macOS desde 2019; popular com o Oh My Zsh</td><td>Muito: quase todo comando do dia a dia funciona igual</td><td>Diferenças em detalhes (arrays começam em 1, curingas que não acham nada dão erro). Scripts com <code>#!/usr/bin/env bash</code> continuam rodando no Bash.</td></tr>
+<tr><td><code>fish</code></td><td>Instalado à parte, em qualquer sistema</td><td>Pouco: sintaxe própria (<code>set x 1</code>, <code>end</code>)</td><td>Muito amigável para digitar, com sugestões automáticas. Scripts de Bash não rodam nele.</td></tr>
+<tr><td>PowerShell</td><td>Windows (também existe para Linux e macOS)</td><td>Não: outra família</td><td>Os comandos passam <strong>objetos</strong>, não texto (<code>Get-ChildItem</code>). Para Bash no Windows, use WSL ou Git Bash.</td></tr>
+</table>
+</div>
+
+<p>Veja na prática que o <code>sh</code> do Ubuntu (o <code>dash</code>) não entende um recurso que o Bash entende, as sequências com chaves:</p>
+<pre class="term">$ bash -c "echo {1..3}"
+1 2 3                              « o Bash expande a sequência
+$ sh -c "echo {1..3}"
+{1..3}                             « o sh (dash) não conhece {1..3}: mostra o texto como está</pre>
+
+<div class="tip">
+<strong>Por que aprender Bash e não outro?</strong>
+<p>Porque é o que você vai encontrar em servidores, contêineres, instaladores, tutoriais e scripts de outras pessoas. Mesmo quem usa zsh ou fish no dia a dia escreve scripts em Bash, porque ele está em todo lugar.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"comando não encontrado" ao tentar outro shell</strong>
+<pre class="term">$ zsh
+bash: zsh: comando não encontrado
+$ echo $?
+127                                « 127 = o Bash não achou nenhum comando com esse nome</pre>
+<p><strong>O que aconteceu:</strong> a mensagem começa com <code>bash:</code> porque quem respondeu foi o Bash: ele procurou um programa chamado <code>zsh</code> e não achou. O zsh simplesmente não está instalado nesta máquina.</p>
+<p><strong>Como resolver:</strong> nada a resolver se você só queria conhecer. Para instalar outro shell, use o gerenciador de pacotes do seu sistema. Os códigos de saída, como o <code>127</code>, têm aula própria: <a href="codigo-saida.html">Código de Saída</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Um script funciona com <code>bash</code> e falha com <code>sh</code></strong>
+<pre class="term">$ sh -c "echo {1..3}"
+{1..3}</pre>
+<p><strong>O que aconteceu:</strong> o script usa um recurso do Bash, mas foi rodado por outro shell. Isso acontece com <code>sh script.sh</code> ou com um script que começa com <code>#!/bin/sh</code>.</p>
+<p><strong>Como resolver:</strong> rode com <code>bash script.sh</code> e comece o arquivo com <code>#!/usr/bin/env bash</code>. Detalhes em <a href="executar.html">Formas de Executar</a>.</p>
+</div>
+
+<hr>
+
+<h2>O que você vai conseguir fazer</h2>
+<p>Ao terminar os três níveis e os projetos deste guia, você vai:</p>
+<ul>
+  <li>usar o terminal com conforto: atalhos, histórico, Tab, ajuda embutida;</li>
+  <li>trabalhar com arquivos e textos combinando comandos com <code>|</code>, <code>&gt;</code>, <code>&amp;&amp;</code> e <code>||</code>;</li>
+  <li>escrever scripts com argumentos, perguntas ao usuário, decisões, laços e funções;</li>
+  <li>tornar scripts seguros: tratar erros, limpar arquivos temporários com <code>trap</code>, validar a entrada com <a href="shellcheck.html">ShellCheck</a>;</li>
+  <li>automatizar tarefas reais: organizar downloads, fazer backup com rotação, gerar relatórios de logs (<a href="projetos.html">Projetos</a>);</li>
+  <li>ler e entender os scripts que você encontrar por aí.</li>
+</ul>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Termo</th><th>Significado</th></tr>
+<tr><td>Kernel</td><td>O núcleo do sistema: fala com o hardware.</td></tr>
+<tr><td>Shell</td><td>Programa que entende comandos em texto e manda o sistema executar.</td></tr>
+<tr><td>Bash</td><td><em>Bourne-Again SHell</em>, o shell do projeto GNU (1989).</td></tr>
+<tr><td>Expansão</td><td>A troca que o Bash faz antes de executar: <code>$USER</code>, <code>~</code>, <code>*.txt</code>…</td></tr>
+<tr><td>Comando interno (<em>builtin</em>)</td><td>Comando que faz parte do Bash: <code>echo</code>, <code>cd</code>, <code>type</code>.</td></tr>
+<tr><td>Script</td><td>Arquivo de texto com comandos, executado do começo ao fim.</td></tr>
+<tr><td><code>echo $BASH_VERSION</code></td><td>Mostra a versão do Bash em uso.</td></tr>
+<tr><td><code>set -x</code> / <code>set +x</code></td><td>Liga / desliga o rastreio que mostra cada comando já expandido.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. O que significa o nome "Bash"?</p>
+<label><input type="radio" name="q1"> Basic Shell</label>
+<label><input type="radio" name="q1"> Bourne-Again SHell</label>
+<label><input type="radio" name="q1"> Bell Labs Shell</label>
+<label><input type="radio" name="q1"> Binary Access Shell</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. A Ana digita <code>echo *.txt</code> e aparece <code>frutas.txt</code>. Quem trocou <code>*.txt</code> por <code>frutas.txt</code>?</p>
+<label><input type="radio" name="q2"> O <code>echo</code>.</label>
+<label><input type="radio" name="q2"> O terminal (a janela).</label>
+<label><input type="radio" name="q2"> O Bash, antes de chamar o <code>echo</code>.</label>
+<label><input type="radio" name="q2"> O kernel.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">3. Qual destes shells <strong>não</strong> roda scripts de Bash, por ter uma sintaxe de outra família?</p>
+<label><input type="radio" name="q3"> O Bash 5.2</label>
+<label><input type="radio" name="q3"> O Bash 5.3</label>
+<label><input type="radio" name="q3"> O Bash do Git Bash, no Windows</label>
+<label><input type="radio" name="q3"> O PowerShell</label>
+</div>
+
+<div class="exercise">
+<h3>4. Ver a expansão</h3>
+<p>Complete o comando que liga o rastreio, para o Bash mostrar cada comando já expandido numa linha com <code>+</code>:</p>
+<div class="ex-code">set <input data-answer="-x|-o xtrace" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>5. Qual é a versão?</h3>
+<p>Complete para mostrar a versão do Bash que está rodando:</p>
+<div class="ex-code">echo <input data-answer="$BASH_VERSION|&quot;$BASH_VERSION&quot;|${BASH_VERSION}" aria-label="variável"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O <strong>shell</strong> é a "casca" entre você e o kernel; o Bash é o shell mais usado.</li>
+  <li>Bash = <em>Bourne-Again SHell</em>: o Bourne shell (1979) renascido como software livre pelo projeto GNU, em 1989.</li>
+  <li>Com cada linha, o Bash <strong>lê</strong>, separa em palavras, <strong>expande</strong> (<code>$USER</code>, <code>~</code>, <code>*</code>) e <strong>executa</strong>; <code>set -x</code> mostra o resultado da expansão.</li>
+  <li>A mesma linguagem serve para digitar no terminal e para escrever scripts.</li>
+  <li><code>sh</code> é mais limitado, zsh é muito parecido, fish e PowerShell são outra coisa.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

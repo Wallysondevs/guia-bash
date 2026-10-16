@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutorial Bash — aprenda Bash do zero, como numa escola | Guia Bash</title>
+<meta name="description" content="Curso de Bash do zero ao avançado, em português: cada comando e cada linha de script explicados parte por parte, terminal e editor de script simulados no navegador, missões, projetos e exercícios. Vale para Linux, macOS e Windows (WSL).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="hero">
+<h1>Tutorial Bash</h1>
+<p>Aprenda Bash do zero, como numa escola: cada comando e cada linha de script são explicados parte por parte, você vê exatamente o que aparece na tela e pratica num terminal simulado aqui mesmo no navegador. Vale para qualquer Linux, para o macOS e para o Windows (com WSL ou Git Bash).</p>
+<a class="btn btn-lg" href="introducao.html">Comece pelo Nível 1 &#10095;</a>
+</div>
+
+<div class="pager"></div>
+
+<h2>Experimente agora</h2>
+<p>A caixa abaixo é um <strong>terminal simulado</strong>: uma máquina fictícia chamada <strong>notebook</strong>, com a usuária <strong>ana</strong>, rodando o Bash. Ela funciona dentro desta página e nada do que você digitar mexe no seu computador. Clique na janela escura, digite <code>echo Olá</code> e aperte <kbd>Enter</kbd>.</p>
+
+<div class="try" data-goal="out:Olá" data-solucao="echo Olá">
+<p class="try-task"><strong>Missão:</strong> digite <code>echo Olá</code> e aperte <kbd>Enter</kbd>. O <code>echo</code> ("eco") repete na tela o que você escreveu depois dele. Depois, se quiser, experimente <code>echo Olá, $USER</code> e <code>ls</code>.</p>
+</div>
+
+<p>O que aconteceu: você escreveu um <strong>comando</strong> (<code>echo</code>) seguido de um <strong>argumento</strong> (<code>Olá</code>). O Bash leu a linha, achou o comando e o executou. O <code>echo</code> devolveu o texto na tela e um novo prompt apareceu, esperando o próximo comando. É isso que o Bash faz o dia inteiro: ler, entender e executar o que você pede.</p>
+
+<pre class="term">$ echo Olá
+Olá                                « a resposta do comando
+$ echo Olá, $USER
+Olá, ana                           « o Bash trocou $USER pelo nome da usuária</pre>
+
+<hr>
+
+<h2>O que é este guia</h2>
+<p>O <strong>Bash</strong> é o programa que entende os comandos que você digita no terminal. Ele está em quase todo Linux, no macOS, no Windows (pelo WSL e pelo Git Bash) e até no Android (pelo Termux). Quem sabe Bash consegue:</p>
+<ul>
+  <li>usar o terminal sem medo: navegar, procurar, copiar e organizar arquivos;</li>
+  <li>juntar comandos pequenos para resolver problemas grandes (<code>|</code>, <code>&gt;</code>, <code>&amp;&amp;</code>);</li>
+  <li>escrever <strong>scripts</strong>: arquivos com comandos que fazem tarefas repetitivas sozinhos, como backups e relatórios;</li>
+  <li>entender scripts dos outros: instaladores, arquivos de configuração, automações de servidor.</li>
+</ul>
+<p>O guia começa do zero absoluto (o que é um terminal?) e vai até scripts robustos, com tratamento de erros, opções de linha de comando e processos em paralelo. A aula <a href="introducao.html">O que é o Bash</a> conta a história e mostra o que acontece entre você e o sistema.</p>
+
+<hr>
+
+<h2>Como as aulas funcionam</h2>
+<p>Nenhum comando aparece "seco". Toda aula segue o mesmo caminho:</p>
+<ol class="passo">
+  <li><strong>A ideia primeiro.</strong> Antes do comando, você entende o problema que ele resolve, com um exemplo do dia a dia.</li>
+  <li><strong>Anatomia do comando.</strong> Cada pedaço é numerado e explicado: o comando, as opções e os argumentos. Nos scripts, cada linha.</li>
+  <li><strong>Terminal com a resposta.</strong> Você vê exatamente o que aparece na tela, com etiquetas laranja apontando o que importa. Toda saída foi conferida no GNU Bash 5.3 de verdade.</li>
+  <li><strong>O que ele devolve.</strong> Além do texto na tela, todo comando devolve um código de saída (<code>0</code> = deu certo). As aulas mostram esse código, principalmente quando "não aparece nada".</li>
+  <li><strong>Várias formas de fazer.</strong> Quase sempre há mais de um caminho, e uma tabela "Qual usar?" mostra quando escolher cada um.</li>
+  <li><strong>Quando não funciona.</strong> As mensagens de erro reais, por que acontecem e como resolver.</li>
+  <li><strong>Experimente e exercícios.</strong> Missões no terminal simulado e no editor de script, e exercícios com correção na hora.</li>
+</ol>
+
+<h3>Exemplo: a anatomia de um comando</h3>
+<p>Quantas linhas tem o arquivo <code>frutas.txt</code> da Ana? O comando <code>wc</code> (de <em>word count</em>, "contagem de palavras") conta linhas, palavras e letras. Veja como as aulas desmontam um comando:</p>
+
+<dl class="anatomy">
+  <dt>wc</dt><dd>O <strong>comando</strong>: o programa que vai trabalhar. Ele conta coisas num texto.</dd>
+  <dt>-l</dt><dd>Uma <strong>opção</strong>: muda o comportamento. <code>-l</code> (de <em>lines</em>, "linhas") pede só o número de linhas.</dd>
+  <dt>frutas.txt</dt><dd>O <strong>argumento</strong>: em que o comando vai trabalhar, aqui o nome do arquivo.</dd>
+</dl>
+
+<pre class="term">$ wc -l frutas.txt
+7 frutas.txt                       « 7 linhas, seguidas do nome do arquivo contado
+$ echo $?
+0                                  « código de saída 0: deu certo</pre>
+
+<p>A primeira resposta diz que o arquivo tem 7 linhas (uma fruta por linha). O <code>echo $?</code> mostra o código de saída do último comando: <code>0</code> quer dizer "sem erro". A aula <a href="sintaxe.html">Anatomia de um Comando</a> explica opções e argumentos a fundo.</p>
+
+<h3>Exemplo: o editor de script</h3>
+<p>Além do terminal, o guia tem um <strong>editor de script</strong>, o "Try it Yourself" daqui. Você muda o código, clica em <strong>Rodar</strong> e vê a saída e o código de saída. O script abaixo recebe um nome como argumento (o campo de argumentos já vem com <code>Ana</code>) e cumprimenta essa pessoa. Antes de mexer, leia o que cada linha faz:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>#!/usr/bin/env bash</code></td><td>A "linha shebang": diz que o arquivo deve ser rodado pelo Bash.</td></tr>
+<tr><td><code>nome=$1</code></td><td>Guarda o primeiro argumento (<code>$1</code>) numa variável chamada <code>nome</code>.</td></tr>
+<tr><td><code>echo "Olá, $nome!"</code></td><td>Mostra o texto, trocando <code>$nome</code> pelo valor guardado.</td></tr>
+<tr><td><code>echo "Sua lista tem $(wc -l &lt; frutas.txt) frutas."</code></td><td>Roda o <code>wc</code> e cola o resultado dele no meio do texto.</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="saudacao.sh" data-args="Ana" data-goal="out:Bom dia, Ana!">
+<p class="try-task"><strong>Missão:</strong> clique em <strong>Rodar</strong> para ver o resultado. Depois mude o script para dizer <code>Bom dia</code> em vez de <code>Olá</code> e rode de novo. Se quiser, troque o argumento <code>Ana</code> pelo seu nome.</p>
+<pre class="script">#!/usr/bin/env bash
+nome=$1
+echo "Olá, $nome!"
+echo "Sua lista tem $(wc -l &lt; frutas.txt) frutas."
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+nome=$1
+echo "Bom dia, $nome!"
+echo "Sua lista tem $(wc -l &lt; frutas.txt) frutas."
+</pre>
+</div>
+
+<p>Rodando sem mudar nada, a saída é esta. Cada linha da saída veio de um <code>echo</code> do script:</p>
+<pre class="term">$ bash saudacao.sh Ana
+Olá, Ana!
+Sua lista tem 7 frutas.</pre>
+
+<p>Não se preocupe se <code>$1</code> e <code>$( )</code> ainda parecem mágica: cada um tem a sua aula (<a href="argumentos.html">Argumentos</a> e <a href="substituicao-comando.html">Substituição de Comando</a>). A aula <a href="simulador.html">Terminal Simulado</a> ensina a usar o terminal e o editor, e mostra o que eles sabem e não sabem fazer.</p>
+
+<hr>
+
+<h2>Escolha sua trilha</h2>
+<div class="trilhas">
+  <div class="trilha n1">
+    <h3>Nível 1 · Iniciante</h3>
+    <p>Para quem nunca abriu um terminal.</p>
+    <ul>
+      <li>O que é o Bash e onde ele existe</li>
+      <li>Prompt, atalhos, histórico e Tab</li>
+      <li>Navegar, criar, copiar e apagar arquivos</li>
+      <li>Curingas, aspas e variáveis</li>
+      <li><code>$?</code>, <code>&amp;&amp;</code>, redirecionamento e pipes</li>
+    </ul>
+    <a class="btn" href="introducao.html">Começar &#10095;</a>
+  </div>
+  <div class="trilha n2">
+    <h3>Nível 2 · Intermediário</h3>
+    <p>Escrever os seus primeiros scripts.</p>
+    <ul>
+      <li>Argumentos, <code>read</code> e variáveis</li>
+      <li><code>if</code>, <code>case</code>, <code>for</code> e <code>while</code></li>
+      <li>Funções, <code>printf</code> e here-docs</li>
+      <li><code>.bashrc</code>, <code>alias</code>, <code>PATH</code> e o prompt</li>
+    </ul>
+    <a class="btn" href="script-primeiro.html">Começar &#10095;</a>
+  </div>
+  <div class="trilha n3">
+    <h3>Nível 3 · Avançado</h3>
+    <p>Scripts robustos, rápidos e portáveis.</p>
+    <ul>
+      <li>Arrays, strings e regex</li>
+      <li><code>set -euo pipefail</code>, <code>trap</code> e depuração</li>
+      <li>Jobs, subshells e descritores</li>
+      <li>POSIX <code>sh</code> × Bash e novidades do Bash 5</li>
+    </ul>
+    <a class="btn" href="arrays.html">Começar &#10095;</a>
+  </div>
+  <div class="trilha proj">
+    <h3>Projetos</h3>
+    <p>Scripts completos, construídos passo a passo.</p>
+    <ul>
+      <li>Organizar a pasta Downloads</li>
+      <li>Backup com rotação</li>
+      <li>Relatório de logs</li>
+      <li>Um jogo e uma ferramenta de verdade</li>
+    </ul>
+    <a class="btn" href="projetos.html">Ver projetos &#10095;</a>
+  </div>
+  <div class="trilha ref">
+    <h3>Referência</h3>
+    <p>Consulta rápida para quando você já sabe o que procura.</p>
+    <ul>
+      <li>Comandos internos e variáveis especiais</li>
+      <li>Cola de expansões e atalhos do teclado</li>
+      <li>Erros comuns e glossário</li>
+      <li>Quiz para testar o que aprendeu</li>
+    </ul>
+    <a class="btn" href="ref-builtins.html">Consultar &#10095;</a>
+  </div>
+</div>
+
+<div class="tip">
+<strong>A regra de ouro</strong>
+<p>Ler não basta: digite cada exemplo. Use o terminal simulado das aulas e, quando quiser, repita no terminal do seu computador. Na dúvida sobre o seu sistema, a aula <a href="onde-tem-bash.html">Bash em Cada Sistema</a> mostra como abrir o Bash no Linux, no macOS e no Windows.</p>
+</div>
+
+<hr>
+
+<h2>Como ler este guia</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Elemento</th><th>O que significa</th></tr>
+<tr><td><code>ana@notebook:~$</code></td><td>O prompt: usuária <code>ana</code>, na máquina <code>notebook</code>, na pasta pessoal (<code>~</code>). O que vem depois é o comando digitado. Veja <a href="prompt.html">Lendo o Prompt</a>.</td></tr>
+<tr><td><code>&gt;</code> no começo da linha</td><td>Continuação: o comando anterior ainda não terminou e o Bash espera o resto (o prompt secundário).</td></tr>
+<tr><td><code>root@notebook:~#</code></td><td>Comando rodado como administrador (root). O <code>#</code> no fim avisa que você pode mexer em tudo.</td></tr>
+<tr><td>Linhas sem prompt</td><td>A resposta do computador.</td></tr>
+<tr><td><span class="t-a">← etiqueta</span></td><td>Uma explicação do guia sobre aquela linha. Não aparece no terminal real.</td></tr>
+<tr><td><code>&lt;texto&gt;</code></td><td>Troque pelo seu valor. Ex.: <code>cd &lt;pasta&gt;</code> vira <code>cd Documentos</code>.</td></tr>
+<tr><td><code>[opcional]</code></td><td>Parte que pode ser omitida.</td></tr>
+<tr><td><span class="versao">bash 5.3+</span></td><td>O recurso só existe a partir dessa versão do Bash. A aula diz a alternativa para versões mais antigas.</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Versão de referência: GNU Bash 5.3</strong>
+<p>Todas as saídas foram conferidas no GNU Bash 5.3, em português do Brasil, com as ferramentas GNU (as do Linux). O Bash 5.3 vem no Ubuntu 26.04, no Fedora e no Arch. O Debian 13 e o Ubuntu 24.04 têm o 5.2, que é quase igual. O macOS vem com o antigo 3.2: a aula <a href="onde-tem-bash.html">Bash em Cada Sistema</a> mostra como instalar um mais novo.</p>
+</div>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
