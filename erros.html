@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Tratar Erros — códigos de saída, stderr e validação | Guia Bash</title>
+<meta name="description" content="Aprenda a tratar erros em scripts Bash: checar o código de saída, cmd || { …; exit 1; }, uma função erro, mensagens para stderr com o nome do script, códigos de saída com significado, validar argumentos, arquivos e comandos, if ! e PIPESTATUS.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Tratar Erros</span></h1>
+
+<p class="intro">O <a href="modo-estrito.html">modo estrito</a> para o script quando algo dá errado, mas em silêncio e às vezes no lugar errado. <strong>Tratar erros</strong> é decidir, em cada passo importante, o que fazer quando ele falha: avisar com uma mensagem clara, devolver um código que diga o que houve e sair sem deixar sujeira. É isso que separa um script "que funciona na minha máquina" de uma ferramenta de verdade.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Três jeitos de checar se um comando deu certo: <code>if</code>, <code>||</code> e <code>$?</code>, e qual usar.</li>
+  <li>A escrever mensagens de erro do jeito certo: na saída de erro (<code>&gt;&amp;2</code>), com o nome do script.</li>
+  <li>A criar uma função <code>erro</code> e usar códigos de saída que significam algo.</li>
+  <li>A validar tudo antes de começar: argumentos, arquivos e programas necessários (<code>command -v</code>).</li>
+  <li>A ler o código de cada parte de um pipe com <code>PIPESTATUS</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: o script mente</h2>
+<p>A Ana fez um script para guardar uma cópia de um arquivo na pasta <code>~/backup</code>:</p>
+
+<pre class="file" data-file="copia.sh">#!/usr/bin/env bash
+cp "$1" ~/backup/
+echo "Cópia feita!"
+</pre>
+
+<p>Ela ainda não criou a pasta <code>backup</code>. Veja:</p>
+
+<pre class="term">$ bash copia.sh frutas.txt
+cp: não foi possível criar arquivo comum '/home/ana/backup/': Não é um diretório
+Cópia feita!                                   « mentira: nada foi copiado
+$ echo $?
+0                                              « e o código diz "sucesso"</pre>
+
+<p>Duas mentiras: a tela diz "Cópia feita!" e o <a href="codigo-saida.html">código de saída</a> diz 0. Se esse script rodasse sozinho toda noite, a Ana só descobriria o problema no dia em que precisasse do backup. Tratar o erro é fazer o script <strong>dizer a verdade</strong>.</p>
+
+<hr>
+
+<h2>Checar o código de saída com <code>if</code></h2>
+<p>Todo comando devolve um número ao terminar: <code>0</code> é sucesso, qualquer outro é falha. O <code>if</code> testa exatamente esse número: ele <strong>roda o comando</strong> e escolhe o caminho pelo resultado.</p>
+
+<pre class="file" data-file="copia2.sh">#!/usr/bin/env bash
+if cp "$1" ~/backup/; then
+  echo "Cópia feita!"
+else
+  echo "A cópia falhou." &gt;&amp;2
+  exit 1
+fi
+</pre>
+
+<dl class="anatomy">
+  <dt>if cp "$1" ~/backup/; then</dt><dd>Roda o <code>cp</code>. Código 0 → executa o bloco do <code>then</code>.</dd>
+  <dt>else</dt><dd>Qualquer outro código → executa este bloco.</dd>
+  <dt>echo "…" &gt;&amp;2</dt><dd>Escreve a mensagem na <strong>saída de erro</strong> (canal 2), e não na saída normal. Explicado logo abaixo.</dd>
+  <dt>exit 1</dt><dd>Termina o script com o código 1, avisando quem chamou que deu errado.</dd>
+</dl>
+
+<pre class="term">$ bash copia2.sh frutas.txt
+cp: não foi possível criar arquivo comum '/home/ana/backup/': Não é um diretório
+A cópia falhou.
+$ echo $?
+1                                              « agora o código conta a verdade</pre>
+
+<p>Repare que não usamos <code>[ ]</code>: o <code>if</code> não precisa de colchetes para testar um comando. Os colchetes são só mais um comando, o <a href="testes.html"><code>test</code></a>, usado para comparar textos e números.</p>
+
+<hr>
+
+<h2>Mensagens de erro vão para a saída de erro (<code>&gt;&amp;2</code>)</h2>
+<p>Todo programa tem dois canais de saída (veja <a href="redirecionamento.html">Redirecionamento</a>): o <strong>1</strong> (stdout), para o resultado, e o <strong>2</strong> (stderr), para avisos e erros. Os dois aparecem na tela, mas quem usa o seu script pode separá-los. O <code>&gt;&amp;2</code> quer dizer "mande a saída deste comando para onde o canal 2 aponta".</p>
+
+<dl class="anatomy">
+  <dt>&gt;</dt><dd>Redirecionar a saída (canal 1)…</dd>
+  <dt>&amp;2</dt><dd>…para o canal 2. O <code>&amp;</code> diz que <code>2</code> é um canal, e não um arquivo chamado "2".</dd>
+</dl>
+
+<p>Por que isso importa? Porque quem redireciona a saída do seu script espera receber <strong>só o resultado</strong>. Os erros precisam continuar visíveis, ou poder ser descartados à parte:</p>
+
+<pre class="term">$ bash copia2.sh frutas.txt 2&gt;/dev/null      « joga fora o canal 2
+$ echo $?
+1                                              « nenhuma mensagem, mas o código continua lá</pre>
+
+<p>Com <code>2&gt;/dev/null</code>, tanto a mensagem do <code>cp</code> quanto a nossa sumiram, porque as duas foram para o canal 2. Se a nossa mensagem tivesse ido para o canal 1, ela teria "vazado" para dentro de um arquivo de resultado ou de um <a href="pipes.html">pipe</a>, misturada aos dados.</p>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Resultado (o que outro programa vai ler) → canal 1, <code>echo</code> normal. Tudo o mais (erros, avisos, "processando…", mensagem de uso pedida por engano) → canal 2, <code>&gt;&amp;2</code>. A exceção é a ajuda pedida de propósito (<code>-h</code>): aí ela é o resultado e vai para o canal 1.</p>
+</div>
+
+<hr>
+
+<h2>A forma curta: <code>cmd || { …; exit 1; }</code></h2>
+<p>Escrever <code>if/else</code> para cada comando deixa o script comprido. A forma mais usada é o <code>||</code> (<a href="operadores.html">"ou"</a>): "rode o <code>cp</code>; <strong>se falhar</strong>, rode o bloco".</p>
+
+<pre class="file" data-file="copia3.sh">#!/usr/bin/env bash
+cp "$1" ~/backup/ || { echo "copia3.sh: a cópia falhou" &gt;&amp;2; exit 1; }
+echo "Cópia feita!"
+</pre>
+
+<dl class="anatomy">
+  <dt>cp "$1" ~/backup/</dt><dd>O comando que pode falhar.</dd>
+  <dt>||</dt><dd>"Se o da esquerda falhar (código diferente de 0), rode o da direita."</dd>
+  <dt>{ … ; }</dt><dd>Um <strong>grupo</strong>: junta vários comandos para que todos dependam do <code>||</code>. Precisa de espaço depois do <code>{</code> e de <code>;</code> antes do <code>}</code>.</dd>
+  <dt>exit 1</dt><dd>Sai do script inteiro, porque o grupo <code>{ }</code> roda no próprio shell.</dd>
+</dl>
+
+<pre class="term">$ mkdir ~/backup
+$ bash copia3.sh frutas.txt
+Cópia feita!
+$ bash copia3.sh nada.txt
+cp: não foi possível obter estado de 'nada.txt': Arquivo ou diretório inexistente
+copia3.sh: a cópia falhou
+$ echo $?
+1</pre>
+
+<p>Na primeira vez, o <code>cp</code> funcionou e o bloco nem rodou. Na segunda, o arquivo não existia: o <code>cp</code> deu a mensagem dele, o nosso bloco deu a nossa, e o script saiu com 1.</p>
+
+<div class="warning">
+<strong>Chaves, não parênteses; e não esqueça as chaves</strong>
+<p><code>cmd || echo "falhou" &gt;&amp;2; exit 1</code> (sem chaves) sai <strong>sempre</strong>, porque o <code>;</code> separa: o <code>exit 1</code> não depende do <code>||</code>. E <code>cmd || ( echo "falhou"; exit 1 )</code> (com parênteses) <strong>nunca</strong> sai do script, porque <code>( )</code> cria um <a href="subshell.html">subshell</a> e o <code>exit</code> encerra só ele. Os dois casos estão em "Quando não funciona".</p>
+</div>
+
+<hr>
+
+<h2>Uma função <code>erro</code> para não repetir</h2>
+<p>Quando o script tem muitos pontos de falha, a mensagem e o <code>exit</code> se repetem. Crie uma <a href="funcoes.html">função</a> que faz as duas coisas. Ela costuma se chamar <code>die</code> ("morra", em inglês) ou, em português, <code>erro</code>:</p>
+
+<pre class="file" data-file="trecho.sh">readonly PROG=${0##*/}
+
+erro() {
+  printf '%s: erro: %s\n' "$PROG" "$1" &gt;&amp;2
+  exit "${2:-1}"
+}
+
+cp -- "$arquivo" ~/backup/ || erro "a cópia de '$arquivo' falhou" 74
+</pre>
+
+<dl class="anatomy">
+  <dt>${0##*/}</dt><dd><code>$0</code> é o caminho usado para chamar o script (<code>./guardar.sh</code>, <code>/home/ana/guardar.sh</code>…). O <code>##*/</code> apaga tudo até a última barra e sobra só o nome: <code>guardar.sh</code>. Veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</dd>
+  <dt>readonly PROG=…</dt><dd>Uma constante: ninguém consegue mudar <code>PROG</code> depois.</dd>
+  <dt>printf '%s: erro: %s\n'</dt><dd>Formato <code>nome: erro: mensagem</code>, o mesmo padrão dos comandos do sistema (<code>cp: …</code>, <code>ls: …</code>). <a href="printf.html"><code>printf</code></a> é mais previsível que <code>echo</code> com textos variáveis.</dd>
+  <dt>"$1"</dt><dd>A mensagem, primeiro argumento da função.</dd>
+  <dt>&gt;&amp;2</dt><dd>Tudo para o canal de erro.</dd>
+  <dt>exit "${2:-1}"</dt><dd>Sai com o código do segundo argumento; se ele não veio, com 1.</dd>
+</dl>
+
+<p>Começar a mensagem com o nome do script é importante quando ele roda junto com outros (num pipe, no cron, dentro de outro script): você sabe <strong>quem</strong> reclamou.</p>
+
+<hr>
+
+<h2>Códigos de saída que significam algo</h2>
+<p>O código de saída é um número de 0 a 255. Para quem chama o script, ele é a única informação garantida sobre o que aconteceu. Alguns valores já têm significado combinado:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Significado</th><th>Quem usa</th></tr>
+<tr><td><code>0</code></td><td>Sucesso.</td><td>Todos.</td></tr>
+<tr><td><code>1</code></td><td>Erro genérico.</td><td>A maioria dos comandos. Também "não achei" no <code>grep</code>, "diferentes" no <code>diff</code>.</td></tr>
+<tr><td><code>2</code></td><td>Uso errado (opção ou argumento inválido).</td><td>Comandos internos do Bash, <code>grep</code>, <code>ls</code>…</td></tr>
+<tr><td><code>64</code>–<code>78</code></td><td>Erros específicos do padrão <em>sysexits</em>: 64 uso, 65 dados ruins, 66 arquivo de entrada não existe, 69 serviço/programa indisponível, 70 erro interno, 73 não conseguiu criar, 74 erro de E/S, 77 sem permissão, 78 configuração.</td><td>Programas que querem ser bem específicos. Opcional, mas útil.</td></tr>
+<tr><td><code>126</code></td><td>Achou o comando, mas não pôde executá-lo (sem permissão <code>x</code>).</td><td>O Bash.</td></tr>
+<tr><td><code>127</code></td><td>Comando não encontrado.</td><td>O Bash.</td></tr>
+<tr><td><code>128+N</code></td><td>Morto pelo sinal N: 130 = Ctrl+C (INT, 2), 137 = KILL (9), 141 = PIPE (13), 143 = TERM (15).</td><td>O Bash. Veja <a href="trap.html">trap e Sinais</a>.</td></tr>
+<tr><td><code>255</code></td><td>Código fora da faixa (<code>exit -1</code>).</td><td>Evite: <code>ssh</code> usa 255 para "a conexão falhou".</td></tr>
+</table>
+</div>
+
+<pre class="term">$ programa-que-nao-existe
+bash: programa-que-nao-existe: comando não encontrado
+$ echo $?
+127
+$ chmod -x guardar.sh
+$ ./guardar.sh frutas.txt
+bash: ./guardar.sh: Permissão negada
+$ echo $?
+126
+$ bash -c 'exit 300'; echo $?
+44                                             « 300 não cabe: o Bash usa o resto da divisão por 256
+$ bash -c 'exit 256'; echo $?
+0                                              « 256 vira 0: um "sucesso" acidental!</pre>
+
+<p><strong>Na prática:</strong> 0 para sucesso, 1 para erro geral e 2 para uso errado já é um ótimo começo. Se quiser distinguir mais casos, use a faixa 64–78 e documente na ajuda do script. Nunca use valores acima de 125, que se confundem com os do próprio Bash.</p>
+
+<hr>
+
+<h2>Validar antes de começar</h2>
+<p>O melhor erro é o que aparece <strong>antes</strong> de o script mexer em qualquer coisa. Confira três coisas logo no início:</p>
+
+<h3>1. Os argumentos</h3>
+<p><code>$#</code> é <a href="argumentos.html">quantos argumentos</a> vieram. Se for diferente do esperado, mostre como usar o script e saia com 2:</p>
+
+<pre class="file" data-file="trecho.sh">uso() {
+  printf 'Uso: %s ARQUIVO\n' "$PROG"
+  printf 'Guarda uma cópia de ARQUIVO em %s.\n' "$DESTINO"
+}
+
+if [[ $# -ne 1 ]]; then
+  uso &gt;&amp;2
+  exit 2
+fi
+</pre>
+
+<h3>2. Os arquivos</h3>
+<p>Os <a href="testes.html">testes</a> de arquivo dizem se o caminho existe e o que você pode fazer com ele. Teste do mais geral ao mais específico, para a mensagem ser exata:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Teste</th><th>Verdadeiro quando…</th><th>Mensagem típica</th></tr>
+<tr><td><code>[[ -e $a ]]</code></td><td>existe (qualquer tipo)</td><td>"não existe"</td></tr>
+<tr><td><code>[[ -f $a ]]</code></td><td>é um arquivo comum</td><td>"não é um arquivo comum"</td></tr>
+<tr><td><code>[[ -d $a ]]</code></td><td>é uma pasta</td><td>"não é uma pasta"</td></tr>
+<tr><td><code>[[ -r $a ]]</code> / <code>-w</code> / <code>-x</code></td><td>você pode ler / escrever / executar</td><td>"sem permissão para ler"</td></tr>
+<tr><td><code>[[ -s $a ]]</code></td><td>existe e não está vazio</td><td>"está vazio"</td></tr>
+</table>
+</div>
+
+<h3>3. Os programas de que o script precisa</h3>
+<p>Se o script usa um programa que pode não estar instalado, confira com <code>command -v</code>. Ele mostra onde o comando está e devolve 0; se não achar, não mostra nada e devolve 1:</p>
+
+<pre class="term">$ command -v cp
+/usr/bin/cp
+$ command -v ls
+alias ls='ls --color=auto'                     « no terminal, aliases também contam
+$ command -v convert
+$ echo $?
+1                                              « não está instalado</pre>
+
+<dl class="anatomy">
+  <dt>command</dt><dd>Comando interno que roda ou descreve outros comandos, ignorando funções.</dd>
+  <dt>-v</dt><dd>"Diga onde está" (<em>verbose</em>), sem executar.</dd>
+</dl>
+
+<pre class="file" data-file="fotos.sh">#!/usr/bin/env bash
+for programa in convert zip; do
+  if ! command -v "$programa" &gt; /dev/null; then
+    echo "fotos.sh: erro: este script precisa do '$programa'." &gt;&amp;2
+    echo "Instale-o (no Debian/Ubuntu: sudo apt install imagemagick) e tente de novo." &gt;&amp;2
+    exit 69
+  fi
+done
+echo "tudo pronto"
+</pre>
+
+<pre class="term">$ bash fotos.sh
+fotos.sh: erro: este script precisa do 'convert'.
+Instale-o (no Debian/Ubuntu: sudo apt install imagemagick) e tente de novo.
+$ echo $?
+69</pre>
+
+<div class="tip">
+<strong>Por que não <code>which</code>?</strong>
+<p><code>which</code> é um programa externo, que não existe em todo sistema e se comporta diferente em cada um. <code>command -v</code> é do próprio Bash (e do POSIX), sempre está lá e enxerga funções e comandos internos. Para ter só o caminho de um programa, há também <code>type -P zip</code>. Veja <a href="path.html">PATH</a>.</p>
+</div>
+
+<hr>
+
+<h2>O script completo: <code>guardar.sh</code></h2>
+<p>Juntando tudo o que vimos, eis a versão profissional do script da Ana:</p>
+
+<pre class="file" data-file="guardar.sh">#!/usr/bin/env bash
+# guardar.sh — guarda uma cópia de ARQUIVO em ~/backup
+set -euo pipefail
+
+readonly PROG=${0##*/}
+readonly DESTINO=~/backup
+
+erro() {
+  printf '%s: erro: %s\n' "$PROG" "$1" &gt;&amp;2
+  exit "${2:-1}"
+}
+
+uso() {
+  printf 'Uso: %s ARQUIVO\n' "$PROG"
+  printf 'Guarda uma cópia de ARQUIVO em %s.\n' "$DESTINO"
+}
+
+# 1. Validar os argumentos
+if [[ $# -ne 1 ]]; then
+  uso &gt;&amp;2
+  exit 2
+fi
+arquivo=$1
+
+# 2. Validar o arquivo
+[[ -e $arquivo ]] || erro "'$arquivo' não existe" 66
+[[ -f $arquivo ]] || erro "'$arquivo' não é um arquivo comum" 66
+[[ -r $arquivo ]] || erro "sem permissão para ler '$arquivo'" 77
+
+# 3. Fazer o trabalho, checando cada passo
+mkdir -p -- "$DESTINO" || erro "não consegui criar $DESTINO" 73
+cp -- "$arquivo" "$DESTINO/" || erro "a cópia de '$arquivo' falhou" 74
+echo "Guardado: $DESTINO/${arquivo##*/}"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha(s)</th><th>O que faz</th></tr>
+<tr><td><code>set -euo pipefail</code></td><td>A rede de segurança para o que esquecermos de checar (<a href="modo-estrito.html">Modo Estrito</a>).</td></tr>
+<tr><td><code>readonly PROG</code>, <code>DESTINO</code></td><td>Constantes no topo: fácil de achar e de mudar.</td></tr>
+<tr><td><code>erro()</code>, <code>uso()</code></td><td>As mensagens num lugar só.</td></tr>
+<tr><td>Passo 1</td><td>Sem exatamente um argumento → mensagem de uso no canal 2 e código 2.</td></tr>
+<tr><td>Passo 2</td><td>Três testes, do geral ao específico, cada um com sua mensagem e seu código.</td></tr>
+<tr><td>Passo 3</td><td>Cada comando que pode falhar tem um <code>|| erro</code>. O <code>--</code> protege contra nomes que começam com <code>-</code> (veja <a href="boas-praticas.html">Boas Práticas</a>).</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./guardar.sh
+Uso: guardar.sh ARQUIVO
+Guarda uma cópia de ARQUIVO em /home/ana/backup.
+$ echo $?
+2
+$ ./guardar.sh notas.txt
+guardar.sh: erro: 'notas.txt' não existe       « a Ana esqueceu que ele está em Documentos
+$ echo $?
+66
+$ ./guardar.sh Documentos
+guardar.sh: erro: 'Documentos' não é um arquivo comum
+$ touch segredo.txt
+$ chmod 000 segredo.txt
+$ ./guardar.sh segredo.txt
+guardar.sh: erro: sem permissão para ler 'segredo.txt'
+$ echo $?
+77
+$ ./guardar.sh Documentos/notas.txt
+Guardado: /home/ana/backup/notas.txt
+$ echo $?
+0</pre>
+
+<p>Cada erro diz <strong>quem</strong> reclamou (<code>guardar.sh</code>), <strong>o quê</strong> deu errado e com <strong>qual arquivo</strong>. E cada caso tem um código diferente, que outro script poderia testar.</p>
+
+<div class="tryscript" data-file="guardar.sh" data-args="nada.txt" data-goal="err:guardar.sh: erro: 'nada.txt' não existe,exit:66">
+<p class="try-task"><strong>Missão:</strong> o script abaixo não valida o arquivo. Crie a função <code>erro</code> (ou escreva direto) para que, quando o arquivo não existir, ele mostre na <strong>saída de erro</strong> a mensagem <code>guardar.sh: erro: 'nada.txt' não existe</code> e saia com o código <code>66</code>. O argumento já está preenchido com <code>nada.txt</code>. Depois, troque o argumento por <code>frutas.txt</code> e veja a cópia funcionar.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+readonly PROG=${0##*/}
+
+arquivo=$1
+mkdir -p ~/backup
+cp -- "$arquivo" ~/backup/
+echo "Guardado: $arquivo"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+readonly PROG=${0##*/}
+
+erro() {
+  printf '%s: erro: %s\n' "$PROG" "$1" &gt;&amp;2
+  exit "${2:-1}"
+}
+
+arquivo=$1
+[[ -e $arquivo ]] || erro "'$arquivo' não existe" 66
+mkdir -p ~/backup
+cp -- "$arquivo" ~/backup/
+echo "Guardado: $arquivo"
+</pre>
+</div>
+
+<hr>
+
+<h2><code>if ! cmd</code>, <code>$?</code> ou <code>||</code>: qual usar?</h2>
+<p>Às vezes você só quer agir <strong>quando dá errado</strong>. O <code>!</code> na frente de um comando inverte o resultado: 0 vira 1 e qualquer falha vira 0.</p>
+
+<pre class="file" data-file="negacao.sh">#!/usr/bin/env bash
+if ! grep -q kiwi frutas.txt; then
+  echo "não tem kiwi (\$? aqui vale $?)"
+fi
+grep -q kiwi frutas.txt
+status=$?
+echo "o grep devolveu $status"
+</pre>
+
+<pre class="term">$ bash negacao.sh
+não tem kiwi ($? aqui vale 0)                  « o $? é o resultado do "!", já invertido
+o grep devolveu 1                              « para ter o código real, guarde-o logo depois</pre>
+
+<p>A primeira linha mostra uma pegadinha: dentro do <code>then</code>, <code>$?</code> é o resultado do <code>! grep</code> (0), e não o do <code>grep</code> (1). Se você precisa do código exato (por exemplo, para separar "não achei" = 1 de "arquivo não existe" = 2 no <code>grep</code>), guarde <code>$?</code> numa variável <strong>na linha seguinte</strong>, antes que outro comando o sobrescreva.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td><code>if cmd; then … else … fi</code></td><td><code>if cp a b; then echo ok; else …; fi</code></td><td>Há algo a fazer nos dois casos.</td></tr>
+<tr><td><code>if ! cmd; then … fi</code></td><td><code>if ! command -v zip &gt;/dev/null; then</code></td><td>Só o caso de erro importa e ele tem várias linhas.</td></tr>
+<tr><td><code>cmd || erro "…"</code></td><td><code>cd "$d" || erro "sem $d"</code></td><td>O mais comum: uma linha por passo.</td></tr>
+<tr><td><code>cmd || true</code></td><td><code>rm -f tmp || true</code></td><td>A falha é aceitável (com <code>set -e</code> ligado).</td></tr>
+<tr><td><code>cmd; s=$?</code> + <code>case</code></td><td><code>grep -q x a; s=$?</code></td><td>Precisa distinguir códigos diferentes (1 × 2). Com <code>set -e</code>, escreva <code>s=0; cmd || s=$?</code>.</td></tr>
+<tr><td><code>cmd; if [ $? -ne 0 ]</code></td><td>—</td><td>Evite: mais longo, frágil (qualquer linha no meio estraga) e não funciona com <code>set -e</code>. O <a href="shellcheck.html">ShellCheck</a> avisa (SC2181).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Erros dentro de um pipe: <code>PIPESTATUS</code></h2>
+<p>Num pipe, <code>$?</code> é o código do último comando. O array <code>PIPESTATUS</code> guarda <strong>todos</strong>, da esquerda para a direita:</p>
+
+<pre class="term">$ grep 500 Documentos/acesso.log | wc -l
+0
+$ echo "${PIPESTATUS[@]}"
+1 0                                            « grep: não achou (1); wc: ok (0)</pre>
+
+<p>Ele é refeito a cada comando, até por um <code>echo</code>. Para usar mais de uma vez, copie para outro array <strong>logo em seguida</strong>:</p>
+
+<pre class="term">$ grep 404 Documentos/acesso.log | cut -d' ' -f1 | sort
+192.168.0.57
+$ codigos=("${PIPESTATUS[@]}")
+$ echo "grep=${codigos[0]} cut=${codigos[1]} sort=${codigos[2]}"
+grep=0 cut=0 sort=0</pre>
+
+<p>Se só interessa "alguma parte falhou?", o <code>set -o pipefail</code> é mais simples (veja <a href="modo-estrito.html">Modo Estrito</a>). <code>PIPESTATUS</code> serve quando você quer saber <strong>qual</strong> parte.</p>
+
+<hr>
+
+<h2>Limpar antes de sair</h2>
+<p>Se o script criou arquivos temporários e falhou no meio, eles ficam para trás. Em vez de lembrar de apagar antes de cada <code>exit</code>, registre a limpeza uma vez só com <code>trap … EXIT</code>: o Bash a executa sempre que o script terminar, com erro ou não. Isso tem uma aula própria: <a href="trap.html">trap e Sinais</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O script sai com erro mesmo quando dá certo</strong>
+<pre class="term">$ cat chaves-erradas.sh
+#!/usr/bin/env bash
+cp frutas.txt ~/backup/ || echo "a cópia falhou" &gt;&amp;2; exit 1
+echo "Cópia feita!"
+$ bash chaves-erradas.sh
+$ echo $?
+1                                              « a cópia funcionou, mas o script saiu com 1</pre>
+<p><strong>O que aconteceu:</strong> o <code>;</code> encerra a lista <code>cp || echo</code>. O <code>exit 1</code> é um comando separado, que roda sempre.</p>
+<p><strong>Como resolver:</strong> agrupe com chaves: <code>cp … || { echo "…" &gt;&amp;2; exit 1; }</code>, ou use a função <code>erro</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>exit</code> não sai do script</strong>
+<pre class="term">$ cat parenteses.sh
+#!/usr/bin/env bash
+cp nada.txt ~/backup/ || ( echo "a cópia falhou" &gt;&amp;2; exit 1 )
+echo "Cópia feita!   (ué, o exit não saiu?)"
+$ bash parenteses.sh
+cp: não foi possível obter estado de 'nada.txt': Arquivo ou diretório inexistente
+a cópia falhou
+Cópia feita!   (ué, o exit não saiu?)
+$ echo $?
+0</pre>
+<p><strong>O que aconteceu:</strong> os parênteses criam um subshell, um "shell filho". O <code>exit 1</code> encerrou o filho, e o script continuou.</p>
+<p><strong>Como resolver:</strong> troque <code>( … )</code> por <code>{ …; }</code>. O mesmo vale para um <code>exit</code> dentro de <code>$( )</code> ou de um pipe: ele não sai do script.</p>
+</div>
+
+<div class="cenario">
+<strong>Redirecionei a saída e a mensagem de erro foi parar no arquivo</strong>
+<p><strong>O que aconteceu:</strong> o script escreve o erro com <code>echo</code> normal (canal 1). Com <code>./script.sh &gt; resultado.txt</code>, o erro vai junto com os dados e ninguém vê.</p>
+<p><strong>Como confirmar:</strong> rode com <code>2&gt;/dev/null</code>. Se a mensagem de erro <strong>continuar</strong> aparecendo, ela está no canal errado.</p>
+<p><strong>Como resolver:</strong> acrescente <code>&gt;&amp;2</code> em todo <code>echo</code>/<code>printf</code> de erro, ou concentre tudo numa função <code>erro</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada, e o código é 1</strong>
+<p><strong>O que aconteceu:</strong> um comando falhou com <code>set -e</code> ligado e o script parou antes de chegar às suas mensagens. Isso é comum com <code>grep</code>, <code>diff</code> e <code>((n++))</code>, que devolvem 1 sem ser um erro de verdade.</p>
+<p><strong>Como resolver:</strong> rode <code>bash -x script.sh</code> para ver a última linha executada (<a href="depuracao.html">Depurar</a>) e trate essa falha (<code>|| true</code>, ou um <code>if</code>). Para sempre saber a linha, use o <code>trap … ERR</code> de <a href="trap.html">trap e Sinais</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>if cmd; then … fi</code></td><td>Age conforme o código de saída de <code>cmd</code>.</td></tr>
+<tr><td><code>if ! cmd; then … fi</code></td><td>Age só quando <code>cmd</code> falha.</td></tr>
+<tr><td><code>cmd || { msg &gt;&amp;2; exit 1; }</code></td><td>Mensagem e saída quando <code>cmd</code> falha.</td></tr>
+<tr><td><code>echo "…" &gt;&amp;2</code></td><td>Escreve no canal de erro.</td></tr>
+<tr><td><code>${0##*/}</code></td><td>Nome do script, sem a pasta.</td></tr>
+<tr><td><code>exit N</code></td><td>Termina o script com o código N (0–255).</td></tr>
+<tr><td><code>$#</code></td><td>Quantos argumentos vieram.</td></tr>
+<tr><td><code>[[ -e/-f/-d/-r/-w/-s $a ]]</code></td><td>Testes de arquivo para validar entradas.</td></tr>
+<tr><td><code>command -v prog</code></td><td>Existe? Mostra o caminho; código 0 ou 1.</td></tr>
+<tr><td><code>$?</code></td><td>Código do último comando (guarde logo).</td></tr>
+<tr><td><code>"${PIPESTATUS[@]}"</code></td><td>Códigos de cada parte do último pipe.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Mensagem no canal certo</h3>
+<p>Complete para que a mensagem vá para a saída de erro:</p>
+<div class="ex-code">echo "arquivo não encontrado" <input data-answer="&gt;&amp;2|1&gt;&amp;2" aria-label="redirecionamento"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Sair se o <code>cd</code> falhar</h3>
+<p>Complete a linha para mostrar a mensagem e sair com 1 quando o <code>cd</code> falhar:</p>
+<div class="ex-code">cd "$pasta" || <input data-answer="{" aria-label="abre o grupo"> echo "sem $pasta" &gt;&amp;2; exit 1; <input data-answer="}" aria-label="fecha o grupo"></div>
+</div>
+
+<div class="exercise">
+<h3>3. O nome do script</h3>
+<p>Complete para guardar em <code>PROG</code> só o nome do script, sem as pastas:</p>
+<div class="ex-code">PROG=<input data-answer="${0##*/}|&quot;${0##*/}&quot;|$(basename &quot;$0&quot;)" aria-label="expansão"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Qual código de saída o Bash usa quando o comando não foi encontrado?</p>
+<label><input type="radio" name="q4"> 1</label>
+<label><input type="radio" name="q4"> 2</label>
+<label><input type="radio" name="q4"> 127</label>
+<label><input type="radio" name="q4"> 255</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Por que <code>cmd || ( echo "erro" &gt;&amp;2; exit 1 )</code> não termina o script?</p>
+<label><input type="radio" name="q5"> Porque os parênteses criam um subshell e o <code>exit</code> encerra só ele.</label>
+<label><input type="radio" name="q5"> Porque falta <code>set -e</code>.</label>
+<label><input type="radio" name="q5"> Porque o <code>&gt;&amp;2</code> desliga o <code>exit</code>.</label>
+<label><input type="radio" name="q5"> Porque <code>exit</code> só funciona dentro de funções.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">6. Qual é a forma recomendada para descobrir se o programa <code>zip</code> está instalado, dentro de um script?</p>
+<label><input type="radio" name="q6"> <code>which zip</code></label>
+<label><input type="radio" name="q6"> <code>command -v zip &gt;/dev/null</code></label>
+<label><input type="radio" name="q6"> <code>ls /usr/bin/zip</code></label>
+<label><input type="radio" name="q6"> <code>zip --version; echo $?</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Cada passo que pode falhar precisa de uma decisão: <code>if cmd</code>, <code>cmd || erro "…"</code> ou <code>cmd || true</code>.</li>
+  <li>Mensagens de erro vão para o canal 2 (<code>&gt;&amp;2</code>) e começam com o nome do script (<code>${0##*/}</code>).</li>
+  <li>Uma função <code>erro</code> junta mensagem e <code>exit</code>; use chaves <code>{ }</code>, nunca parênteses, para agrupar.</li>
+  <li>Códigos: 0 sucesso, 1 erro, 2 uso errado, 64–78 se quiser detalhar; 126, 127 e 128+N são do Bash.</li>
+  <li>Valide argumentos (<code>$#</code>), arquivos (<code>-e -f -r</code>) e programas (<code>command -v</code>) antes de começar. <code>PIPESTATUS</code> mostra qual parte do pipe falhou.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
