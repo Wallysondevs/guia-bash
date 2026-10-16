@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash ls — listar arquivos e pastas | Guia Bash</title>
+<meta name="description" content="Aprenda o comando ls no Bash: a listagem longa -l explicada coluna a coluna, -a, -A, -h, -t, -r, -S, -R, -d, -1, -F, a ordem alfabética em português, as cores do alias ls --color=auto e por que quem expande o * é o Bash.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">ls</span></h1>
+
+<p class="intro"><code>ls</code> mostra o que existe dentro de uma pasta. É os "olhos" do terminal: você vai usá-lo antes e depois de quase tudo, para conferir o que fez. Nesta aula você aprende as opções que importam e, de quebra, uma coisa que muda a forma de ver o Bash: no <code>ls *.txt</code>, quem encontra os arquivos não é o <code>ls</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Listar a pasta atual, outras pastas e arquivos específicos.</li>
+  <li>Ler a listagem longa (<code>ls -l</code>) coluna por coluna.</li>
+  <li>Mostrar arquivos ocultos, tamanhos legíveis, ordenar por data e por tamanho.</li>
+  <li>De onde vêm as cores e por que o <code>ls</code> é um <em>alias</em>.</li>
+  <li>Por que <code>ls *.txt</code> é trabalho do Bash, e por que não se deve usar a saída do <code>ls</code> em scripts.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Conceito: olhar antes de mexer</h2>
+<p>No gerenciador de arquivos você vê as pastas o tempo todo. No terminal, não: você precisa <strong>pedir</strong> para ver. É isso que o <code>ls</code> faz. O nome vem de <em>list</em>, "listar".</p>
+<p>Um bom hábito de quem trabalha no terminal: <code>ls</code> antes de agir (para ter certeza do nome) e <code>ls</code> depois (para conferir o resultado).</p>
+
+<hr>
+
+<h2>O mais simples: <code>ls</code></h2>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>Sem argumentos: lista a <strong>pasta atual</strong> (veja <a href="navegar.html">Navegar</a>).</dd>
+</dl>
+
+<pre class="term">$ ls
+'Área de trabalho'   Downloads    Imagens   Música    Vídeos
+ Documentos          frutas.txt   Modelos   Público
+$ echo $?
+0</pre>
+
+<p>O que você está vendo:</p>
+<ul>
+  <li>Os nomes estão em <strong>ordem alfabética, de cima para baixo</strong>, coluna por coluna. O <code>ls</code> monta quantas colunas couberem na largura da janela.</li>
+  <li><code>'Área de trabalho'</code> aparece entre aspas porque o nome tem espaços. As aspas <strong>não fazem parte do nome</strong>: são o <code>ls</code> mostrando como você deve digitar esse nome no Bash (veja <a href="aspas.html">Aspas e Escapes</a>).</li>
+  <li>Por causa dessas aspas, os outros nomes da coluna ganham um espaço na frente (<code> Documentos</code>), só para ficarem alinhados.</li>
+  <li>No seu terminal, as pastas aparecem em <strong>azul</strong>. As cores somem aqui no guia; você vai ver de onde elas vêm mais adiante.</li>
+  <li>O código de saída <code>0</code> diz que deu tudo certo.</li>
+</ul>
+
+<h3>Listar outra pasta</h3>
+<p>Dê o nome da pasta como argumento. Você não precisa entrar nela:</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O programa.</dd>
+  <dt>Documentos</dt><dd>O argumento: qual pasta listar. Pode ser caminho relativo ou absoluto.</dd>
+</dl>
+
+<pre class="term">$ ls Documentos
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+$ ls ~/Imagens
+ferias.jpg  perfil.png</pre>
+
+<h3>Várias pastas, ou arquivos</h3>
+<p>Com mais de uma pasta, o <code>ls</code> põe um título antes de cada lista. Se o argumento for um arquivo, ele mostra só o nome, como confirmação de que o arquivo existe:</p>
+
+<pre class="term">$ ls Downloads Imagens
+Downloads:
+foto.jpg          manual.pdf  ubuntu-26.04-desktop-amd64.iso
+fotos-viagem.zip  musica.mp3
+
+Imagens:
+ferias.jpg  perfil.png
+$ ls frutas.txt
+frutas.txt</pre>
+
+<hr>
+
+<h2>Opções: mudando o jeito de listar</h2>
+<p>Uma <strong>opção</strong> é um argumento que começa com <code>-</code> e muda o comportamento do comando. Quase todas as do <code>ls</code> são uma letra só, e você pode juntá-las: <code>ls -l -h -S</code> é o mesmo que <code>ls -lhS</code>. A ordem das letras não importa.</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O programa.</dd>
+  <dt>-lhS</dt><dd>Três opções juntas: <code>-l</code> (longa), <code>-h</code> (tamanhos legíveis) e <code>-S</code> (maiores primeiro).</dd>
+  <dt>Downloads</dt><dd>A pasta. As opções vêm, por costume, antes dos nomes.</dd>
+</dl>
+
+<p>Maiúscula e minúscula são opções diferentes: <code>-a</code> e <code>-A</code> fazem coisas parecidas, mas não iguais; <code>-r</code> inverte a ordem e <code>-R</code> entra nas subpastas. Vamos ver uma por uma.</p>
+
+<hr>
+
+<h2><code>-l</code>: a listagem longa, coluna por coluna</h2>
+<p><code>-l</code> vem de <em>long</em>, "longo". Em vez de só os nomes, o <code>ls</code> mostra uma linha de informações para cada item.</p>
+
+<pre class="term">$ ls -l Documentos
+total 16
+-rw-rw-r-- 1 ana ana  389 out 15 09:07 acesso.log
+-rw-rw-r-- 1 ana ana  132 out 14 18:12 alunos.csv
+-rw-rw-r-- 1 ana ana   69 out 14 17:40 notas.txt
+drwxrwxr-x 3 ana ana 4096 out 15 09:15 projetos
+-rw-rw-r-- 1 ana ana 8394 out 14 17:40 relatorio.odt</pre>
+
+<p>Vamos dissecar a linha do <code>notas.txt</code>:</p>
+
+<pre class="syntax">-rw-rw-r--  1  ana  ana  69  out 14 17:40  notas.txt
+│└───┬───┘  │   │    │   │   └────┬─────┘  └───┬───┘
+│ permissões│ dono grupo │  última mudança    nome
+tipo     ligações      tamanho (bytes)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Exemplo</th><th>O que significa</th></tr>
+<tr><td>Tipo</td><td><code>-</code></td><td>O primeiro caractere. <code>-</code> = arquivo comum, <code>d</code> = pasta (<em>directory</em>), <code>l</code> = atalho (link simbólico).</td></tr>
+<tr><td>Permissões</td><td><code>rw-rw-r--</code></td><td>Três grupos de três letras: o que o <strong>dono</strong>, o <strong>grupo</strong> e os <strong>outros</strong> podem fazer. <code>r</code> = ler (<em>read</em>), <code>w</code> = escrever (<em>write</em>), <code>x</code> = executar (numa pasta: entrar). <code>-</code> = não pode. Aqui: a Ana e o grupo dela leem e escrevem; os outros só leem.</td></tr>
+<tr><td>Ligações</td><td><code>1</code></td><td>Quantos nomes apontam para esse arquivo (<em>hard links</em>). Para pastas, cresce com o número de subpastas. No dia a dia você pode ignorar.</td></tr>
+<tr><td>Dono</td><td><code>ana</code></td><td>O usuário dono do arquivo.</td></tr>
+<tr><td>Grupo</td><td><code>ana</code></td><td>O grupo do arquivo. No Linux, cada usuário costuma ter um grupo com o próprio nome.</td></tr>
+<tr><td>Tamanho</td><td><code>69</code></td><td>Em <strong>bytes</strong>. Para pastas, o <code>4096</code> é o espaço da "ficha" da pasta, <strong>não</strong> a soma do que tem dentro.</td></tr>
+<tr><td>Data</td><td><code>out 14 17:40</code></td><td>A última vez que o <strong>conteúdo</strong> mudou. Arquivos com mais de seis meses mostram o ano no lugar da hora: <code>mar 26  2026</code>.</td></tr>
+<tr><td>Nome</td><td><code>notas.txt</code></td><td>O nome do arquivo ou pasta.</td></tr>
+</table>
+</div>
+
+<p>E a primeira linha, <code>total 16</code>? É o espaço que os arquivos listados ocupam <strong>no disco</strong>, em blocos de 1 KiB. Quase ninguém usa esse número; você pode ignorá-lo.</p>
+
+<div class="tip">
+<strong>Para ver só um arquivo</strong>
+<p><code>ls -l</code> também aceita arquivos: <code>ls -l frutas.txt</code> mostra só a linha dele. É o jeito rápido de ver o tamanho, a data ou as permissões de um arquivo.</p>
+</div>
+
+<pre class="term">$ ls -l frutas.txt
+-rw-rw-r-- 1 ana ana 47 out 14 16:05 frutas.txt</pre>
+
+<hr>
+
+<h2><code>-h</code>: tamanhos que um humano lê</h2>
+<p>Olhe os tamanhos em bytes da pasta <code>Downloads</code>. Quanto é <code>6333579264</code>?</p>
+
+<pre class="term">$ ls -l Downloads
+total 0
+-rw-rw-r-- 1 ana ana      49152 out 15 08:47 foto.jpg
+-rw-rw-r-- 1 ana ana  104857600 out  1 19:30 fotos-viagem.zip
+-rw-rw-r-- 1 ana ana    2411520 out 13 11:02 manual.pdf
+-rw-rw-r-- 1 ana ana    5242880 out  9 20:10 musica.mp3
+-rw-rw-r-- 1 ana ana 6333579264 out 10 21:14 ubuntu-26.04-desktop-amd64.iso</pre>
+
+<p><code>-h</code> vem de <em>human-readable</em>, "legível para humanos". Junto com <code>-l</code>, ele converte para K, M e G:</p>
+
+<pre class="term">$ ls -lh Downloads
+total 0
+-rw-rw-r-- 1 ana ana  48K out 15 08:47 foto.jpg
+-rw-rw-r-- 1 ana ana 100M out  1 19:30 fotos-viagem.zip
+-rw-rw-r-- 1 ana ana 2,3M out 13 11:02 manual.pdf
+-rw-rw-r-- 1 ana ana 5,0M out  9 20:10 musica.mp3
+-rw-rw-r-- 1 ana ana 5,9G out 10 21:14 ubuntu-26.04-desktop-amd64.iso    « 5,9 gigabytes</pre>
+
+<ul>
+  <li><code>K</code>, <code>M</code>, <code>G</code> = kibibytes, mebibytes, gibibytes (potências de 1024). Para potências de 1000, como os fabricantes de disco, use <code>--si</code>.</li>
+  <li>A vírgula decimal (<code>2,3M</code>) aparece porque o sistema está em português (<code>LANG=pt_BR.UTF-8</code>). Em inglês seria <code>2.3M</code>.</li>
+  <li><code>total 0</code>: os arquivos da máquina fictícia são "de mentira": têm tamanho, mas não ocupam espaço de verdade no disco. Num computador real, aqui apareceria um número grande.</li>
+</ul>
+
+<hr>
+
+<h2><code>-a</code> e <code>-A</code>: os arquivos ocultos</h2>
+<p>No Linux, todo nome que começa com <strong>ponto</strong> é <strong>oculto</strong>: o <code>ls</code> não mostra, a não ser que você peça. Não existe uma "propriedade" de esconder; é só uma convenção do nome. Os arquivos de configuração costumam ser ocultos, como o <code>.bashrc</code> (veja <a href="inicializacao.html">Arquivos de Inicialização</a>).</p>
+
+<pre class="term">$ ls -a
+ .                   .bash_history   Downloads    Modelos    Público
+ ..                  .bashrc         frutas.txt   Música     Vídeos
+'Área de trabalho'   Documentos      Imagens      .profile</pre>
+
+<p><code>-a</code> vem de <em>all</em>, "todos". Apareceram <code>.bash_history</code>, <code>.bashrc</code> e <code>.profile</code>, e também <code>.</code> e <code>..</code>: as "entradas especiais" que toda pasta tem (a própria pasta e a de cima, as mesmas do <code>cd ..</code>). Repare que, na ordem alfabética, o ponto é ignorado: <code>.bashrc</code> ficou perto do "b".</p>
+
+<p>Quase nunca você quer ver <code>.</code> e <code>..</code>. Para isso existe o <code>-A</code> (<em>almost all</em>, "quase todos"):</p>
+
+<pre class="term">$ ls -A
+'Área de trabalho'   .bashrc      Downloads    Imagens   Música     Público
+ .bash_history       Documentos   frutas.txt   Modelos   .profile   Vídeos</pre>
+
+<div class="try" data-goal="ran:\bls\b.*\s-[a-zA-Z]*A,out:.bashrc" data-solucao="ls -A">
+<p class="try-task"><strong>Missão:</strong> liste a pasta pessoal mostrando os arquivos ocultos, mas <strong>sem</strong> as entradas <code>.</code> e <code>..</code>. Quantos arquivos ocultos a Ana tem?</p>
+</div>
+
+<hr>
+
+<h2>Ordenar: <code>-t</code>, <code>-S</code> e <code>-r</code></h2>
+<p>Por padrão, o <code>ls</code> ordena por nome. Três opções mudam isso:</p>
+
+<dl class="anatomy">
+  <dt>-t</dt><dd>Por data (<em>time</em>): o mais recente primeiro.</dd>
+  <dt>-S</dt><dd>Por tamanho (<em>size</em>): o maior primeiro. É <code>S</code> maiúsculo.</dd>
+  <dt>-r</dt><dd>Inverte (<em>reverse</em>) a ordem, qualquer que seja ela.</dd>
+</dl>
+
+<pre class="term">$ ls -lt Documentos
+total 16
+drwxrwxr-x 3 ana ana 4096 out 15 09:15 projetos          « o mais recente
+-rw-rw-r-- 1 ana ana  389 out 15 09:07 acesso.log
+-rw-rw-r-- 1 ana ana  132 out 14 18:12 alunos.csv
+-rw-rw-r-- 1 ana ana   69 out 14 17:40 notas.txt
+-rw-rw-r-- 1 ana ana 8394 out 14 17:40 relatorio.odt
+$ ls -ltr Documentos
+total 16
+-rw-rw-r-- 1 ana ana 8394 out 14 17:40 relatorio.odt
+-rw-rw-r-- 1 ana ana   69 out 14 17:40 notas.txt
+-rw-rw-r-- 1 ana ana  132 out 14 18:12 alunos.csv
+-rw-rw-r-- 1 ana ana  389 out 15 09:07 acesso.log
+drwxrwxr-x 3 ana ana 4096 out 15 09:15 projetos          « invertido: o mais recente por último</pre>
+
+<p>O <code>ls -ltr</code> é um clássico: o arquivo mais novo fica <strong>no fim</strong>, logo acima do prompt, onde você já está olhando. Ótimo para ver "o que acabou de ser baixado" ou "qual log mudou agora".</p>
+
+<pre class="term">$ ls -lhS Downloads
+total 0
+-rw-rw-r-- 1 ana ana 5,9G out 10 21:14 ubuntu-26.04-desktop-amd64.iso
+-rw-rw-r-- 1 ana ana 100M out  1 19:30 fotos-viagem.zip
+-rw-rw-r-- 1 ana ana 5,0M out  9 20:10 musica.mp3
+-rw-rw-r-- 1 ana ana 2,3M out 13 11:02 manual.pdf
+-rw-rw-r-- 1 ana ana  48K out 15 08:47 foto.jpg</pre>
+
+<div class="try" data-goal="ran:\bls\b.*\s-[a-zA-Z]*S,out:ubuntu-26.04-desktop-amd64.iso" data-solucao="ls -lhS Downloads">
+<p class="try-task"><strong>Missão:</strong> a pasta <code>Downloads</code> está ocupando espaço demais. Liste-a com os <strong>maiores arquivos primeiro</strong> e com tamanhos fáceis de ler. Qual é o maior?</p>
+</div>
+
+<hr>
+
+<h2><code>-R</code>, <code>-d</code>, <code>-1</code> e <code>-F</code></h2>
+
+<h3><code>-R</code>: entrar nas subpastas</h3>
+<p><code>-R</code> é <em>recursive</em>, "recursivo": lista a pasta, depois cada subpasta, depois as subpastas delas, até o fim.</p>
+
+<pre class="term">$ ls -R Documentos
+Documentos:
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+
+Documentos/projetos:
+backup.sh  site
+
+Documentos/projetos/site:
+index.html  style.css</pre>
+
+<p>Cuidado: numa pasta grande, a lista não acaba mais. Para buscar arquivos por nome em várias pastas, o comando certo é o <code>find</code> (veja <a href="ferramentas-texto.html">grep, sed, awk e cia.</a>).</p>
+
+<h3><code>-d</code>: a pasta, não o que tem dentro</h3>
+<p>Quando você passa uma pasta, o <code>ls</code> mostra o <strong>conteúdo</strong> dela. Com <code>-d</code> (<em>directory</em>), ele mostra a <strong>própria pasta</strong>. Junto com <code>-l</code>, é o jeito de ver a data e as permissões de uma pasta:</p>
+
+<pre class="term">$ ls -ld Documentos
+drwxrwxr-x 3 ana ana 4096 out 15 09:07 Documentos</pre>
+
+<div class="try" data-goal="ran:\bls\b.*\s-[a-zA-Z]*d,outre:^drwx\S* .* Documentos/projetos$" data-solucao="ls -ld Documentos/projetos">
+<p class="try-task"><strong>Missão:</strong> mostre as permissões e a data da <strong>própria pasta</strong> <code>Documentos/projetos</code>, numa linha só, sem listar o que tem dentro dela.</p>
+</div>
+
+<h3><code>-1</code>: um nome por linha</h3>
+<p>É o número um, não a letra L. Útil para ler com calma ou copiar uma lista:</p>
+
+<pre class="term">$ ls -1 Documentos
+acesso.log
+alunos.csv
+notas.txt
+projetos
+relatorio.odt</pre>
+
+<h3><code>-F</code>: um sinal no fim de cada nome</h3>
+<p><code>-F</code> (<em>classify</em>) acrescenta um caractere que diz o tipo, ótimo quando não há cores:</p>
+
+<pre class="term">$ ls -F Documentos/projetos
+backup.sh*  site/</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sinal</th><th>Significa</th></tr>
+<tr><td><code>/</code></td><td>Pasta</td></tr>
+<tr><td><code>*</code></td><td>Arquivo executável (tem permissão <code>x</code>), como um script</td></tr>
+<tr><td><code>@</code></td><td>Atalho (link simbólico)</td></tr>
+<tr><td>nada</td><td>Arquivo comum</td></tr>
+</table>
+</div>
+
+<p>Os sinais não fazem parte do nome: o arquivo continua se chamando <code>backup.sh</code>.</p>
+
+<hr>
+
+<h2>A ordem alfabética em português</h2>
+<p>Volte ao primeiro <code>ls</code> da aula. <code>frutas.txt</code>, com "f" minúsculo, ficou entre <code>Downloads</code> e <code>Imagens</code>, e <code>Área de trabalho</code> ficou antes de <code>Documentos</code>. Isso acontece porque o <code>ls</code> ordena conforme o <strong>idioma</strong> do sistema (o <em>locale</em>, na variável <code>LANG</code>). Em português, a ordem ignora maiúsculas e acentos na primeira comparação, como num dicionário: "Á" conta como "A".</p>
+
+<p>Com o locale "C", a ordem é a do computador: pelo código de cada caractere. Maiúsculas vêm antes das minúsculas, e letras acentuadas vão para o fim:</p>
+
+<pre class="term">$ LC_ALL=C.UTF-8 ls
+ Documentos   Imagens   Música    Vídeos      'Área de trabalho'
+ Downloads    Modelos   Público   frutas.txt</pre>
+
+<dl class="anatomy">
+  <dt>LC_ALL=C.UTF-8</dt><dd>Uma variável escrita <strong>antes</strong> do comando vale só para aquele comando. Aqui ela troca as regras de idioma do <code>ls</code> por "C".</dd>
+  <dt>ls</dt><dd>O comando, que agora ordena pelo código dos caracteres.</dd>
+</dl>
+
+<p>Isso explica por que o mesmo <code>ls</code> pode ordenar diferente em outro computador, ou num servidor configurado em inglês. Se a ordem importa num script, defina o <code>LC_ALL</code>.</p>
+
+<h3>Números: <code>-v</code></h3>
+<p>A ordem alfabética compara caractere por caractere, então <code>aula10</code> vem antes de <code>aula2</code> ("1" vem antes de "2"). A opção <code>-v</code> (de <em>version</em>) ordena os números pelo valor:</p>
+
+<pre class="term" data-cwd="~/aulas">$ ls
+aula10.txt  aula12.txt  aula2.txt  aula4.txt  aula6.txt  aula8.txt
+aula11.txt  aula1.txt   aula3.txt  aula5.txt  aula7.txt  aula9.txt
+$ ls -v
+aula1.txt  aula3.txt  aula5.txt  aula7.txt  aula9.txt   aula11.txt
+aula2.txt  aula4.txt  aula6.txt  aula8.txt  aula10.txt  aula12.txt</pre>
+
+<p>A outra solução é criar os nomes com zeros à esquerda (<code>aula01</code>…<code>aula12</code>), como você vai ver em <a href="chaves.html">Chaves</a>.</p>
+
+<hr>
+
+<h2>De onde vêm as cores: o alias <code>ls</code></h2>
+<p>Pergunte ao Bash o que é o <code>ls</code>:</p>
+
+<pre class="term">$ type ls
+ls está apelidada para `ls --color=auto'</pre>
+
+<p>Quando você digita <code>ls</code>, o Bash troca por <code>ls --color=auto</code> antes de rodar. Esse "apelido" é um <strong>alias</strong>, criado no seu <code>~/.bashrc</code>. A opção <code>--color=auto</code> quer dizer: "use cores, mas só se a saída for para a tela". O <code>.bashrc</code> da Ana tem outros apelidos prontos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você digita</th><th>O Bash roda</th><th>Resultado</th></tr>
+<tr><td><code>ls</code></td><td><code>ls --color=auto</code></td><td>Lista com cores</td></tr>
+<tr><td><code>ll</code></td><td><code>ls -alF</code></td><td>Longa, com ocultos e sinais de tipo</td></tr>
+<tr><td><code>la</code></td><td><code>ls -A</code></td><td>Com ocultos, sem <code>.</code> e <code>..</code></td></tr>
+<tr><td><code>l</code></td><td><code>ls -CF</code></td><td>Colunas, com sinais de tipo</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ll Documentos
+total 24
+drwxrwxr-x  3 ana ana 4096 out 15 09:07 ./
+drwxr-x--- 10 ana ana 4096 out 15 08:47 ../
+-rw-rw-r--  1 ana ana  389 out 15 09:07 acesso.log
+-rw-rw-r--  1 ana ana  132 out 14 18:12 alunos.csv
+-rw-rw-r--  1 ana ana   69 out 14 17:40 notas.txt
+drwxrwxr-x  3 ana ana 4096 out 15 09:15 projetos/
+-rw-rw-r--  1 ana ana 8394 out 14 17:40 relatorio.odt</pre>
+
+<p>Esses apelidos vêm do <code>.bashrc</code> padrão do Debian e do Ubuntu. Em outros sistemas (Fedora, Arch, macOS) eles podem não existir, ou ser diferentes. Você aprende a criar os seus em <a href="alias.html">alias</a>.</p>
+
+<h3>O que cada cor quer dizer</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Cor (padrão)</th><th>Tipo</th></tr>
+<tr><td>Azul, negrito</td><td>Pasta</td></tr>
+<tr><td>Verde, negrito</td><td>Executável (scripts, programas)</td></tr>
+<tr><td>Ciano (azul-claro)</td><td>Atalho (link simbólico)</td></tr>
+<tr><td>Vermelho, negrito</td><td>Arquivo compactado (<code>.zip</code>, <code>.tar.gz</code>…)</td></tr>
+<tr><td>Magenta</td><td>Imagens e vídeos (<code>.jpg</code>, <code>.png</code>, <code>.mp4</code>…)</td></tr>
+<tr><td>Sem cor</td><td>Arquivo comum</td></tr>
+</table>
+</div>
+<p>Quem define as cores é a variável <code>LS_COLORS</code>, preparada pelo comando <code>dircolors</code> no <code>.bashrc</code>.</p>
+
+<h3>Rodar o <code>ls</code> "puro", sem o alias</h3>
+<p>Às vezes você quer o comando original. Há três jeitos:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como funciona</th></tr>
+<tr><td><code>\ls</code></td><td>A barra invertida na frente impede o Bash de trocar pelo alias.</td></tr>
+<tr><td><code>command ls</code></td><td>O <code>command</code> roda o programa, ignorando aliases e funções.</td></tr>
+<tr><td><code>ls --color=never</code></td><td>Mantém o alias, mas a última opção vence e desliga as cores.</td></tr>
+</table>
+</div>
+
+<h3>Quando a saída não vai para a tela</h3>
+<p>O <code>ls</code> percebe se está escrevendo na tela ou num arquivo/<a href="pipes.html">pipe</a>. Para a tela, ele faz colunas, cores e aspas. Para qualquer outro lugar, ele escreve <strong>um nome por linha, sem aspas e sem cores</strong>:</p>
+
+<pre class="term">$ ls | cat
+Área de trabalho
+Documentos
+Downloads
+frutas.txt
+Imagens
+Modelos
+Música
+Público
+Vídeos</pre>
+
+<p>O <code>| cat</code> manda a saída do <code>ls</code> para o <code>cat</code>, que só repete na tela. Como o <code>ls</code> não está mais falando direto com a tela, mudou de formato.</p>
+
+<hr>
+
+<h2><code>ls *.txt</code>: quem procura é o Bash</h2>
+<p>Este é o ponto mais importante da aula para quem quer entender o Bash. Veja dois comandos:</p>
+
+<pre class="term">$ ls *.txt
+frutas.txt
+$ echo *.txt
+frutas.txt</pre>
+
+<p>O <code>echo</code> não sabe listar arquivos: ele só repete o que recebe. Mesmo assim, mostrou <code>frutas.txt</code>. Por quê? Porque quem troca <code>*.txt</code> pelos nomes dos arquivos é o <strong>Bash</strong>, <strong>antes</strong> de chamar o comando. O <code>*</code> é um <strong>curinga</strong>: "qualquer sequência de caracteres".</p>
+
+<pre class="syntax">você digita:        ls *.txt
+o Bash procura:     arquivos que terminam em .txt  →  frutas.txt
+o ls recebe:        ls frutas.txt</pre>
+
+<p>O <code>ls</code> nunca viu o <code>*</code>. Ele recebeu o nome pronto e só mostrou que o arquivo existe. Isso tem consequências que pegam todo iniciante.</p>
+
+<h3>Surpresa 1: o curinga casa com pastas</h3>
+<pre class="term">$ ls D*
+Documentos:
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+
+Downloads:
+foto.jpg          manual.pdf  ubuntu-26.04-desktop-amd64.iso
+fotos-viagem.zip  musica.mp3</pre>
+
+<p>A Ana queria ver "os nomes que começam com D". O Bash trocou <code>D*</code> por <code>Documentos Downloads</code>, e o <code>ls</code> recebeu duas <strong>pastas</strong>, então listou o <strong>conteúdo</strong> de cada uma. Para ver só os nomes, use <code>-d</code>:</p>
+
+<pre class="term">$ ls -d D*
+Documentos  Downloads
+$ ls -d */
+'Área de trabalho/'   Downloads/   Modelos/   Público/
+ Documentos/          Imagens/     Música/    Vídeos/</pre>
+
+<p>O <code>*/</code> casa só com pastas (o <code>/</code> no fim exige que seja pasta). É um truque útil para listar só as pastas.</p>
+
+<h3>Surpresa 2: quando nada casa</h3>
+<pre class="term">$ ls *.xyz
+ls: não foi possível acessar '*.xyz': Arquivo ou diretório inexistente
+$ echo *.xyz
+*.xyz</pre>
+
+<p>Não existe nenhum <code>.xyz</code>. Nesse caso, o Bash deixa o padrão <strong>como está</strong>, e o <code>ls</code> recebe literalmente <code>*.xyz</code>, procura um arquivo com esse nome estranho e reclama. O <code>echo</code> prova que o argumento chegou intacto.</p>
+
+<p>Curingas têm uma aula inteira: <a href="curingas.html">Curingas</a>.</p>
+
+<div class="try" data-goal="ran:\*\.jpg,out:ferias.jpg,out:foto.jpg" data-solucao="ls Downloads/*.jpg Imagens/*.jpg">
+<p class="try-task"><strong>Missão:</strong> com <strong>um único</strong> <code>ls</code>, mostre todas as fotos <code>.jpg</code> que estão em <code>Downloads</code> e em <code>Imagens</code>. Depois troque o <code>ls</code> por <code>echo</code> e veja o que o Bash entregou ao comando.</p>
+</div>
+
+<hr>
+
+<h2>Não use a saída do <code>ls</code> em scripts</h2>
+<p>O <code>ls</code> foi feito para <strong>pessoas</strong> lerem, não para outros programas. Em scripts, é tentador escrever algo como <code>ls | wc -l</code> para contar arquivos, ou <code>for f in $(ls)</code> para percorrer cada um. Os dois quebram com nomes "difíceis". No Linux, um nome de arquivo pode ter espaços e até <strong>quebra de linha</strong>:</p>
+
+<pre class="term">$ touch $'linha\nquebrada.txt'
+$ ls
+'Área de trabalho'   Downloads    Imagens                     Modelos   Público
+ Documentos          frutas.txt  'linha'$'\n''quebrada.txt'   Música    Vídeos
+$ ls | wc -l
+11                                                 « são 10 itens, mas o nome com quebra contou como 2</pre>
+
+<p>Na tela, o <code>ls</code> mostrou o nome de um jeito seguro. Mas, pelo pipe, ele escreveu o nome em duas linhas, e o <code>wc -l</code> (que conta linhas) errou. Com <code>$(ls)</code>, o problema é ainda maior: <code>Área de trabalho</code> vira três "arquivos".</p>
+
+<p>A solução é deixar o <strong>Bash</strong> listar, com um curinga. O Bash entrega cada nome como um argumento inteiro, com espaços, acentos e o que for:</p>
+
+<pre class="term">$ for f in *.txt; do echo "Achei: $f"; done
+Achei: frutas.txt
+$ printf '%s\n' *
+Área de trabalho
+Documentos
+Downloads
+frutas.txt
+Imagens
+Modelos
+Música
+Público
+Vídeos</pre>
+
+<p>O laço <code>for</code> é explicado em <a href="for.html">for</a>, e as regras para scripts que aguentam qualquer nome estão em <a href="boas-praticas.html">Boas Práticas</a>.</p>
+
+<hr>
+
+<h2>Formas diferentes de ver o que há numa pasta</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td><code>ls</code></td><td><code>ls Documentos</code></td><td>Uma olhada rápida, no terminal.</td></tr>
+<tr><td><code>ls -l</code> / <code>ll</code></td><td><code>ls -lh Downloads</code></td><td>Você quer tamanho, data, dono, permissões.</td></tr>
+<tr><td>Curinga + <code>echo</code></td><td><code>echo *.txt</code></td><td>Ver o que um curinga vai pegar, antes de usar num comando perigoso.</td></tr>
+<tr><td>Curinga + <code>for</code></td><td><code>for f in *; do …; done</code></td><td>Em scripts: fazer algo com cada arquivo.</td></tr>
+<tr><td><code>find</code></td><td><code>find Documentos -name '*.sh'</code></td><td>Procurar em todas as subpastas.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"não foi possível acessar … Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ ls Documentos/nada
+ls: não foi possível acessar 'Documentos/nada': Arquivo ou diretório inexistente
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> não existe nada com esse nome, a partir da pasta atual. O código de saída do <code>ls</code> é <code>2</code> ("problema sério": um argumento não pôde ser acessado).</p>
+<p><strong>Como confirmar:</strong> <code>pwd</code> (estou onde penso?) e <code>ls</code> da pasta de cima, para ver os nomes exatos. Lembre que maiúsculas, minúsculas e acentos contam.</p>
+<p><strong>Como resolver:</strong> corrija o nome ou use <kbd>Tab</kbd> para completar. Se o nome tinha um curinga, como <code>*.xyz</code>, quer dizer que nenhum arquivo casou com ele.</p>
+</div>
+
+<div class="cenario">
+<strong>Um dos nomes não existe, e os outros?</strong>
+<pre class="term">$ ls frutas.txt Documentos/notas.txt nada.txt
+ls: não foi possível acessar 'nada.txt': Arquivo ou diretório inexistente
+Documentos/notas.txt  frutas.txt
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> o <code>ls</code> mostrou o que existe e reclamou do que não existe. O erro aparece primeiro porque vai por outro canal, a saída de erro (veja <a href="redirecionamento.html">Redirecionamento</a>). O código <code>2</code> avisa que <strong>algo</strong> falhou.</p>
+</div>
+
+<div class="cenario">
+<strong>"não foi possível abrir o diretório … Permissão negada"</strong>
+<pre class="term">$ ls /root
+ls: não foi possível abrir o diretório '/root': Permissão negada
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> a pasta existe, mas a Ana não tem permissão de ler o conteúdo dela.</p>
+<p><strong>Como resolver:</strong> com <code>ls -ld /root</code> você vê as permissões da própria pasta, sem precisar ler o conteúdo. Se é uma pasta do sistema, normalmente você não precisa ver o que tem dentro.</p>
+</div>
+
+<div class="cenario">
+<strong>Pedi uma pasta e veio o conteúdo de várias</strong>
+<p><strong>O que aconteceu:</strong> um curinga (<code>ls D*</code>, <code>ls *</code>) casou com pastas, e o <code>ls</code> listou o que tem dentro de cada uma.</p>
+<p><strong>Como resolver:</strong> acrescente <code>-d</code>: <code>ls -d D*</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O arquivo não aparece, mas eu sei que ele está ali</strong>
+<p><strong>O que aconteceu:</strong> o nome começa com ponto (<code>.bashrc</code>, <code>.config</code>), então é oculto.</p>
+<p><strong>Como resolver:</strong> <code>ls -A</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Não apareceu nada"</strong>
+<pre class="term">$ mkdir vazia
+$ ls vazia
+$ echo $?
+0</pre>
+<p><strong>O que aconteceu:</strong> a pasta existe e está vazia. O <code>ls</code> não tem o que mostrar, e o código <code>0</code> confirma que não houve erro. (Se houver arquivos ocultos, eles só aparecem com <code>ls -A</code>.)</p>
+</div>
+
+<div class="cenario">
+<strong>Aspas e sinais estranhos nos nomes</strong>
+<p><strong>O que aconteceu:</strong> o <code>ls</code> põe aspas em volta de nomes com espaço (<code>'Área de trabalho'</code>) e mostra caracteres invisíveis de forma segura (<code>'linha'$'\n''quebrada.txt'</code>). É só a exibição: o nome real não tem as aspas.</p>
+<p><strong>Como resolver:</strong> nada a corrigir. Se quiser ver os nomes "crus", use <code>ls -N</code> ou <code>ls | cat</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Origem</th><th>O que faz</th></tr>
+<tr><td><code>-l</code></td><td><em>long</em></td><td>Listagem longa: tipo, permissões, dono, tamanho, data</td></tr>
+<tr><td><code>-a</code></td><td><em>all</em></td><td>Mostra ocultos, incluindo <code>.</code> e <code>..</code></td></tr>
+<tr><td><code>-A</code></td><td><em>almost all</em></td><td>Mostra ocultos, sem <code>.</code> e <code>..</code></td></tr>
+<tr><td><code>-h</code></td><td><em>human-readable</em></td><td>Tamanhos em K, M, G (com <code>-l</code>)</td></tr>
+<tr><td><code>-t</code></td><td><em>time</em></td><td>Ordena por data, o mais recente primeiro</td></tr>
+<tr><td><code>-S</code></td><td><em>size</em></td><td>Ordena por tamanho, o maior primeiro</td></tr>
+<tr><td><code>-r</code></td><td><em>reverse</em></td><td>Inverte a ordem</td></tr>
+<tr><td><code>-v</code></td><td><em>version</em></td><td>Ordena números pelo valor (<code>aula2</code> antes de <code>aula10</code>)</td></tr>
+<tr><td><code>-R</code></td><td><em>recursive</em></td><td>Entra em todas as subpastas</td></tr>
+<tr><td><code>-d</code></td><td><em>directory</em></td><td>Mostra a pasta em si, não o conteúdo</td></tr>
+<tr><td><code>-1</code></td><td>(um)</td><td>Um nome por linha</td></tr>
+<tr><td><code>-F</code></td><td><em>classify</em></td><td>Sinal de tipo no fim: <code>/</code> <code>*</code> <code>@</code></td></tr>
+<tr><td><code>-N</code></td><td><em>literal</em></td><td>Nomes sem aspas</td></tr>
+<tr><td><code>--color=auto|never|always</code></td><td></td><td>Cores só na tela / nunca / sempre</td></tr>
+<tr><td><code>--time-style=long-iso</code></td><td></td><td>Datas como <code>2026-10-15 09:07</code></td></tr>
+</table>
+</div>
+
+<h3>Códigos de saída do <code>ls</code></h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Quando</th></tr>
+<tr><td><code>0</code></td><td>Tudo certo (inclusive pasta vazia)</td></tr>
+<tr><td><code>1</code></td><td>Problema menor (por exemplo, uma subpasta ilegível durante o <code>-R</code>)</td></tr>
+<tr><td><code>2</code></td><td>Problema sério: um nome dado não existe ou não pôde ser aberto; opção inválida</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ocultos sem as entradas especiais</h3>
+<p>Complete para listar os ocultos da pasta atual, sem <code>.</code> e <code>..</code>:</p>
+<div class="ex-code">ls <input data-answer="-A|--almost-all" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. O mais novo por último</h3>
+<p>Complete para ver a listagem longa de <code>Documentos</code> com o arquivo modificado mais recentemente <strong>no fim</strong>:</p>
+<div class="ex-code">ls <input data-answer="-ltr|-lrt|-trl|-tlr|-rlt|-rtl|-l -t -r|-l -r -t" aria-label="opções"> Documentos</div>
+</div>
+
+<div class="exercise">
+<h3>3. A pasta, não o conteúdo</h3>
+<p>Complete para ver a linha longa da própria pasta <code>Downloads</code>:</p>
+<div class="ex-code">ls <input data-answer="-ld|-dl|-l -d|-d -l" aria-label="opções"> Downloads</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Na linha <code>drwxrwxr-x 3 ana ana 4096 out 15 09:15 projetos</code>, o que o <code>d</code> do começo indica?</p>
+<label><input type="radio" name="q4"> Que o arquivo foi apagado (<em>deleted</em>).</label>
+<label><input type="radio" name="q4"> Que <code>projetos</code> é uma pasta.</label>
+<label><input type="radio" name="q4"> Que o dono pode baixar (<em>download</em>) o arquivo.</label>
+<label><input type="radio" name="q4"> Que o arquivo está compactado.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Em <code>ls *.txt</code>, quem encontra os arquivos que terminam em <code>.txt</code>?</p>
+<label><input type="radio" name="q5"> O <code>ls</code>, que entende o <code>*</code>.</label>
+<label><input type="radio" name="q5"> O sistema de arquivos.</label>
+<label><input type="radio" name="q5"> O Bash, que troca <code>*.txt</code> pelos nomes antes de rodar o <code>ls</code>.</label>
+<label><input type="radio" name="q5"> Ninguém: o <code>*</code> é ignorado.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. A Ana digitou <code>ls -l</code> e o comando rodou como <code>ls --color=auto -l</code>. Por quê?</p>
+<label><input type="radio" name="q6"> Porque <code>ls</code> é um alias definido no <code>.bashrc</code>.</label>
+<label><input type="radio" name="q6"> Porque o <code>ls</code> sempre usa cores.</label>
+<label><input type="radio" name="q6"> Porque a opção <code>-l</code> liga as cores.</label>
+<label><input type="radio" name="q6"> Porque o terminal acrescenta opções sozinho.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>ls</code> lista a pasta atual; <code>ls PASTA</code> lista outra; opções se juntam (<code>-lhS</code>).</li>
+  <li><code>-l</code> mostra tipo, permissões, ligações, dono, grupo, tamanho, data e nome; <code>-h</code> deixa o tamanho legível.</li>
+  <li><code>-a</code>/<code>-A</code> mostram ocultos (nomes com ponto); <code>-t</code>, <code>-S</code>, <code>-r</code> ordenam; <code>-d</code> mostra a pasta em si.</li>
+  <li>A ordem segue o idioma do sistema; as cores vêm do alias <code>ls --color=auto</code>.</li>
+  <li>Em <code>ls *.txt</code>, quem expande o <code>*</code> é o Bash. Teste com <code>echo</code>.</li>
+  <li>Em scripts, percorra arquivos com curingas (<code>for f in *</code>), nunca com a saída do <code>ls</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
