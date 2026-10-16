@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Variáveis Especiais — $? $# $@ $$, BASH_*, PIPESTATUS, RANDOM, PS1, HIST* e ambiente | Guia Bash</title>
+<meta name="description" content="Referência das variáveis especiais e de ambiente do Bash 5.3: parâmetros especiais, BASH_*, PIPESTATUS, FUNCNAME, LINENO, RANDOM, SRANDOM, SECONDS, EPOCH*, IFS, PS0-PS4, PROMPT_COMMAND, HIST*, CDPATH, REPLY, OPTARG, COMP_* e as do sistema, com exemplo e resultado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Variáveis Especiais</span></h1>
+
+<p class="intro">Algumas variáveis o Bash preenche sozinho (o código do último comando, os argumentos do script, a linha atual); outras ele <strong>lê</strong> para decidir como se comportar (o prompt, o tamanho do histórico, onde procurar comandos); e outras vêm do sistema (sua pasta, sua língua). Esta é a lista das que você vai encontrar, com um exemplo de cada, conferido no Bash 5.3 da máquina da Ana.</p>
+
+<div class="note">
+<strong>Como ler as tabelas</strong>
+<ul>
+  <li><strong>Quem define:</strong> <em>Bash</em> = o shell preenche (só leia); <em>você</em> = o Bash lê o valor que você der; <em>sistema</em> = vem do login/ambiente.</li>
+  <li>No exemplo, <code>→</code> separa o comando do resultado. Valores como PIDs e horários mudam a cada execução.</li>
+  <li>Para ver todas as variáveis do shell: <code>declare -p</code>; só as exportadas (o ambiente): <code>env</code> ou <code>export -p</code>. Veja <a href="variaveis.html">Variáveis, Escopo e export</a>.</li>
+</ul>
+</div>
+
+<p class="indice-letras"><a href="#especiais">Parâmetros especiais</a> · <a href="#bash">BASH_* e depuração</a> · <a href="#tempo">Tempo e sorteio</a> · <a href="#leitura">Leitura e opções</a> · <a href="#prompt">Prompt</a> · <a href="#historico">Histórico</a> · <a href="#pastas">Pastas e caminhos</a> · <a href="#completar">Completar</a> · <a href="#ambiente">Ambiente do sistema</a></p>
+
+<hr>
+
+<h2 id="especiais">Parâmetros especiais</h2>
+<p>Não têm nome de letra: são símbolos. Exemplos rodados com <code>bash vscript.sh a "b c"</code> (um script de teste) ou no terminal. Veja <a href="argumentos.html">Argumentos</a> e <a href="codigo-saida.html">Código de Saída</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>O que guarda</th><th>Exemplo → resultado</th><th>Aula</th></tr>
+<tr><td><code>$?</code></td><td>Código de saída do último comando (0 = sucesso).</td><td><code>ls nada 2&gt;/dev/null; echo $?</code> → <code>2</code></td><td><a href="codigo-saida.html">Código de Saída</a></td></tr>
+<tr><td><code>$#</code></td><td>Quantos argumentos posicionais ("#" = "quantos").</td><td>no script: <code>echo $#</code> → <code>2</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>$1</code> … <code>$9</code>, <code>${10}</code></td><td>Cada argumento; do 10º em diante, com chaves.</td><td><code>echo $1</code> → <code>a</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>"$@"</code></td><td>Todos os argumentos, cada um como uma palavra separada (com aspas!).</td><td><code>printf '[%s]' "$@"</code> → <code>[a][b c]</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>"$*"</code></td><td>Todos os argumentos numa palavra só, unidos pelo 1º caractere do <code>IFS</code>.</td><td><code>printf '[%s]' "$*"</code> → <code>[a b c]</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>$0</code></td><td>O nome do script (ou do shell, no terminal).</td><td>no script: <code>echo $0</code> → <code>vscript.sh</code>; no terminal → <code>bash</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>$$</code></td><td>O PID (número do processo) do shell. Num subshell, continua o do shell principal.</td><td><code>echo $$</code> → <code>3001</code></td><td><a href="subshell.html">Subshells</a></td></tr>
+<tr><td><code>$!</code></td><td>O PID do último comando posto em segundo plano com <code>&amp;</code>.</td><td><code>sleep 30 &amp; echo $!</code> → <code>3120</code></td><td><a href="jobs.html">Jobs</a></td></tr>
+<tr><td><code>$-</code></td><td>As opções ligadas do shell, em letras (<code>i</code> = interativo, <code>m</code> = controle de jobs, <code>h</code> hash, <code>B</code> chaves, <code>H</code> <code>!</code> do histórico, <code>e</code> <code>u</code> <code>x</code> do <code>set</code>).</td><td>no terminal → <code>himBHs</code>; num script → <code>hB</code></td><td><a href="shopt.html">set e shopt</a></td></tr>
+<tr><td><code>$_</code></td><td>O último argumento do comando anterior.</td><td><code>echo um dois; echo $_</code> → <code>dois</code>; útil: <code>mkdir pasta &amp;&amp; cd $_</code></td><td><a href="historico.html">Histórico</a></td></tr>
+</table>
+</div>
+
+<h2 id="bash">BASH_* e variáveis de depuração</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Quem define</th><th>O que guarda</th><th>Exemplo → resultado</th></tr>
+<tr><td><code>BASH_VERSION</code></td><td>Bash</td><td>A versão, em texto.</td><td><code>echo "$BASH_VERSION"</code> → <code>5.3.9(1)-release</code></td></tr>
+<tr><td><code>BASH_VERSINFO</code></td><td>Bash</td><td>A versão em partes (array): maior, menor, correção…</td><td><code>echo "${BASH_VERSINFO[@]}"</code> → <code>5 3 9 1 release x86_64-pc-linux-gnu</code>; teste: <code>(( BASH_VERSINFO[0] &gt;= 5 ))</code></td></tr>
+<tr><td><code>BASH</code></td><td>Bash</td><td>O caminho do executável do Bash em uso.</td><td><code>echo $BASH</code> → <code>/usr/bin/bash</code></td></tr>
+<tr><td><code>BASHPID</code></td><td>Bash</td><td>O PID do processo atual (diferente de <code>$$</code> dentro de um subshell).</td><td><code>( (( BASHPID == $$ )) &amp;&amp; echo igual || echo diferente )</code> → <code>diferente</code></td></tr>
+<tr><td><code>BASH_SUBSHELL</code></td><td>Bash</td><td>Quantos subshells de profundidade.</td><td><code>echo $BASH_SUBSHELL $(echo $BASH_SUBSHELL)</code> → <code>0 1</code></td></tr>
+<tr><td><code>SHLVL</code></td><td>Bash</td><td>Quantos Bash um dentro do outro (sobe 1 a cada <code>bash</code>).</td><td>num script rodado do terminal: <code>echo $SHLVL</code> → <code>2</code></td></tr>
+<tr><td><code>LINENO</code></td><td>Bash</td><td>A linha atual do script.</td><td><code>echo "erro na linha $LINENO"</code> → <code>erro na linha 4</code></td></tr>
+<tr><td><code>FUNCNAME</code></td><td>Bash</td><td>Array: a função atual, quem a chamou… até <code>main</code>.</td><td>dentro de <code>f</code>: <code>echo "${FUNCNAME[*]}"</code> → <code>f main</code></td></tr>
+<tr><td><code>BASH_SOURCE</code></td><td>Bash</td><td>Array: o arquivo de cada função da pilha.</td><td><code>echo "${BASH_SOURCE[0]}"</code> → <code>vscript.sh</code>; truque: <code>[[ ${BASH_SOURCE[0]} == "$0" ]]</code> = "fui executado, não lido com source"</td></tr>
+<tr><td><code>BASH_LINENO</code></td><td>Bash</td><td>Array: a linha de onde cada função foi chamada.</td><td>dentro de <code>f</code>: <code>echo "${BASH_LINENO[0]}"</code> → <code>5</code></td></tr>
+<tr><td><code>PIPESTATUS</code></td><td>Bash</td><td>Array: o código de cada comando do último pipeline.</td><td><code>false | true; echo "${PIPESTATUS[*]}"</code> → <code>1 0</code></td></tr>
+<tr><td><code>BASH_REMATCH</code></td><td>Bash</td><td>Array: o que casou no último <code>[[ =~ ]]</code> (0 = tudo, 1… = grupos).</td><td><code>[[ foo123 =~ ([a-z]+)([0-9]+) ]]; echo "${BASH_REMATCH[*]}"</code> → <code>foo123 foo 123</code></td></tr>
+<tr><td><code>BASH_ARGV0</code></td><td>Bash</td><td>O mesmo que <code>$0</code>, mas pode ser alterado. <span class="versao">bash 5.0+</span></td><td><code>echo $BASH_ARGV0</code> → <code>vscript.sh</code></td></tr>
+<tr><td><code>BASH_COMMAND</code></td><td>Bash</td><td>O comando sendo executado agora (útil em <code>trap … ERR</code>).</td><td><code>trap 'echo "falhou: $BASH_COMMAND"' ERR; ls nada 2&gt;/dev/null</code> → <code>falhou: ls --color=auto nada 2&gt; /dev/null</code> (já com o alias expandido)</td></tr>
+<tr><td><code>BASH_TRAPSIG</code></td><td>Bash</td><td>O número do sinal que disparou o <code>trap</code> atual. <span class="versao">bash 5.3+</span></td><td><code>trap 'echo sinal $BASH_TRAPSIG' USR1; kill -USR1 $$</code> → <code>sinal 10</code></td></tr>
+<tr><td><code>BASH_ALIASES</code></td><td>Bash</td><td>Array associativo com os aliases.</td><td><code>echo "${BASH_ALIASES[ll]}"</code> → <code>ls -alF</code></td></tr>
+<tr><td><code>PS4</code></td><td>você</td><td>O prefixo das linhas do <code>set -x</code> (padrão <code>+ </code>).</td><td><code>bash -c 'PS4="+ ${LINENO}: "; set -x; echo oi'</code> → <code>+ 1: echo oi</code></td></tr>
+<tr><td><code>BASH_XTRACEFD</code></td><td>você</td><td>Para qual descritor vai a saída do <code>set -x</code>.</td><td><code>exec 5&gt;trace.log; BASH_XTRACEFD=5</code></td></tr>
+<tr><td><code>BASH_ENV</code></td><td>você</td><td>Arquivo lido por todo script não interativo ao iniciar.</td><td><code>BASH_ENV=~/.bash_scripts bash script.sh</code></td></tr>
+</table>
+</div>
+<p>Veja <a href="depuracao.html">Depurar</a>, <a href="funcoes.html">Funções</a>, <a href="regex.html">Regex</a> e <a href="pipes.html">Pipes</a>.</p>
+
+<h2 id="tempo">Tempo e números aleatórios</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>O que guarda</th><th>Exemplo → resultado</th></tr>
+<tr><td><code>RANDOM</code></td><td>Um inteiro aleatório de 0 a 32767 a cada leitura. Atribuir um valor fixa a semente (sequência repetível).</td><td><code>echo $RANDOM $RANDOM</code> → <code>11184 4096</code>; dado: <code>$(( RANDOM % 6 + 1 ))</code></td></tr>
+<tr><td><code>SRANDOM</code></td><td>Aleatório de 32 bits (0 a 4294967295), de fonte segura; não aceita semente. <span class="versao">bash 5.1+</span></td><td><code>echo $SRANDOM</code> → <code>2469350281</code></td></tr>
+<tr><td><code>SECONDS</code></td><td>Segundos desde que o shell começou (atribuir zera a contagem).</td><td><code>SECONDS=0; sleep 2; echo $SECONDS</code> → <code>2</code></td></tr>
+<tr><td><code>EPOCHSECONDS</code></td><td>Segundos desde 1/1/1970 (o "Unix time"), sem chamar o <code>date</code>. <span class="versao">bash 5.0+</span></td><td><code>echo $EPOCHSECONDS</code> → <code>1792157154</code></td></tr>
+<tr><td><code>EPOCHREALTIME</code></td><td>O mesmo, com microssegundos. O separador decimal segue a língua: vírgula em português. <span class="versao">bash 5.0+</span></td><td><code>echo $EPOCHREALTIME</code> → <code>1792157154,055163</code></td></tr>
+<tr><td><code>BASH_MONOSECONDS</code></td><td>Segundos de um relógio que nunca volta (não muda se alguém acertar a hora). Para medir durações. <span class="versao">bash 5.3+</span></td><td><code>echo $BASH_MONOSECONDS</code> → <code>3603</code></td></tr>
+<tr><td><code>TIMEFORMAT</code></td><td>O formato da saída do <code>time</code>.</td><td><code>TIMEFORMAT="levou %R s"; time sleep 0.1</code> → <code>levou 0,102 s</code></td></tr>
+<tr><td><code>TMOUT</code></td><td>No terminal: fecha o shell após N segundos sem digitar. No <code>read</code>: tempo-limite padrão.</td><td><code>TMOUT=600</code> (10 minutos)</td></tr>
+</table>
+</div>
+<p>Veja <a href="aritmetica.html">Contas</a>, <a href="projeto-jogo.html">Jogo da Adivinhação</a> e <a href="novidades.html">Novidades do Bash 5</a>.</p>
+
+<h2 id="leitura">Leitura, separação e opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Quem define</th><th>O que guarda</th><th>Exemplo → resultado</th></tr>
+<tr><td><code>IFS</code></td><td>você</td><td>Os separadores de palavras (padrão: espaço, TAB, quebra de linha).</td><td><code>printf '%q\n' "$IFS"</code> → <code>$' \t\n'</code>; <code>IFS=: read -r a b &lt;&lt;&lt; "x:y"</code></td></tr>
+<tr><td><code>REPLY</code></td><td>Bash</td><td>O que o <code>read</code> leu quando você não dá nome de variável; o número digitado no <code>select</code>.</td><td><code>read &lt;&lt;&lt; "linha lida"; echo "$REPLY"</code> → <code>linha lida</code></td></tr>
+<tr><td><code>OPTARG</code></td><td>Bash</td><td>O valor da opção que o <code>getopts</code> acabou de ler (<code>-o arq</code> → <code>arq</code>).</td><td><code>getopts 'o:' op -o saida.txt; echo $OPTARG</code> → <code>saida.txt</code></td></tr>
+<tr><td><code>OPTIND</code></td><td>Bash</td><td>O índice do próximo argumento que o <code>getopts</code> vai ler. Depois do laço: <code>shift $((OPTIND - 1))</code>.</td><td>depois de ler <code>-v -o x</code> → <code>4</code></td></tr>
+<tr><td><code>OPTERR</code></td><td>você</td><td>1 = o <code>getopts</code> escreve as próprias mensagens de erro; 0 = não.</td><td><code>echo $OPTERR</code> → <code>1</code></td></tr>
+<tr><td><code>SHELLOPTS</code> / <code>BASHOPTS</code></td><td>Bash</td><td>As opções ligadas do <code>set -o</code> / do <code>shopt</code>, separadas por <code>:</code>.</td><td><code>echo $SHELLOPTS</code> → <code>braceexpand:emacs:hashall:histexpand:history:interactive-comments:monitor</code></td></tr>
+<tr><td><code>BASH_COMPAT</code></td><td>você</td><td>Faz o Bash se comportar como uma versão antiga (ex.: <code>5.1</code>).</td><td>vazia por padrão</td></tr>
+</table>
+</div>
+<p>Veja <a href="read.html">read</a>, <a href="getopts.html">getopts</a> e <a href="aspas.html">Aspas</a>.</p>
+
+<h2 id="prompt">Prompt</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Quando aparece</th><th>Padrão / exemplo</th></tr>
+<tr><td><code>PS1</code></td><td>O prompt principal, antes de cada comando.</td><td><code>'\u@\h:\w\$ '</code> → <code>ana@notebook:~$</code></td></tr>
+<tr><td><code>PS2</code></td><td>Continuação, quando o comando ainda não terminou (aspas abertas, <code>if</code> sem <code>fi</code>).</td><td><code>'&gt; '</code></td></tr>
+<tr><td><code>PS3</code></td><td>A pergunta do <code>select</code>.</td><td>vazia → o <code>select</code> usa <code>#? </code></td></tr>
+<tr><td><code>PS4</code></td><td>O começo de cada linha do <code>set -x</code>.</td><td><code>'+ '</code></td></tr>
+<tr><td><code>PS0</code></td><td>Mostrado depois que você aperta Enter e antes de o comando rodar. <span class="versao">bash 4.4+</span></td><td><code>PS0='[\t]\n'</code> → mostra a hora de início</td></tr>
+<tr><td><code>PROMPT_COMMAND</code></td><td>Comando (ou array de comandos, <span class="versao">bash 5.1+</span>) rodado antes de cada <code>PS1</code>.</td><td><code>PROMPT_COMMAND='history -a'</code></td></tr>
+<tr><td><code>PROMPT_DIRTRIM</code></td><td>Quantas pastas o <code>\w</code> mostra (as outras viram <code>…</code>).</td><td><code>PROMPT_DIRTRIM=2</code> → <code>ana@notebook:~/.../projetos/site$</code></td></tr>
+</table>
+</div>
+<p>Veja <a href="prompt.html">Lendo o Prompt</a> e <a href="ps1.html">Personalizar o Prompt</a>.</p>
+
+<h2 id="historico">Histórico</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>O que controla</th><th>Valor na máquina da Ana / exemplo</th></tr>
+<tr><td><code>HISTFILE</code></td><td>O arquivo do histórico.</td><td><code>/home/ana/.bash_history</code></td></tr>
+<tr><td><code>HISTSIZE</code></td><td>Quantos comandos ficam na memória do terminal.</td><td><code>1000</code></td></tr>
+<tr><td><code>HISTFILESIZE</code></td><td>Quantas linhas ficam no arquivo.</td><td><code>2000</code></td></tr>
+<tr><td><code>HISTCONTROL</code></td><td><code>ignorespace</code>, <code>ignoredups</code>, <code>ignoreboth</code> (os dois), <code>erasedups</code>.</td><td><code>ignoreboth</code></td></tr>
+<tr><td><code>HISTIGNORE</code></td><td>Padrões de comandos que não são guardados, separados por <code>:</code>.</td><td><code>HISTIGNORE='ls:ll:exit'</code></td></tr>
+<tr><td><code>HISTTIMEFORMAT</code></td><td>Mostra data/hora no <code>history</code> (formato do <code>date</code>).</td><td><code>HISTTIMEFORMAT='%F %T  '</code> → <code>17  2026-10-15 10:51:23  cd</code></td></tr>
+<tr><td><code>HISTCMD</code></td><td>O número do comando atual no histórico (Bash).</td><td><code>echo $HISTCMD</code> → <code>113</code></td></tr>
+</table>
+</div>
+<p>Veja <a href="historico.html">Histórico</a> e o projeto <a href="projeto-dotfiles.html">Seus Dotfiles</a>.</p>
+
+<h2 id="pastas">Pastas e caminhos</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Quem define</th><th>O que guarda</th><th>Exemplo → resultado</th></tr>
+<tr><td><code>PWD</code></td><td>Bash</td><td>A pasta atual.</td><td><code>echo $PWD</code> → <code>/home/ana</code></td></tr>
+<tr><td><code>OLDPWD</code></td><td>Bash</td><td>A pasta anterior (a do <code>cd -</code> e do <code>~-</code>).</td><td><code>cd /tmp; cd; echo $OLDPWD</code> → <code>/tmp</code></td></tr>
+<tr><td><code>HOME</code></td><td>sistema</td><td>Sua pasta pessoal (o <code>~</code>).</td><td><code>echo $HOME</code> → <code>/home/ana</code></td></tr>
+<tr><td><code>PATH</code></td><td>sistema / você</td><td>As pastas onde o Bash procura comandos, separadas por <code>:</code>, na ordem.</td><td><code>echo $PATH</code> → <code>/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</code></td></tr>
+<tr><td><code>CDPATH</code></td><td>você</td><td>Pastas onde o <code>cd</code> procura nomes relativos.</td><td><code>CDPATH=.:~/Documentos; cd projetos</code> → <code>/home/ana/Documentos/projetos</code></td></tr>
+<tr><td><code>DIRSTACK</code></td><td>Bash</td><td>A pilha do <code>pushd</code>/<code>popd</code> (array).</td><td><code>echo "${DIRSTACK[@]}"</code> → <code>/home/ana</code></td></tr>
+<tr><td><code>GLOBIGNORE</code></td><td>você</td><td>Padrões que os curingas devem ignorar, separados por <code>:</code>.</td><td>em <code>~/Documentos</code>: <code>GLOBIGNORE='*.log'; echo *</code> → <code>alunos.csv notas.txt projetos relatorio.odt</code></td></tr>
+<tr><td><code>GLOBSORT</code></td><td>você</td><td>Como os curingas ordenam: <code>name</code> (padrão), <code>size</code>, <code>mtime</code>, <code>-size</code> (invertido)… <span class="versao">bash 5.3+</span></td><td>em <code>~/Documentos</code>: <code>GLOBSORT=size; echo *</code> → <code>notas.txt alunos.csv acesso.log projetos relatorio.odt</code></td></tr>
+<tr><td><code>TMPDIR</code></td><td>você</td><td>Pasta de arquivos temporários (o <code>mktemp</code> usa; vazia = <code>/tmp</code>).</td><td>vazia na máquina da Ana</td></tr>
+</table>
+</div>
+<p>Veja <a href="navegar.html">Navegar</a>, <a href="path.html">PATH</a> e <a href="curingas.html">Curingas</a>.</p>
+
+<h2 id="completar">Completar (<code>COMP_*</code>)</h2>
+<p>Existem só dentro de uma função de completar registrada com <code>complete -F</code>. Valores ilustrativos para quando você digita <code>git che</code> e aperta <kbd>Tab</kbd>. Veja <a href="complete.html">Completar Programável</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>O que guarda</th><th>Em <code>git che</code>+<kbd>Tab</kbd></th></tr>
+<tr><td><code>COMP_WORDS</code></td><td>Array com as palavras da linha.</td><td><code>(git che)</code></td></tr>
+<tr><td><code>COMP_CWORD</code></td><td>O índice, em <code>COMP_WORDS</code>, da palavra onde está o cursor.</td><td><code>1</code></td></tr>
+<tr><td><code>COMP_LINE</code></td><td>A linha inteira, como texto.</td><td><code>git che</code></td></tr>
+<tr><td><code>COMP_POINT</code></td><td>A posição do cursor na linha.</td><td><code>7</code></td></tr>
+<tr><td><code>COMP_TYPE</code></td><td>O tipo de pedido: 9 (Tab normal), 63 (<code>?</code>, listar as opções no 2º Tab), 33, 37, 64.</td><td><code>9</code></td></tr>
+<tr><td><code>COMP_KEY</code></td><td>A tecla que pediu a completação.</td><td><code>9</code> (Tab)</td></tr>
+<tr><td><code>COMP_WORDBREAKS</code></td><td>Caracteres que separam palavras para o completar (existe sempre).</td><td><code>printf '%q' "$COMP_WORDBREAKS"</code> → <code>$' \t\n"\'@&gt;&lt;=;|&amp;(:'</code></td></tr>
+<tr><td><code>COMPREPLY</code></td><td>O array que <strong>você</strong> preenche com as sugestões.</td><td><code>COMPREPLY=(checkout cherry cherry-pick)</code></td></tr>
+</table>
+</div>
+
+<h2 id="ambiente">Ambiente do sistema</h2>
+<p>Vêm do login e são herdadas por todos os programas (são exportadas). Veja <a href="variaveis.html">Variáveis, Escopo e export</a>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>O que guarda</th><th>Na máquina da Ana</th></tr>
+<tr><td><code>USER</code>, <code>LOGNAME</code></td><td>Seu nome de usuário.</td><td><code>ana</code></td></tr>
+<tr><td><code>UID</code>, <code>EUID</code></td><td>Seu número de usuário (real / efetivo). Definidas pelo Bash, somente leitura. Root = 0.</td><td><code>1000 1000</code>; teste de root: <code>(( EUID == 0 ))</code></td></tr>
+<tr><td><code>GROUPS</code></td><td>Array com os números dos seus grupos (Bash).</td><td><code>echo "${GROUPS[0]}"</code> → <code>1000</code></td></tr>
+<tr><td><code>SHELL</code></td><td>O seu shell <strong>de login</strong> (não necessariamente o que está rodando).</td><td><code>/bin/bash</code></td></tr>
+<tr><td><code>HOSTNAME</code></td><td>O nome da máquina (Bash).</td><td><code>notebook</code></td></tr>
+<tr><td><code>OSTYPE</code>, <code>HOSTTYPE</code>, <code>MACHTYPE</code></td><td>Sistema e processador (Bash). No macOS, <code>OSTYPE</code> começa com <code>darwin</code>.</td><td><code>linux-gnu x86_64 x86_64-pc-linux-gnu</code></td></tr>
+<tr><td><code>PPID</code></td><td>O PID do processo pai do shell (Bash).</td><td><code>echo $PPID</code> → <code>2950</code> (o terminal)</td></tr>
+<tr><td><code>LANG</code></td><td>Língua e codificação padrão.</td><td><code>pt_BR.UTF-8</code></td></tr>
+<tr><td><code>LC_ALL</code></td><td>Passa por cima de todas as <code>LC_*</code> e da <code>LANG</code>. <code>LC_ALL=C comando</code> = mensagens em inglês, ordem por byte, ponto decimal.</td><td>vazia</td></tr>
+<tr><td><code>LC_NUMERIC</code>, <code>LC_TIME</code>, <code>LC_COLLATE</code>, <code>LC_MESSAGES</code></td><td>Partes da língua: números, datas, ordem alfabética, mensagens.</td><td><code>LC_NUMERIC=C printf '%.1f\n' 2.5</code> → <code>2.5</code></td></tr>
+<tr><td><code>TERM</code></td><td>O tipo de terminal (cores e teclas que ele entende).</td><td><code>xterm-256color</code></td></tr>
+<tr><td><code>COLUMNS</code>, <code>LINES</code></td><td>Largura e altura do terminal (o Bash atualiza com <code>checkwinsize</code>).</td><td><code>80 24</code></td></tr>
+<tr><td><code>EDITOR</code>, <code>VISUAL</code></td><td>O editor que os programas abrem (<code>crontab -e</code>, <code>git commit</code>, <code>fc</code>).</td><td><code>nano</code></td></tr>
+<tr><td><code>PAGER</code></td><td>O paginador (<code>less</code>) usado pelo <code>man</code>, <code>git log</code>…</td><td>vazia (o padrão é <code>less</code>)</td></tr>
+<tr><td><code>MAIL</code>, <code>MAILCHECK</code></td><td>Caixa de correio local e de quanto em quanto tempo checar.</td><td>vazia; <code>60</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Código do último comando</h3>
+<p>Complete para mostrar o código de saída do comando anterior:</p>
+<div class="ex-code">echo <input data-answer="$?|${?}" aria-label="variável"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. <code>grep x arq | sort</code> terminou com <code>$?</code> igual a 0, mas você suspeita que o <code>grep</code> falhou. Onde está o código dele?</p>
+<label><input type="radio" name="q2"> Em <code>$!</code>.</label>
+<label><input type="radio" name="q2"> Em <code>${PIPESTATUS[0]}</code>, logo depois do pipeline.</label>
+<label><input type="radio" name="q2"> Em <code>$#</code>.</label>
+<label><input type="radio" name="q2"> Em <code>$_</code>.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Todos os argumentos, intactos</h3>
+<p>Complete para repassar todos os argumentos do script para outro comando, cada um intacto:</p>
+<div class="ex-code">outro_comando <input data-answer="&quot;$@&quot;" aria-label="argumentos"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Qual variável dá um número aleatório que <strong>não</strong> pode ser repetido com uma semente?</p>
+<label><input type="radio" name="q4"> <code>RANDOM</code></label>
+<label><input type="radio" name="q4"> <code>SECONDS</code></label>
+<label><input type="radio" name="q4"> <code>SRANDOM</code></label>
+<label><input type="radio" name="q4"> <code>$$</code></label>
+</div>
+
+<div class="exercise">
+<h3>4. A linha do erro</h3>
+<p>Complete a mensagem para mostrar a linha atual do script:</p>
+<div class="ex-code">echo "erro na linha <input data-answer="$LINENO|${LINENO}" aria-label="variável">" &gt;&amp;2</div>
+</div>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
