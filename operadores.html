@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash ; &amp;&amp; || — encadear comandos com segurança | Guia Bash</title>
+<meta name="description" content="Aprenda a encadear comandos no Bash com ;, &amp;&amp; e ||, agrupar com { ; }, por que a &amp;&amp; b || c não é um if/else, e quando usar cada operador, com saídas reais e terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">; &amp;&amp; ||</span></h1>
+
+<p class="intro">Até agora você digitou um comando por vez. Com três operadores, você coloca vários na mesma linha e decide <strong>quando</strong> cada um roda: sempre (<code>;</code>), só se o anterior deu certo (<code>&amp;&amp;</code>) ou só se o anterior falhou (<code>||</code>). Quem decide é o <a href="codigo-saida.html">código de saída</a> que você acabou de aprender.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre <code>;</code>, <code>&amp;&amp;</code> e <code>||</code>, e como o código de saída escolhe o caminho.</li>
+  <li>Por que <code>a &amp;&amp; b || c</code> <strong>não</strong> é um "se/senão", com o caso em que ele falha.</li>
+  <li>Como agrupar vários comandos com <code>{ …; }</code> (e os dois detalhes que todo mundo erra).</li>
+  <li>O que o <code>&amp;</code> no fim da linha faz, e qual operador usar em cada situação.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: uma receita com condições</h2>
+<p>Pense numa receita: "quebre os ovos <strong>e então</strong> bata" (só bate se conseguiu quebrar); "use manteiga, <strong>ou senão</strong> óleo" (só usa óleo se faltar manteiga). Os operadores do Bash fazem exatamente isso com comandos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Operador</th><th>Lê-se</th><th>O segundo comando roda…</th></tr>
+<tr><td><code>a ; b</code></td><td>"a, depois b"</td><td>Sempre.</td></tr>
+<tr><td><code>a &amp;&amp; b</code></td><td>"a <strong>e então</strong> b" (<em>and</em>)</td><td>Só se <code>a</code> deu certo (código 0).</td></tr>
+<tr><td><code>a || b</code></td><td>"a <strong>ou senão</strong> b" (<em>or</em>)</td><td>Só se <code>a</code> falhou (código diferente de 0).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2><code>;</code>: um depois do outro, sempre</h2>
+<p>O ponto e vírgula separa comandos na mesma linha. É exatamente como apertar <kbd>Enter</kbd> entre eles: o segundo roda quando o primeiro termina, <strong>dê certo ou não</strong>.</p>
+
+<dl class="anatomy">
+  <dt>mkdir estudos</dt><dd>Primeiro comando: cria a pasta.</dd>
+  <dt>;</dt><dd>"Depois" (sem condição).</dd>
+  <dt>cd estudos</dt><dd>Segundo comando: entra nela.</dd>
+  <dt>;</dt><dd>"Depois".</dd>
+  <dt>pwd</dt><dd>Terceiro: mostra onde você está.</dd>
+</dl>
+
+<pre class="term">$ mkdir estudos; cd estudos; pwd
+/home/ana/estudos</pre>
+
+<p>Funcionou porque nada falhou. Agora veja o perigo do <code>;</code>: ele não liga para erros.</p>
+
+<pre class="term">$ cd nada; pwd
+bash: cd: nada: Arquivo ou diretório inexistente
+/home/ana                     « o pwd rodou mesmo assim: você continua na pasta pessoal</pre>
+
+<p>Aqui não houve estrago, mas imagine <code>cd pasta-temporaria; rm -r *</code>. Se o <code>cd</code> falhar, o <code>rm</code> apaga tudo <strong>na pasta onde você está</strong>. É para isso que existe o <code>&amp;&amp;</code>.</p>
+
+<hr>
+
+<h2><code>&amp;&amp;</code>: só se o anterior deu certo</h2>
+
+<dl class="anatomy">
+  <dt>mkdir projeto</dt><dd>Primeiro comando.</dd>
+  <dt>&amp;&amp;</dt><dd>"E então": só continua se o código foi 0.</dd>
+  <dt>cd projeto</dt><dd>Só roda se a pasta foi criada.</dd>
+  <dt>&amp;&amp; pwd</dt><dd>Só roda se o <code>cd</code> deu certo.</dd>
+</dl>
+
+<pre class="term">$ mkdir projeto &amp;&amp; cd projeto &amp;&amp; pwd
+/home/ana/projeto</pre>
+
+<p>Tudo deu certo, então tudo rodou. Agora a Ana volta para a pasta pessoal e repete o comando. A pasta já existe, o <code>mkdir</code> falha, e a corrente para:</p>
+
+<pre class="term">$ cd
+$ mkdir projeto &amp;&amp; cd projeto
+mkdir: cannot create directory ‘projeto’: Arquivo existe
+$ echo $?
+1                             « o código do mkdir: o cd nem foi tentado
+$ pwd
+/home/ana                     « continua na pasta pessoal</pre>
+
+<div class="note">
+<strong>A mensagem meio em inglês</strong>
+<p>"cannot create directory … Arquivo existe" é a mensagem real do GNU <code>mkdir</code> em português: parte dela ainda não foi traduzida. No seu sistema ela pode aparecer toda em português ou toda em inglês.</p>
+</div>
+
+<p>O <code>&amp;&amp;</code> é a escolha certa quando o passo seguinte <strong>depende</strong> do anterior. Um exemplo do dia a dia, um backup que só avisa "feito" se tudo funcionou:</p>
+
+<pre class="term">$ mkdir -p backup &amp;&amp; cp frutas.txt backup/ &amp;&amp; echo "Backup feito"
+Backup feito</pre>
+
+<div class="try" data-goal="cwd:~/relatorios,ran:mkdir.*&amp;&amp;.*cd" data-solucao="mkdir relatorios &amp;&amp; cd relatorios">
+<p class="try-task"><strong>Missão:</strong> numa linha só, crie a pasta <code>relatorios</code> e entre nela, de modo que o <code>cd</code> só rode se o <code>mkdir</code> der certo.</p>
+</div>
+
+<hr>
+
+<h2><code>||</code>: só se o anterior falhou</h2>
+<p>O <code>||</code> (duas barras verticais, a tecla perto do <kbd>Enter</kbd> com <kbd>Shift</kbd>) é o "plano B": o segundo comando só roda se o primeiro <strong>falhou</strong>.</p>
+
+<dl class="anatomy">
+  <dt>cd nada</dt><dd>Tenta entrar numa pasta.</dd>
+  <dt>||</dt><dd>"Ou senão": só continua se o código foi diferente de 0.</dd>
+  <dt>echo "Essa pasta não existe"</dt><dd>O plano B: avisa.</dd>
+</dl>
+
+<pre class="term">$ cd nada || echo "Essa pasta não existe"
+bash: cd: nada: Arquivo ou diretório inexistente
+Essa pasta não existe            « o cd falhou, então o echo rodou
+$ cd Documentos || echo "Essa pasta não existe"     « o cd deu certo: o echo foi pulado (e a Ana está em Documentos)</pre>
+
+<p>Dois usos clássicos:</p>
+<ul>
+  <li><strong>Criar só se faltar:</strong> <code>[ -d backup ] || mkdir backup</code> ("a pasta existe, ou senão crie").</li>
+  <li><strong>Parar um script no erro:</strong> <code>cd "$pasta" || exit 1</code> ("entre na pasta, ou senão saia com erro"). Você vai ver isso em quase todo script bem escrito.</li>
+</ul>
+
+<div class="try" data-goal="dir:~/backup,ran:\|\|" data-solucao="[ -d backup ] || mkdir backup">
+<p class="try-task"><strong>Missão:</strong> usando <code>||</code>, crie a pasta <code>backup</code> <strong>só se ela ainda não existir</strong>. Dica: <code>[ -d backup ]</code> pergunta "existe uma pasta backup?". Rode o comando duas vezes: na segunda, nada deve acontecer (nem erro).</p>
+</div>
+
+<hr>
+
+<h2>Combinando: a armadilha do <code>a &amp;&amp; b || c</code></h2>
+<p>É muito comum ver esta linha, que parece um "se/senão" em uma linha:</p>
+
+<pre class="term">$ grep -q banana frutas.txt &amp;&amp; echo "tem banana" || echo "não tem banana"
+tem banana
+$ grep -q kiwi frutas.txt &amp;&amp; echo "tem kiwi" || echo "não tem kiwi"
+não tem kiwi</pre>
+
+<p>Funcionou nos dois casos. Mas não é um <code>if</code>. O Bash lê da esquerda para a direita, um operador por vez, olhando sempre o código do <strong>último comando que rodou</strong>:</p>
+
+<pre class="syntax">  a  &amp;&amp;  b  ||  c
+  └──┬──┘
+     └─ resultado de "a &amp;&amp; b" ──||── c
+        c roda se a falhou  OU  se b falhou</pre>
+
+<p>Ou seja: o <code>c</code> roda quando <code>a</code> falha, mas <strong>também quando <code>b</code> falha</strong>. Com <code>echo</code> no meio, o <code>b</code> praticamente nunca falha, por isso o truque parece funcionar. Troque o <code>b</code> por algo que pode falhar e veja:</p>
+
+<pre class="term">$ [ -f frutas.txt ] &amp;&amp; grep kiwi frutas.txt || echo "O arquivo não existe"
+O arquivo não existe              « mentira! o arquivo existe; quem falhou foi o grep</pre>
+
+<p>Passo a passo: <code>[ -f frutas.txt ]</code> deu 0 (o arquivo existe), então o <code>grep</code> rodou; o <code>grep</code> não achou kiwi e deu 1; como o último código foi 1, o <code>||</code> rodou o <code>echo</code>. A mensagem saiu errada.</p>
+
+<p>Mais duas provas de que os operadores são lidos em fila, sem "prioridade":</p>
+
+<pre class="term">$ false &amp;&amp; echo A || echo B
+B                                 « false falhou: pula o A, cai no B
+$ true || echo A &amp;&amp; echo B
+B                                 « true deu certo: pula o A; o último código ainda é 0, então roda o B</pre>
+
+<div class="warning">
+<strong>Regra prática</strong>
+<p>Use <code>a &amp;&amp; b || c</code> só quando <code>b</code> não pode falhar (um <code>echo</code> simples). Quando precisar de "se/senão" de verdade, use <a href="if.html">if</a>: <code>if [ -f frutas.txt ]; then grep kiwi frutas.txt; else echo "O arquivo não existe"; fi</code>.</p>
+</div>
+
+<h3>O código de saída de uma linha inteira</h3>
+<p>Quando a linha tem vários comandos, o <code>$?</code> fica com o código do <strong>último que rodou</strong>:</p>
+
+<pre class="term">$ false; true; echo $?
+0
+$ true &amp;&amp; false; echo $?
+1
+$ false || true; echo $?
+0</pre>
+
+<hr>
+
+<h2>Agrupar comandos: <code>{ …; }</code></h2>
+<p>E se o plano B tiver dois passos? <code>grep -q kiwi frutas.txt || echo "Faltava kiwi"; echo kiwi &gt;&gt; frutas.txt</code> não serve: o <code>;</code> faz o segundo passo rodar <strong>sempre</strong>. Você precisa dizer "estes dois comandos são um bloco só". É o que as chaves fazem:</p>
+
+<dl class="anatomy">
+  <dt>grep -q kiwi frutas.txt</dt><dd>A pergunta: tem kiwi?</dd>
+  <dt>||</dt><dd>Se não tiver…</dd>
+  <dt>{</dt><dd>…abre o bloco. <strong>Precisa de espaço depois.</strong></dd>
+  <dt>echo "Faltava kiwi, adicionando...";</dt><dd>Primeiro passo do bloco.</dd>
+  <dt>echo kiwi &gt;&gt; frutas.txt;</dt><dd>Segundo passo (o <code>&gt;&gt;</code> acrescenta ao arquivo, veja <a href="redirecionamento.html">Redirecionamento</a>). <strong>Precisa do <code>;</code> antes da chave.</strong></dd>
+  <dt>}</dt><dd>Fecha o bloco.</dd>
+</dl>
+
+<pre class="term">$ grep -q kiwi frutas.txt || { echo "Faltava kiwi, adicionando..."; echo kiwi &gt;&gt; frutas.txt; }
+Faltava kiwi, adicionando...
+$ tail -n 2 frutas.txt
+banana
+kiwi                              « os dois passos rodaram juntos</pre>
+
+<h3>Os dois detalhes obrigatórios</h3>
+<p>Para o Bash, <code>{</code> e <code>}</code> são <strong>palavras reservadas</strong>, como <code>if</code>. Por isso:</p>
+<ol>
+  <li><strong>Espaço depois do <code>{</code></strong>, senão <code>{echo</code> vira uma palavra só (um "comando" que não existe).</li>
+  <li><strong><code>;</code> (ou uma quebra de linha) antes do <code>}</code></strong>, senão o <code>}</code> vira só mais um argumento do último comando.</li>
+</ol>
+
+<pre class="term">$ {echo oi}
+bash: {echo: comando não encontrado          « faltou o espaço depois de {
+$ { echo oi }
+&gt; }                                         « o Bash esperou o fim do bloco; a Ana digitou } de novo
+oi }                                         « o primeiro } virou texto para o echo</pre>
+
+<h3>Agrupar para redirecionar tudo junto</h3>
+<p>Outro uso: mandar a saída de vários comandos para o mesmo arquivo de uma vez.</p>
+
+<pre class="term">$ { echo "Relatório de frutas"; wc -l frutas.txt; } &gt; relatorio.txt
+$ cat relatorio.txt
+Relatório de frutas
+7 frutas.txt</pre>
+
+<div class="tip">
+<strong>Chaves <code>{ }</code> × parênteses <code>( )</code></strong>
+<p>Parênteses também agrupam, mas rodam o bloco num <strong>subshell</strong>, uma cópia do shell: um <code>cd</code> ou uma variável criada lá dentro não chegam ao seu terminal. As chaves rodam no shell atual. Os detalhes estão em <a href="subshell.html">Subshells e Grupos</a>.</p>
+</div>
+
+<hr>
+
+<h2>Experimente num script</h2>
+<p>Este script lista a pasta que você passar como argumento (<code>$1</code>, veja <a href="argumentos.html">Argumentos</a>). Rode com <code>Fotos</code>, uma pasta que não existe:</p>
+
+<pre class="file" data-file="lista.sh">#!/usr/bin/env bash
+cd "$1"
+echo "Arquivos em $1:"
+ls
+</pre>
+
+<pre class="term">$ bash lista.sh Fotos
+lista.sh: linha 2: cd: Fotos: Arquivo ou diretório inexistente
+Arquivos em Fotos:                                   « mentira: estamos em ~, não em Fotos
+'Área de trabalho'   Downloads    Imagens    Modelos   Público
+ Documentos          frutas.txt   lista.sh   Música    Vídeos
+$ echo $?
+0                                                    « e ainda diz que deu certo</pre>
+
+<p>O <code>cd</code> falhou, mas o script seguiu em frente e listou a pasta errada. Corrija isso:</p>
+
+<div class="tryscript" data-file="lista.sh" data-args="Fotos" data-goal="exit:1,out:Pasta não encontrada,src:\|\|\s*\{">
+<p class="try-task"><strong>Missão:</strong> mude a linha do <code>cd</code> para que, se ele falhar, o script mostre <code>Pasta não encontrada: Fotos</code> (use <code>$1</code>) e termine com <code>exit 1</code>. Use <code>||</code> e um grupo <code>{ …; }</code>. Depois teste também com o argumento <code>Imagens</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+cd "$1"
+echo "Arquivos em $1:"
+ls
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+cd "$1" || { echo "Pasta não encontrada: $1"; exit 1; }
+echo "Arquivos em $1:"
+ls
+</pre>
+</div>
+
+<p>Com a correção, a saída real fica assim:</p>
+<pre class="term">$ bash lista.sh Fotos
+lista.sh: linha 2: cd: Fotos: Arquivo ou diretório inexistente
+Pasta não encontrada: Fotos
+$ echo $?
+1
+$ bash lista.sh Imagens
+Arquivos em Imagens:
+ferias.jpg  perfil.png</pre>
+
+<hr>
+
+<h2><code>&amp;</code>: rodar sem esperar</h2>
+<p>Um <code>&amp;</code> sozinho no fim do comando é outra coisa: ele manda o comando rodar <strong>em segundo plano</strong>. O Bash não espera ele terminar e devolve o prompt na hora.</p>
+
+<pre class="term">$ sleep 2 &amp;
+[1] 33816                         « [1] = número do job; 33816 = PID (no seu será outro)
+$ echo "O terminal continua livre"
+O terminal continua livre
+$ echo fim
+fim
+[1]+  Concluído                 sleep 2     « aviso de que o job terminou</pre>
+
+<p>Não confunda: <code>&amp;</code> (um) = segundo plano; <code>&amp;&amp;</code> (dois) = "e então". Segundo plano, <code>fg</code>, <code>bg</code> e <code>wait</code> são assunto de <a href="jobs.html">Jobs</a>.</p>
+
+<hr>
+
+<h2>Quebra de linha × <code>;</code></h2>
+<p>Num script, cada linha é um comando, e a quebra de linha faz o papel do <code>;</code>. Estas duas formas são iguais:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Uma linha</th><th>Várias linhas (num script)</th></tr>
+<tr><td><code>cd /tmp; ls; pwd</code></td><td><code>cd /tmp</code><br><code>ls</code><br><code>pwd</code></td></tr>
+<tr><td><code>{ echo a; echo b; }</code></td><td><code>{</code><br><code>&nbsp;&nbsp;echo a</code><br><code>&nbsp;&nbsp;echo b</code><br><code>}</code></td></tr>
+</table>
+</div>
+
+<p>Você também pode quebrar a linha <strong>depois</strong> de <code>&amp;&amp;</code> ou <code>||</code>: o Bash percebe que falta algo e mostra o prompt de continuação <code>&gt;</code>. Isso deixa linhas longas mais legíveis.</p>
+
+<pre class="term">$ ls Documentos &amp;&amp;
+&gt; echo "deu certo"
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+deu certo</pre>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th><th>Exemplo</th></tr>
+<tr><td>Comandos independentes, só para economizar linhas</td><td><code>;</code></td><td><code>clear; ls</code></td></tr>
+<tr><td>O passo seguinte depende do anterior</td><td><code>&amp;&amp;</code></td><td><code>mkdir site &amp;&amp; cd site</code></td></tr>
+<tr><td>Plano B, aviso ou parada se der errado</td><td><code>||</code></td><td><code>cd "$dir" || exit 1</code></td></tr>
+<tr><td>Plano B com vários passos</td><td><code>|| { …; }</code></td><td><code>cd x || { echo "erro"; exit 1; }</code></td></tr>
+<tr><td>"Se/senão" em uma linha, com <code>b</code> que não falha</td><td><code>a &amp;&amp; b || c</code></td><td><code>grep -q x f &amp;&amp; echo sim || echo não</code></td></tr>
+<tr><td>"Se/senão" de verdade, ou mais de um passo em cada lado</td><td><code>if</code></td><td>veja <a href="if.html">if, elif, else</a></td></tr>
+<tr><td>Não esperar o comando terminar</td><td><code>&amp;</code></td><td><code>sleep 60 &amp;</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado `&amp;&amp;'"</strong>
+<pre class="term">$ &amp;&amp; ls
+bash: erro de sintaxe próximo ao token inesperado `&amp;&amp;'</pre>
+<p><strong>O que aconteceu:</strong> o operador precisa de um comando dos <strong>dois</strong> lados. Aqui não havia nada antes do <code>&amp;&amp;</code>. O mesmo acontece com <code>;;</code> digitado por engano (<code>ls ;;</code>): o <code>;;</code> só existe dentro do <a href="case.html">case</a>.</p>
+<p><strong>Como resolver:</strong> confira se há um comando antes e depois de cada operador. "Token" é cada pedaço que o Bash separa na linha.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu <code>&gt;</code> e o terminal ficou esperando</strong>
+<p><strong>O que aconteceu:</strong> a linha terminou com <code>&amp;&amp;</code>, <code>||</code> ou um <code>{</code> sem <code>}</code>. O Bash está esperando o resto.</p>
+<p><strong>Como resolver:</strong> digite o que falta (o próximo comando, ou <code>}</code>), ou aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para desistir da linha.</p>
+</div>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado `}'" ou "{echo: comando não encontrado"</strong>
+<pre class="term">$ {echo oi;}
+bash: erro de sintaxe próximo ao token inesperado `}'</pre>
+<p><strong>O que aconteceu:</strong> faltou o espaço depois do <code>{</code>. Para o Bash, <code>{echo</code> é uma palavra qualquer, e o <code>}</code> apareceu sem um <code>{</code> de verdade aberto.</p>
+<p><strong>Como resolver:</strong> <code>{ echo oi; }</code>: espaço depois de <code>{</code>, <code>;</code> antes de <code>}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A mensagem de "senão" apareceu mesmo com tudo certo</strong>
+<p><strong>O que aconteceu:</strong> é a armadilha do <code>a &amp;&amp; b || c</code>: o <code>b</code> falhou e o <code>c</code> rodou.</p>
+<p><strong>Como confirmar:</strong> rode só <code>a &amp;&amp; b</code> e olhe o <code>echo $?</code>. Se for diferente de 0, o problema está no <code>b</code>.</p>
+<p><strong>Como resolver:</strong> troque por um <a href="if.html">if</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Um comando rodou mesmo depois de um erro</strong>
+<pre class="term">$ cd nada || echo "não deu" &amp;&amp; echo "e este?"
+bash: cd: nada: Arquivo ou diretório inexistente
+não deu
+e este?</pre>
+<p><strong>O que aconteceu:</strong> o <code>echo "não deu"</code> deu certo, então o <code>&amp;&amp;</code> seguinte rodou. Ou você usou <code>;</code> onde queria <code>&amp;&amp;</code>.</p>
+<p><strong>Como resolver:</strong> leia a linha da esquerda para a direita, perguntando "qual foi o último código?". Se a lógica ficou confusa, separe em linhas ou use <code>if</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Código final</th></tr>
+<tr><td><code>a ; b</code></td><td>Roda <code>a</code>, depois <code>b</code>, sempre</td><td>O de <code>b</code></td></tr>
+<tr><td><code>a &amp;&amp; b</code></td><td>Roda <code>b</code> só se <code>a</code> devolveu 0</td><td>O de <code>a</code> (se falhou) ou o de <code>b</code></td></tr>
+<tr><td><code>a || b</code></td><td>Roda <code>b</code> só se <code>a</code> não devolveu 0</td><td>0 (se <code>a</code> deu certo) ou o de <code>b</code></td></tr>
+<tr><td><code>a &amp;&amp; b || c</code></td><td>Roda <code>c</code> se <code>a</code> <strong>ou</strong> <code>b</code> falhar</td><td>O do último que rodou</td></tr>
+<tr><td><code>{ a; b; }</code></td><td>Agrupa no shell atual</td><td>O de <code>b</code></td></tr>
+<tr><td><code>( a; b )</code></td><td>Agrupa num subshell</td><td>O de <code>b</code></td></tr>
+<tr><td><code>a &amp;</code></td><td>Roda <code>a</code> em segundo plano</td><td>0 (o lançamento)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só se der certo</h3>
+<p>Complete para entrar na pasta <code>site</code> só se ela for criada com sucesso:</p>
+<div class="ex-code">mkdir site <input data-answer="&amp;&amp;" aria-label="operador"> cd site</div>
+</div>
+
+<div class="exercise">
+<h3>2. Parar o script</h3>
+<p>Complete para o script terminar com código 1 se o <code>cd</code> falhar:</p>
+<div class="ex-code">cd "$pasta" || <input data-answer="exit 1" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. O bloco certo</h3>
+<p>Complete o grupo (atenção ao espaço e ao ponto e vírgula):</p>
+<div class="ex-code">cd x || <input data-answer="{ echo &quot;erro&quot;; exit 1; }" aria-label="grupo"></div>
+<p>Use <code>echo "erro"</code> e <code>exit 1</code>.</p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O que <code>false &amp;&amp; echo A || echo B</code> mostra?</p>
+<label><input type="radio" name="q4"> A</label>
+<label><input type="radio" name="q4"> A e B</label>
+<label><input type="radio" name="q4"> B</label>
+<label><input type="radio" name="q4"> Nada</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Em <code>[ -f notas.txt ] &amp;&amp; grep Bash notas.txt || echo "sem arquivo"</code>, quando aparece "sem arquivo"?</p>
+<label><input type="radio" name="q5"> Só quando <code>notas.txt</code> não existe.</label>
+<label><input type="radio" name="q5"> Quando <code>notas.txt</code> não existe <strong>ou</strong> quando o grep não acha "Bash".</label>
+<label><input type="radio" name="q5"> Nunca, porque o <code>&amp;&amp;</code> vem antes.</label>
+<label><input type="radio" name="q5"> Sempre.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Por que <code>cd backup; rm *.tmp</code> é perigoso?</p>
+<label><input type="radio" name="q6"> Se o <code>cd</code> falhar, o <code>rm</code> roda mesmo assim, na pasta atual.</label>
+<label><input type="radio" name="q6"> Porque o <code>;</code> roda os dois ao mesmo tempo.</label>
+<label><input type="radio" name="q6"> Porque o <code>rm</code> não aceita curingas depois de <code>;</code>.</label>
+<label><input type="radio" name="q6"> Não é perigoso.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>;</code> roda o próximo sempre; <code>&amp;&amp;</code> só se o anterior deu 0; <code>||</code> só se o anterior falhou.</li>
+  <li>Os operadores são lidos da esquerda para a direita, olhando o código do último comando que rodou.</li>
+  <li><code>a &amp;&amp; b || c</code> roda <code>c</code> também quando <code>b</code> falha: não é um <code>if</code>.</li>
+  <li><code>{ a; b; }</code> agrupa: espaço depois do <code>{</code> e <code>;</code> antes do <code>}</code>.</li>
+  <li><code>cd pasta || exit 1</code> é o jeito mais simples de um script parar no erro. Um <code>&amp;</code> sozinho roda em segundo plano.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
