@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Histórico — history, !!, !$, Ctrl+R e HISTCONTROL | Guia Bash</title>
+<meta name="description" content="O histórico do Bash: setas, history, repetir com !!, !n, !-n e !texto, reaproveitar argumentos com !$ e !*, corrigir com ^velho^novo, conferir com :p, buscar com Ctrl+R, HISTSIZE, HISTCONTROL, HISTTIMEFORMAT, o arquivo ~/.bash_history e o perigo do sudo !!.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Histórico</span></h1>
+
+<p class="intro">O Bash lembra os comandos que você digitou. Em vez de redigitar um comando comprido, você pode trazê-lo de volta com uma seta, buscá-lo por um pedaço ou reaproveitar só o último argumento. Nesta aula você aprende a usar e a configurar essa memória, e um cuidado importante com senhas.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A navegar com <kbd>↑</kbd> <kbd>↓</kbd>, listar com <code>history</code> e buscar com <kbd>Ctrl</kbd>+<kbd>R</kbd>.</li>
+  <li>A repetir comandos com <code>!!</code>, <code>!n</code>, <code>!-n</code> e <code>!texto</code>, e reaproveitar argumentos com <code>!$</code> e <code>!*</code>.</li>
+  <li>A corrigir o último comando com <code>^velho^novo</code> e conferir antes com <code>:p</code>.</li>
+  <li>A configurar o histórico: <code>HISTSIZE</code>, <code>HISTFILESIZE</code>, <code>HISTCONTROL</code>, <code>HISTTIMEFORMAT</code>.</li>
+  <li>Onde o histórico é gravado (<code>~/.bash_history</code>), como apagar itens e por que <code>sudo !!</code> pede atenção.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>As setas: o jeito mais simples</h2>
+<p>Aperte <kbd>↑</kbd> no prompt: o comando anterior aparece, pronto para ser editado ou executado de novo com <kbd>Enter</kbd>. Cada <kbd>↑</kbd> volta mais um; <kbd>↓</kbd> avança. Isso já resolve metade dos casos. Junto com os atalhos de <a href="editar-linha.html">Editar a Linha</a>, você traz um comando, corrige um pedaço e roda.</p>
+
+<hr>
+
+<h2><code>history</code>: a lista numerada</h2>
+<p>O comando interno <code>history</code> mostra a lista. Cada comando tem um número, a sua posição no histórico:</p>
+
+<pre class="term">$ ls Documentos
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+$ wc -l frutas.txt
+7 frutas.txt
+$ echo dois tres quatro
+dois tres quatro
+$ history
+    1  ls Documentos
+    2  wc -l frutas.txt
+    3  echo dois tres quatro
+    4  history                     « o próprio history também entra na lista</pre>
+
+<p>Com um número, <code>history N</code> mostra só os últimos N. Quando a lista é grande, filtre com o <code>grep</code>: <code>history | grep wc</code> mostra só as linhas com "wc" (o <code>|</code> é explicado em <a href="pipes.html">Pipes</a>).</p>
+
+<hr>
+
+<h2>Repetir comandos com <code>!</code></h2>
+<p>A exclamação no começo de uma palavra é a <strong>expansão de histórico</strong>: o Bash troca a expressão pelo comando antigo, <strong>mostra</strong> o resultado da troca e executa. Continuando a sessão acima:</p>
+
+<pre class="term">$ !2
+wc -l frutas.txt                   « o Bash mostra o comando que vai rodar
+7 frutas.txt                       « e a resposta dele
+$ !-3
+echo dois tres quatro              « 3 comandos atrás
+dois tres quatro
+$ !ls
+ls Documentos                      « o mais recente que começa com "ls"
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+$ !!
+ls Documentos                      « o último comando
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Repete…</th><th>Lembre como</th></tr>
+<tr><td><code>!!</code></td><td>O último comando</td><td>"de novo, de novo"</td></tr>
+<tr><td><code>!n</code></td><td>O comando número <em>n</em> da lista</td><td><code>!2</code> = o número 2</td></tr>
+<tr><td><code>!-n</code></td><td>O comando <em>n</em> posições atrás</td><td><code>!-1</code> = <code>!!</code></td></tr>
+<tr><td><code>!texto</code></td><td>O mais recente que <strong>começa</strong> com "texto"</td><td><code>!ls</code>, <code>!wc</code></td></tr>
+<tr><td><code>!?texto?</code></td><td>O mais recente que <strong>contém</strong> "texto"</td><td><code>!?frutas?</code></td></tr>
+</table>
+</div>
+
+<p>Repare que o <code>!!</code> repetido não apareceu duas vezes no histórico: comandos iguais seguidos são guardados uma vez só (a configuração <code>HISTCONTROL</code>, mais abaixo).</p>
+
+<h3>Conferir antes de rodar: <code>:p</code></h3>
+<p>Acrescente <code>:p</code> (de <em>print</em>, "mostrar") para ver o comando <strong>sem executar</strong>. Ele entra no histórico, então um <kbd>↑</kbd> ou <code>!!</code> depois o executa:</p>
+<pre class="term">$ !wc:p
+wc -l frutas.txt                   « só mostrou: nada foi executado</pre>
+
+<hr>
+
+<h2>Reaproveitar argumentos: <code>!$</code> e <code>!*</code></h2>
+<p>Muitas vezes você quer o mesmo arquivo ou pasta do comando anterior em outro comando. <code>!$</code> é a <strong>última palavra</strong> do comando anterior; <code>!*</code> são <strong>todas as palavras</strong> menos o nome do comando.</p>
+
+<pre class="term">$ mkdir -p projetos/site
+$ cd !$
+cd projetos/site                   « !$ virou "projetos/site"
+$ pwd
+/home/ana/projetos/site</pre>
+
+<pre class="term">$ echo dois tres quatro
+dois tres quatro
+$ echo !*
+echo dois tres quatro              « !* virou "dois tres quatro"
+dois tres quatro</pre>
+
+<p>O <code>!$</code> é de longe o mais usado: criar e entrar (<code>mkdir pasta</code> → <code>cd !$</code>), conferir e editar (<code>cat arquivo</code> → <code>nano !$</code>). Há também o atalho <kbd>Alt</kbd>+<kbd>.</kbd> (ponto), que cola a última palavra do comando anterior direto na linha, e você vê o resultado antes do <kbd>Enter</kbd>.</p>
+
+<hr>
+
+<h2>Corrigir o último comando: <code>^velho^novo</code></h2>
+<p>Errou uma letra? Em vez de trazer o comando e editar, escreva <code>^errado^certo^</code>: o Bash pega o último comando, troca a <strong>primeira</strong> ocorrência e roda.</p>
+
+<dl class="anatomy">
+  <dt>^</dt><dd>Começo da correção.</dd>
+  <dt>me</dt><dd>O texto a procurar no último comando.</dd>
+  <dt>^men</dt><dd>O texto que entra no lugar.</dd>
+  <dt>^</dt><dd>Fim (pode ser omitido se nada vier depois).</dd>
+</dl>
+
+<pre class="term">$ ls Documetos
+ls: não foi possível acessar 'Documetos': Arquivo ou diretório inexistente
+$ ^me^men^
+ls Documentos                      « "me" virou "men": Documetos → Documentos
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt</pre>
+
+<div class="try" data-goal="ran:^\s*\^,cwd:~/Documentos" data-solucao="cd Documetos;;^me^men^">
+<p class="try-task"><strong>Missão:</strong> digite <code>cd Documetos</code> (com o erro de propósito). Depois corrija com <code>^velho^novo</code>, sem redigitar o comando, até entrar em <code>Documentos</code>.</p>
+</div>
+
+<hr>
+
+<h2>Buscar no histórico: <kbd>Ctrl</kbd>+<kbd>R</kbd></h2>
+<p>A ferramenta mais útil do histórico. Aperte <kbd>Ctrl</kbd>+<kbd>R</kbd> (<em>reverse search</em>, "busca para trás") e comece a digitar um pedaço de qualquer comando antigo. O Bash mostra o mais recente que contém o que você digitou, e atualiza a cada letra:</p>
+
+<pre class="term">$
+(reverse-i-search)`fru': wc -l frutas.txt       « digitou "fru": achou um comando com "fru"</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Durante a busca</th><th>Faz</th></tr>
+<tr><td>Digitar mais letras</td><td>Refina a busca</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd> de novo</td><td>Procura uma ocorrência mais antiga</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Executa o comando encontrado</td></tr>
+<tr><td><kbd>←</kbd>, <kbd>→</kbd>, <kbd>Ctrl</kbd>+<kbd>E</kbd>…</td><td>Para a busca e deixa o comando na linha, para editar</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> ou <kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Desiste e volta à linha vazia</td></tr>
+</table>
+</div>
+
+<p>Se não houver mais nada, a mensagem muda para <code>(failed reverse-i-search)</code>, "busca falhou". Esse texto fica em inglês porque vem da readline. O terminal simulado não tem <kbd>Ctrl</kbd>+<kbd>R</kbd>; pratique no seu terminal.</p>
+
+<hr>
+
+<h2>Configurar o histórico</h2>
+<p>O comportamento do histórico é controlado por variáveis, normalmente definidas no <code>~/.bashrc</code>. As da Ana:</p>
+
+<pre class="term">$ echo $HISTCONTROL $HISTSIZE $HISTFILESIZE
+ignoreboth 1000 2000
+$ echo $HISTFILE
+/home/ana/.bash_history</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Na Ana</th><th>O que controla</th></tr>
+<tr><td><code>HISTSIZE</code></td><td>1000</td><td>Quantos comandos ficam na memória do shell aberto (o que o <code>history</code> mostra).</td></tr>
+<tr><td><code>HISTFILESIZE</code></td><td>2000</td><td>Quantas linhas o arquivo <code>~/.bash_history</code> guarda no máximo.</td></tr>
+<tr><td><code>HISTFILE</code></td><td><code>~/.bash_history</code></td><td>Onde o histórico é gravado.</td></tr>
+<tr><td><code>HISTCONTROL</code></td><td><code>ignoreboth</code></td><td>O que <strong>não</strong> guardar (veja abaixo).</td></tr>
+<tr><td><code>HISTTIMEFORMAT</code></td><td>(vazia)</td><td>Se definida, o <code>history</code> mostra data e hora de cada comando.</td></tr>
+</table>
+</div>
+
+<h3><code>HISTCONTROL=ignoreboth</code>: o espaço que esconde</h3>
+<p><code>ignoreboth</code> é a junção de dois valores: <code>ignoredups</code> (não guarda um comando igual ao anterior) e <code>ignorespace</code> (não guarda comandos que <strong>começam com espaço</strong>). O segundo é um truque útil: comece a linha com um espaço, e ela não vai para o histórico.</p>
+
+<pre class="term">$  echo senha123                    « repare no espaço antes do echo
+senha123
+$ echo visivel
+visivel
+$ echo visivel
+visivel
+$ history 3
+   18  history 3
+   19  echo visivel                « só uma vez (ignoredups)
+   20  history 3                   « e o " echo senha123" não está aqui (ignorespace)</pre>
+
+<p>Esse <code>ignoreboth</code> vem pronto no <code>.bashrc</code> do Debian e do Ubuntu. Em outros sistemas, acrescente <code>HISTCONTROL=ignoreboth</code> ao seu <code>~/.bashrc</code>. Outro valor útil é <code>erasedups</code>, que apaga cópias antigas de um comando quando ele é repetido.</p>
+
+<h3><code>HISTTIMEFORMAT</code>: quando eu rodei isso?</h3>
+<p>Defina um formato (os mesmos códigos <code>%</code> do <code>date</code>) e o <code>history</code> passa a mostrar data e hora:</p>
+
+<pre class="term">$ HISTTIMEFORMAT="%d/%m/%Y %H:%M "
+$ history 3
+    8  15/10/2026 10:30 echo $?
+    9  15/10/2026 10:30 HISTTIMEFORMAT="%d/%m/%Y %H:%M "
+   10  15/10/2026 10:30 history 3</pre>
+
+<p>O espaço no fim do formato separa a hora do comando. Para valer sempre, coloque a linha no <code>~/.bashrc</code>.</p>
+
+<h3>Aumentar o histórico</h3>
+<p>1000 comandos acabam rápido. Para guardar mais, mude no <code>~/.bashrc</code>:</p>
+<pre class="file" data-file="~/.bashrc (trecho)">HISTCONTROL=ignoreboth
+HISTSIZE=10000
+HISTFILESIZE=20000
+HISTTIMEFORMAT="%d/%m/%Y %H:%M "
+</pre>
+<p>O arquivo de configuração é explicado em <a href="inicializacao.html">Arquivos de Inicialização</a>.</p>
+
+<hr>
+
+<h2>O arquivo <code>~/.bash_history</code></h2>
+<p>Enquanto o terminal está aberto, o histórico fica na <strong>memória</strong> daquele shell. Ele só é gravado no arquivo <code>~/.bash_history</code> quando o shell <strong>termina</strong> (com <code>exit</code>, <kbd>Ctrl</kbd>+<kbd>D</kbd> ou fechando a janela). Por isso, numa janela recém-aberta, o arquivo pode estar desatualizado:</p>
+
+<pre class="term">$ cat ~/.bash_history
+$ echo $?
+0                                  « o arquivo existe, mas está vazio: nada foi gravado ainda</pre>
+
+<p>Depois que a Ana fecha o terminal e abre outro, os comandos aparecem no arquivo. Se <code>HISTTIMEFORMAT</code> estava definido, cada comando vem com uma linha <code>#</code> e a hora em segundos desde 1970:</p>
+<pre class="term">$ cat ~/.bash_history
+#1792071000
+history
+#1792071000
+echo apos limpar
+#1792071000
+history</pre>
+
+<p>Com várias janelas abertas, cada uma tem o seu histórico na memória. A opção <code>shopt -s histappend</code> (já ligada no <code>.bashrc</code> da Ana) faz cada janela <strong>acrescentar</strong> ao arquivo quando fecha, em vez de sobrescrever o que as outras gravaram.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>history -a</code></td><td>Grava agora no arquivo os comandos novos desta janela (<em>append</em>)</td></tr>
+<tr><td><code>history -w</code></td><td>Grava a lista inteira da memória no arquivo, sobrescrevendo (<em>write</em>)</td></tr>
+<tr><td><code>history -r</code></td><td>Lê o arquivo e acrescenta à memória (<em>read</em>): traz os comandos de outras janelas</td></tr>
+<tr><td><code>history -d N</code></td><td>Apaga o item número N (<em>delete</em>)</td></tr>
+<tr><td><code>history -c</code></td><td>Limpa a lista da memória (<em>clear</em>)</td></tr>
+</table>
+</div>
+
+<h3>Apagar um comando que não devia estar lá</h3>
+<p>Digitou uma senha no comando, sem o espaço na frente? Apague o item da lista:</p>
+<pre class="term">$ history 3
+   21  mysql -u ana -pSenhaSecreta123
+   22  echo ok
+   23  history 3
+$ history -d 21                    « apaga o item 21
+$ history -w                       « regrava o arquivo sem ele</pre>
+
+<p>O <code>history -c</code> limpa tudo da memória, mas atenção: se o arquivo já tinha os comandos de antes, eles continuam lá até você rodar <code>history -w</code> (ou apagar o arquivo).</p>
+
+<hr>
+
+<h2>O perigo do <code>sudo !!</code></h2>
+<p>Um uso famoso do <code>!!</code>: você roda um comando, ele falha por falta de permissão, e você repete como administrador com <code>sudo !!</code>. Exemplo <strong>ilustrativo</strong>:</p>
+
+<pre class="term">$ rm /var/log/app.log
+rm: não foi possível remover '/var/log/app.log': Permissão negada
+$ sudo !!
+sudo rm /var/log/app.log           « o Bash mostra o comando, mas já está executando</pre>
+
+<p>É prático, mas perigoso: o <code>!!</code> é trocado e executado <strong>na hora</strong>, sem confirmação. Se o último comando não era o que você pensava (você rodou outro no meio, ou estava em outra pasta), o <code>sudo</code> executa como root algo que você não leu. Prefira <kbd>↑</kbd>, <kbd>Ctrl</kbd>+<kbd>A</kbd>, digitar <code>sudo </code> e conferir antes do <kbd>Enter</kbd>. Ou use <code>sudo !!:p</code>, que só mostra.</p>
+
+<div class="tip">
+<strong>Quer conferir sempre?</strong>
+<p><code>shopt -s histverify</code> faz toda expansão com <code>!</code> ser colocada na linha para você ver e apertar <kbd>Enter</kbd>, em vez de executar direto. Bom para colocar no <code>~/.bashrc</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"event not found"</strong>
+<pre class="term">$ !xyz
+bash: !xyz: event not found</pre>
+<p><strong>O que aconteceu:</strong> não há nenhum comando no histórico começando com "xyz". A mensagem fica em inglês. Nada foi executado.</p>
+<p><strong>Como resolver:</strong> confira com <code>history | grep xyz</code>. Se você queria uma exclamação de verdade no texto, veja o próximo caso.</p>
+</div>
+
+<div class="cenario">
+<strong>Uma exclamação no texto virou outra coisa</strong>
+<pre class="term">$ echo "Atenção!Leia"
+bash: !Leia: event not found
+$ echo "Fim!"
+Fim!                               « exclamação no fim: sem problema</pre>
+<p><strong>O que aconteceu:</strong> dentro de aspas duplas, <code>!</code> seguido de letras ainda é expansão de histórico: <code>"Atenção!Leia"</code> procurou um comando que começasse com "Leia". Uma <code>!</code> no fim da palavra, ou antes de um espaço, não causa problema.</p>
+<p><strong>Como resolver:</strong> use aspas simples (<code>echo 'Atenção!Leia'</code>), que desligam todas as trocas. Veja <a href="aspas.html">Aspas e Escapes</a>. Em scripts isso não acontece: a expansão de histórico só existe no terminal interativo.</p>
+</div>
+
+<div class="cenario">
+<strong><code>!*</code> trouxe uma opção junto</strong>
+<pre class="term">$ wc -l frutas.txt Documentos/notas.txt
+  7 frutas.txt
+  4 Documentos/notas.txt
+ 11 total
+$ head -n 1 !*
+head -n 1 -l frutas.txt Documentos/notas.txt
+head: opção inválida -- “l”
+Tente "head --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> <code>!*</code> são <strong>todas</strong> as palavras depois do nome do comando, inclusive as opções. O <code>-l</code> do <code>wc</code> foi parar no <code>head</code>.</p>
+<p><strong>Como resolver:</strong> confira com <code>:p</code> antes, ou use <code>!$</code> quando só precisar do último argumento.</p>
+</div>
+
+<div class="cenario">
+<strong>O comando de outra janela não aparece no histórico</strong>
+<p><strong>O que aconteceu:</strong> cada janela tem o seu histórico na memória, e só grava no arquivo ao fechar.</p>
+<p><strong>Como resolver:</strong> na janela de origem, <code>history -a</code>; na outra, <code>history -r</code>. Ou feche a primeira janela e abra uma nova.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Comando anterior / seguinte</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Busca para trás por um pedaço do comando</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>.</kbd></td><td>Cola a última palavra do comando anterior</td></tr>
+<tr><td><code>history</code>, <code>history N</code></td><td>Lista tudo / os últimos N</td></tr>
+<tr><td><code>!!</code>, <code>!n</code>, <code>!-n</code></td><td>Último comando / número n / n atrás</td></tr>
+<tr><td><code>!texto</code>, <code>!?texto?</code></td><td>Último que começa com / contém o texto</td></tr>
+<tr><td><code>!$</code>, <code>!*</code></td><td>Último argumento / todos os argumentos do comando anterior</td></tr>
+<tr><td><code>^velho^novo^</code></td><td>Repete o último trocando o texto</td></tr>
+<tr><td><code>…:p</code></td><td>Mostra a expansão sem executar</td></tr>
+<tr><td><code>history -d N</code>, <code>-c</code></td><td>Apaga um item / limpa a memória</td></tr>
+<tr><td><code>history -a</code>, <code>-w</code>, <code>-r</code></td><td>Acrescenta ao arquivo / sobrescreve o arquivo / lê do arquivo</td></tr>
+<tr><td><code>HISTCONTROL=ignoreboth</code></td><td>Ignora repetidos seguidos e linhas que começam com espaço</td></tr>
+<tr><td><code>HISTSIZE</code>, <code>HISTFILESIZE</code></td><td>Tamanho na memória / no arquivo</td></tr>
+<tr><td><code>HISTTIMEFORMAT</code></td><td>Mostra data e hora no <code>history</code></td></tr>
+<tr><td><code>shopt -s histverify</code></td><td>Mostra as expansões com <code>!</code> antes de executar</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Criar e entrar</h3>
+<p>A Ana rodou <code>mkdir relatorios</code>. Complete para entrar na pasta sem redigitar o nome:</p>
+<div class="ex-code">cd <input data-answer="!$" aria-label="expansão"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Corrigir rápido</h3>
+<p>A Ana digitou <code>cat frutsa.txt</code>. Complete para corrigir "frutsa" para "frutas" e rodar de novo:</p>
+<div class="ex-code"><input data-answer="^frutsa^frutas^|^frutsa^frutas|^sa^as^|^sa^as" aria-label="correção"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Apagar um item</h3>
+<p>Complete para apagar o item 42 do histórico:</p>
+<div class="ex-code">history <input data-answer="-d 42|-d42" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Com <code>HISTCONTROL=ignoreboth</code>, qual destes comandos <strong>não</strong> vai para o histórico?</p>
+<label><input type="radio" name="q4"> <code>ls -l</code></label>
+<label><input type="radio" name="q4"> <code>echo "  oi"</code></label>
+<label><input type="radio" name="q4"> <code> echo oi</code> (com um espaço antes)</label>
+<label><input type="radio" name="q4"> <code>history</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Por que <code>sudo !!</code> pede cuidado?</p>
+<label><input type="radio" name="q5"> Porque não funciona com <code>sudo</code>.</label>
+<label><input type="radio" name="q5"> Porque executa como root, na hora, um comando que você não conferiu.</label>
+<label><input type="radio" name="q5"> Porque apaga o histórico.</label>
+<label><input type="radio" name="q5"> Porque grava a senha no histórico.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><kbd>↑</kbd> e <kbd>Ctrl</kbd>+<kbd>R</kbd> resolvem o dia a dia; <code>history</code> mostra a lista numerada.</li>
+  <li><code>!!</code>, <code>!n</code>, <code>!-n</code>, <code>!texto</code> repetem; <code>!$</code> e <code>!*</code> reaproveitam argumentos; <code>^a^b</code> corrige; <code>:p</code> só mostra.</li>
+  <li><code>HISTCONTROL=ignoreboth</code>: um espaço no começo esconde o comando do histórico.</li>
+  <li>O histórico vai para <code>~/.bash_history</code> quando o shell termina; <code>history -a/-w/-r/-d/-c</code> controlam isso à mão.</li>
+  <li>Expansões com <code>!</code> executam na hora: confira antes, principalmente com <code>sudo</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
