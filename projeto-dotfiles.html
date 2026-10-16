@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto Seus Dotfiles — .bashrc em módulos, versionado com git | Guia Bash</title>
+<meta name="description" content="Projeto passo a passo: organize o .bashrc em arquivos ~/.bashrc.d/*.sh carregados num laço, com aliases e funções úteis (mkcd, extrair, up), prompt com código de saída e cor, histórico melhor, inputrc, versionamento com git e um instalar.sh que cria links simbólicos com backup.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Seus Dotfiles</span></h1>
+
+<p class="intro"><strong>Dotfiles</strong> ("arquivos de ponto") são os arquivos de configuração que moram na sua pasta pessoal com nome começando por ponto: <code>.bashrc</code>, <code>.inputrc</code>, <code>.gitconfig</code>. Com o tempo, o <code>.bashrc</code> vira uma gaveta bagunçada de 300 linhas que ninguém tem coragem de mexer. Neste projeto você o reorganiza em módulos pequenos, acrescenta funções e um prompt que valem a pena, guarda tudo num repositório git e escreve um instalador que deixa qualquer computador novo do seu jeito em um comando.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Uma pasta <code>~/dotfiles</code> versionada com git, com <code>bashrc</code>, <code>bashrc.d/*.sh</code>, <code>inputrc</code> e <code>instalar.sh</code>.</li>
+  <li>Um <code>~/.bashrc</code> de 20 linhas que só carrega os módulos, num laço.</li>
+  <li>As funções <code>mkcd</code>, <code>up N</code> e <code>extrair</code>, e um prompt colorido que mostra o código de saída quando algo falha.</li>
+  <li>Um histórico grande, sem repetições, com data e compartilhado entre terminais.</li>
+  <li>Um <code>instalar.sh</code> que cria os links simbólicos e guarda um backup do que já existia.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>1h</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="inicializacao.html">Arquivos de Inicialização</a>, <a href="alias.html">alias</a>, <a href="funcoes.html">Funções</a>, <a href="ps1.html">Personalizar o Prompt</a>, <a href="historico.html">Histórico</a>. Ajuda: <a href="editar-linha.html">Editar a Linha</a>.</td></tr>
+<tr><td>Onde roda</td><td>As funções e o prompt nas caixas "Experimente"; o projeto inteiro no seu computador. As sessões foram feitas no Bash 5.3 real (o git não existe no simulador).</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Antes de mexer no seu <code>.bashrc</code> de verdade</strong>
+<p>Um erro no <code>.bashrc</code> aparece em <strong>todo</strong> terminal novo. Faça uma cópia (<code>cp ~/.bashrc ~/.bashrc.original</code>) e mantenha um terminal aberto enquanto testa: se o novo quebrar, você conserta pelo antigo. Para testar sem abrir janelas, use <code>bash -i</code> (um shell interativo novo, que lê o <code>.bashrc</code>) e saia com <code>exit</code>.</p>
+</div>
+
+<hr>
+
+<h2>Antes de programar: a organização</h2>
+<p>A ideia central: <strong>os arquivos de verdade ficam em <code>~/dotfiles</code></strong> (uma pasta comum, versionada com git), e os lugares onde o Bash os procura (<code>~/.bashrc</code>, <code>~/.inputrc</code>) viram <strong>links simbólicos</strong> (atalhos) para lá. Editar <code>~/.bashrc</code> é editar <code>~/dotfiles/bashrc</code>, e o git vê a mudança.</p>
+
+<pre class="term">$ find dotfiles -path dotfiles/.git -prune -o -type f -print | sort
+dotfiles/bashrc                         « vira o ~/.bashrc
+dotfiles/bashrc.d/10-historico.sh       « a pasta vira ~/.bashrc.d
+dotfiles/bashrc.d/20-aliases.sh
+dotfiles/bashrc.d/30-funcoes.sh
+dotfiles/bashrc.d/40-prompt.sh
+dotfiles/inputrc                        « vira o ~/.inputrc
+dotfiles/instalar.sh                    « cria os links</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Por que separar em módulos?</th><th></th></tr>
+<tr><td>Achar as coisas</td><td>"Onde está aquele alias?" → em <code>20-aliases.sh</code>.</td></tr>
+<tr><td>Desligar sem apagar</td><td>Renomeie <code>40-prompt.sh</code> para <code>40-prompt.sh.off</code>: o laço só carrega <code>*.sh</code>.</td></tr>
+<tr><td>Ordem garantida</td><td>Os números na frente fazem o curinga devolver os arquivos na ordem certa.</td></tr>
+<tr><td>Diffs pequenos no git</td><td>Cada mudança aparece no arquivo do assunto.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Etapa 1 — Um <code>.bashrc</code> que carrega os módulos num laço</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o novo <code>bashrc</code> não configura nada sozinho: ele só garante que o shell é interativo e carrega, em ordem, cada <code>.sh</code> da pasta <code>~/.bashrc.d</code>.</p>
+
+<pre class="file" data-file="~/dotfiles/bashrc"># ~/.bashrc — só carrega os módulos de ~/.bashrc.d
+# (este arquivo vive em ~/dotfiles/bashrc; ~/.bashrc é um link para ele)
+
+# Shell não interativo (scp, bash -c, scripts): não faz nada
+case $- in
+  *i*) ;;
+  *) return ;;
+esac
+
+# Carrega cada módulo, em ordem alfabética (por isso os números no nome)
+for modulo in ~/.bashrc.d/*.sh; do
+  # shellcheck source=/dev/null
+  [[ -r $modulo ]] &amp;&amp; source "$modulo"
+done
+unset modulo
+
+# Configurações só desta máquina (fora do git)
+if [[ -r ~/.bashrc.local ]]; then
+  # shellcheck source=/dev/null
+  source ~/.bashrc.local
+fi
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>case $- in *i*) ;; *) return ;; esac</code></td><td><code>$-</code> lista as opções do shell; se não tem <code>i</code> (interativo), para de ler o arquivo. Programas como o <code>scp</code> abrem shells não interativos que podem ler o <code>.bashrc</code>, e qualquer texto impresso aqui os quebraria. É o mesmo teste do <code>.bashrc</code> original do Ubuntu. Veja <a href="inicializacao.html">Arquivos de Inicialização</a>.</td></tr>
+<tr><td><code>for modulo in ~/.bashrc.d/*.sh</code></td><td>Os módulos, em ordem alfabética: <code>10-…</code>, <code>20-…</code>, <code>30-…</code>. Deixar espaço entre os números (10, 20) permite encaixar um <code>15-…</code> depois.</td></tr>
+<tr><td><code>[[ -r $modulo ]] &amp;&amp; source "$modulo"</code></td><td>Se o arquivo pode ser lido, executa-o <strong>neste</strong> shell (<code>source</code>, ou o sinônimo <code>.</code>). Se a pasta estiver vazia, o curinga sobra como o texto <code>…/*.sh</code>, que não é legível, e nada acontece. Veja <a href="executar.html">Formas de Executar</a>.</td></tr>
+<tr><td><code># shellcheck source=/dev/null</code></td><td>Avisa ao <a href="shellcheck.html">ShellCheck</a> que não dá para saber qual arquivo será lido (senão ele avisa SC1090).</td></tr>
+<tr><td><code>unset modulo</code></td><td>Não deixa a variável do laço sobrando no seu terminal.</td></tr>
+<tr><td><code>~/.bashrc.local</code></td><td>Para o que é só desta máquina (um PATH do trabalho, um token): fica fora do git.</td></tr>
+</table>
+</div>
+
+<p>Para conferir sem abrir um terminal novo, <code>bash -ic '…'</code> abre um shell interativo (que lê o <code>.bashrc</code>), roda o comando e sai:</p>
+<pre class="term">$ bash -ic 'type mkcd up extrair | grep função; alias ..; echo "$HISTCONTROL"; echo "$PROMPT_COMMAND"'
+mkcd é uma função
+up é uma função
+extrair é uma função
+alias ..='cd ..'
+ignoreboth:erasedups
+__prompt; history -a</pre>
+<p>(Esta sessão é do fim do projeto, com os quatro módulos prontos e instalados.) Cada linha confirma um módulo carregado: as funções, o alias, o histórico e o prompt.</p>
+
+<div class="tryscript" data-file="carregar.sh" data-setup="mkdir .bashrc.d;;echo 'echo carregado: 10-historico' &gt; .bashrc.d/10-historico.sh;;echo 'echo carregado: 20-aliases' &gt; .bashrc.d/20-aliases.sh;;echo 'echo NÃO devia carregar' &gt; .bashrc.d/LEIAME.txt" data-goal="out:carregado: 20-aliases,src:\bfor\b">
+<p class="try-task"><strong>Missão:</strong> a pasta <code>~/.bashrc.d</code> já tem dois módulos e um <code>LEIAME.txt</code>. Escreva o laço que carrega com <code>source</code> só os arquivos <code>*.sh</code>, em ordem.</p>
+<pre class="script">#!/usr/bin/env bash
+# escreva o laço aqui
+
+echo "fim do carregamento"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+for modulo in ~/.bashrc.d/*.sh; do
+  [[ -r $modulo ]] &amp;&amp; source "$modulo"
+done
+unset modulo
+echo "fim do carregamento"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 2 — Aliases e funções que valem a pena</h3>
+<p><strong>O que vamos fazer e por quê:</strong> os aliases que a Ana já tinha vão para <code>20-aliases.sh</code>, com alguns novos. E três funções para tarefas que todo mundo faz várias vezes por dia. Por que funções e não aliases? Um alias só troca um texto pelo outro; uma função recebe argumentos, tem <code>if</code>, laço e código de saída. Veja <a href="alias.html">alias</a> e <a href="funcoes.html">Funções</a>.</p>
+
+<pre class="file" data-file="~/dotfiles/bashrc.d/20-aliases.sh"># Apelidos
+alias ls='ls --color=auto'
+alias ll='ls -alF'
+alias la='ls -A'
+alias grep='grep --color=auto'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias rm='rm -I'                   # pergunta antes de apagar mais de 3 arquivos
+alias df='df -h'
+alias du='du -h'
+</pre>
+<p>Destaques: <code>..</code> e <code>...</code> sobem pastas; <code>rm -I</code> (i maiúsculo) pergunta uma vez só quando você apaga mais de três arquivos ou uma pasta inteira, sem ser chato como o <code>-i</code>; <code>df</code> e <code>du</code> passam a mostrar tamanhos legíveis.</p>
+
+<pre class="file" data-file="~/dotfiles/bashrc.d/30-funcoes.sh"># Funções úteis
+
+# mkcd PASTA — cria a pasta (e as do meio) e entra nela
+mkcd() {
+  if (( $# != 1 )); then
+    echo "uso: mkcd PASTA" &gt;&amp;2
+    return 2
+  fi
+  mkdir -p -- "$1" &amp;&amp; cd -- "$1" || return
+}
+
+# up [N] — sobe N pastas (padrão: 1)
+up() {
+  local n=${1:-1} caminho=
+  if [[ ! $n =~ ^[0-9]+$ ]]; then
+    echo "uso: up [N]" &gt;&amp;2
+    return 2
+  fi
+  while (( n-- &gt; 0 )); do
+    caminho+=../
+  done
+  cd -- "${caminho:-.}" || return
+}
+
+# extrair ARQUIVO... — descompacta conforme a extensão
+extrair() {
+  local arq status=0
+  if (( $# == 0 )); then
+    echo "uso: extrair ARQUIVO..." &gt;&amp;2
+    return 2
+  fi
+  for arq in "$@"; do
+    if [[ ! -f $arq ]]; then
+      echo "extrair: '$arq' não é um arquivo" &gt;&amp;2
+      status=1
+      continue
+    fi
+    case ${arq,,} in
+      *.tar.gz|*.tgz)   tar -xzf "$arq" ;;
+      *.tar.xz|*.txz)   tar -xJf "$arq" ;;
+      *.tar.bz2|*.tbz2) tar -xjf "$arq" ;;
+      *.tar)            tar -xf "$arq" ;;
+      *.zip)            unzip -q "$arq" ;;
+      *.gz)             gunzip -k "$arq" ;;
+      *.xz)             unxz -k "$arq" ;;
+      *.bz2)            bunzip2 -k "$arq" ;;
+      *.7z)             7z x "$arq" ;;
+      *)                echo "extrair: não sei abrir '$arq'" &gt;&amp;2; false ;;
+    esac || status=1
+  done
+  return "$status"
+}
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Função</th><th>Trecho</th><th>Por quê</th></tr>
+<tr><td><code>mkcd</code></td><td><code>mkdir -p -- "$1" &amp;&amp; cd -- "$1" || return</code></td><td>Só entra se conseguiu criar. O <code>|| return</code> devolve o código do comando que falhou (o ShellCheck pede isso para todo <code>cd</code>). Precisa ser função: um script rodaria o <code>cd</code> num processo filho, e o seu terminal continuaria na mesma pasta.</td></tr>
+<tr><td><code>up</code></td><td><code>while (( n-- &gt; 0 )); do caminho+=../; done</code></td><td>Monta <code>../../../</code> com N pedaços. <code>n--</code> compara e depois diminui. Com <code>N=0</code>, <code>${caminho:-.}</code> vira <code>.</code> e nada muda.</td></tr>
+<tr><td><code>extrair</code></td><td><code>case ${arq,,} in *.tar.gz|*.tgz) …</code></td><td>Cada formato tem um comando e opções diferentes; o <code>case</code> lembra por você. A ordem importa: <code>*.tar.gz</code> vem antes de <code>*.gz</code>.</td></tr>
+<tr><td><code>extrair</code></td><td><code>esac || status=1</code> e <code>return "$status"</code></td><td>Continua com os próximos arquivos quando um falha, mas no fim devolve 1 se algum falhou.</td></tr>
+<tr><td>todas</td><td><code>return 2</code> com a mensagem de uso</td><td>Uso errado tem código 2, como nos comandos do sistema e no projeto <a href="projeto-cli.html">Uma Ferramenta de Verdade</a>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ cd /tmp/t
+$ tar -czf notas.tar.gz -C ~/Documentos notas.txt alunos.csv
+$ zip -q site.zip -j ~/Documentos/projetos/site/index.html
+$ extrair notas.tar.gz site.zip
+$ ls
+alunos.csv  index.html  notas.tar.gz  notas.txt  site.zip
+$ extrair nada.rar LEIAME
+extrair: 'nada.rar' não é um arquivo
+extrair: 'LEIAME' não é um arquivo
+$ echo $?
+1
+$ extrair
+uso: extrair ARQUIVO...
+$ echo $?
+2
+$ mkcd a/b/c
+$ pwd
+/tmp/t/a/b/c
+$ up 3
+$ pwd
+/tmp/t
+$ up
+$ pwd
+/tmp</pre>
+
+<div class="try" data-goal="func:mkcd,cwd:~/projetos/novo" data-solucao="mkcd() { mkdir -p -- &quot;$1&quot; &amp;&amp; cd -- &quot;$1&quot;; };;mkcd projetos/novo">
+<p class="try-task"><strong>Missão:</strong> defina a função <code>mkcd</code> no terminal (pode ser numa linha só: <code>mkcd() { …; }</code>) e use-a para criar e entrar em <code>projetos/novo</code>.</p>
+</div>
+
+<div class="tryscript" data-file="up.sh" data-goal="outre:^/home/ana/Documentos$">
+<p class="try-task"><strong>Missão:</strong> complete o laço da função <code>up</code> para que <code>up 2</code>, a partir de <code>~/Documentos/projetos/site</code>, leve a <code>~/Documentos</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+up() {
+  local n=${1:-1} caminho=
+  # monte aqui o caminho ../../ com n pedaços
+  cd -- "${caminho:-.}" || return
+}
+
+cd ~/Documentos/projetos/site
+up 2
+pwd
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+up() {
+  local n=${1:-1} caminho=
+  while (( n-- &gt; 0 )); do
+    caminho+=../
+  done
+  cd -- "${caminho:-.}" || return
+}
+
+cd ~/Documentos/projetos/site
+up 2
+pwd
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 3 — Um prompt com cor e o código de saída</h3>
+<p><strong>O que vamos fazer e por quê:</strong> quando um comando falha sem mensagem (como o <code>grep</code> que não acha nada), você só descobre com <code>echo $?</code>. Um prompt que mostra o código <strong>quando ele não é 0</strong> avisa sozinho. O truque: a variável <code>PROMPT_COMMAND</code> guarda um comando que o Bash roda logo antes de mostrar cada prompt; nele, montamos o <code>PS1</code> do zero. Veja <a href="ps1.html">Personalizar o Prompt</a>.</p>
+
+<pre class="file" data-file="~/dotfiles/bashrc.d/40-prompt.sh"># Prompt: usuário@máquina:pasta, em cores, e o código de saída quando não for 0
+__prompt() {
+  local codigo=$?                  # TEM que ser a primeira linha
+  local verde='\[\e[32m\]' azul='\[\e[34m\]' vermelho='\[\e[31m\]' normal='\[\e[0m\]'
+  PS1="${verde}\u@\h${normal}:${azul}\w${normal}"
+  if (( codigo != 0 )); then
+    PS1+=" ${vermelho}[${codigo}]${normal}"
+  fi
+  PS1+='\$ '
+}
+PROMPT_COMMAND="__prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+</pre>
+
+<dl class="anatomy">
+  <dt>local codigo=$?</dt><dd>Guarda o código do comando que você acabou de rodar. Tem que ser a primeira coisa da função: qualquer comando antes trocaria o <code>$?</code>.</dd>
+  <dt>\[ … \]</dt><dd>Envolve as sequências de cor para o Bash saber que elas não ocupam espaço na tela. Sem isso, linhas compridas se embaralham ao editar.</dd>
+  <dt>\e[32m</dt><dd>Verde (31 vermelho, 34 azul, 0 volta ao normal). As mesmas sequências do <a href="projeto-jogo.html">jogo</a>.</dd>
+  <dt>\u@\h … \w … \$</dt><dd>Usuário, máquina, pasta atual e <code>$</code> (ou <code>#</code> para o root).</dd>
+  <dt>PROMPT_COMMAND="__prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}"</dt><dd>Põe <code>__prompt</code> na <strong>frente</strong> do que já existia, separado por <code>;</code>. O <code>${X:+…}</code> só acrescenta o <code>; …</code> se já havia algo. Assim os módulos não apagam o trabalho uns dos outros.</dd>
+</dl>
+
+<p>Num terminal novo, depois de instalado (as cores não aparecem aqui; o prompt real é verde, azul e vermelho):</p>
+<pre class="term">ana@notebook:~$ false
+ana@notebook:~ [1]$ ls nada                     « o false devolveu 1
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+ana@notebook:~ [2]$ mkcd projetos/novo          « o ls devolveu 2
+ana@notebook:~/projetos/novo$ up 2              « deu certo: o código some
+ana@notebook:~$ up x
+uso: up [N]
+ana@notebook:~ [2]$</pre>
+
+<div class="note">
+<strong>A ordem no <code>PROMPT_COMMAND</code> importa</strong>
+<p>O módulo de histórico (etapa 4, arquivo <code>10-…</code>) é carregado antes e põe <code>history -a</code> no <code>PROMPT_COMMAND</code>. O de prompt (<code>40-…</code>) põe <code>__prompt</code> <strong>na frente</strong>. Resultado: <code>__prompt; history -a</code>. Se fosse ao contrário, o <code>__prompt</code> veria o <code>$?</code> do <code>history -a</code> (sempre 0) e nunca mostraria erro. No Bash 5.1 ou mais novo, <code>PROMPT_COMMAND</code> também pode ser um array (<code>PROMPT_COMMAND+=(history -a)</code>). <span class="versao">bash 5.1+</span></p>
+</div>
+
+<div class="try" data-goal="ran:PS1=.*\$\?" data-solucao="PS1='[$?] \u@\h:\w\$ ';;false;;ls">
+<p class="try-task"><strong>Missão:</strong> sem função nenhuma, dá para pôr o código no prompt: mude o <code>PS1</code> para começar com <code>[$?]</code> (use aspas <strong>simples</strong>, para o <code>$?</code> ser lido a cada prompt e não uma vez só). Depois rode <code>false</code> e veja o prompt.</p>
+</div>
+</li>
+
+<li>
+<h3>Etapa 4 — Um histórico que não esquece</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o padrão do Bash guarda pouco (500 a 2000 comandos), guarda repetidos e, com dois terminais abertos, o último a fechar apaga o histórico do outro. Veja <a href="historico.html">Histórico</a>.</p>
+
+<pre class="file" data-file="~/dotfiles/bashrc.d/10-historico.sh"># Histórico: maior, sem repetições, com data, salvo a cada comando
+HISTCONTROL=ignoreboth:erasedups   # ignora repetidos e linhas que começam com espaço
+HISTSIZE=10000                     # comandos na memória
+HISTFILESIZE=20000                 # linhas no ~/.bash_history
+HISTTIMEFORMAT='%F %T  '           # data e hora no comando history
+HISTIGNORE='ls:ll:history:exit'    # comandos que nem vale a pena guardar
+shopt -s histappend                # acrescenta ao arquivo em vez de sobrescrever
+shopt -s cmdhist                   # comando de várias linhas vira uma entrada só
+PROMPT_COMMAND="history -a${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Configuração</th><th>Efeito</th></tr>
+<tr><td><code>HISTCONTROL=ignoreboth:erasedups</code></td><td><code>ignoreboth</code> = <code>ignorespace</code> (comando começado com espaço não é guardado: útil para senhas) + <code>ignoredups</code> (repetido em seguida não é guardado). <code>erasedups</code> apaga cópias antigas de um comando repetido.</td></tr>
+<tr><td><code>HISTSIZE</code> / <code>HISTFILESIZE</code></td><td>Quantos comandos ficam na memória do terminal / no arquivo <code>~/.bash_history</code>.</td></tr>
+<tr><td><code>HISTTIMEFORMAT='%F %T  '</code></td><td>O comando <code>history</code> passa a mostrar data e hora (formato do <code>date</code>).</td></tr>
+<tr><td><code>HISTIGNORE='ls:ll:history:exit'</code></td><td>Comandos que não vale a pena guardar (só se forem exatamente isso).</td></tr>
+<tr><td><code>shopt -s histappend</code></td><td>Ao fechar, <strong>acrescenta</strong> ao arquivo em vez de sobrescrever.</td></tr>
+<tr><td><code>PROMPT_COMMAND="history -a…"</code></td><td>Grava cada comando no arquivo assim que ele termina (<code>-a</code> = <em>append</em>). Um terminal novo já enxerga o que você digitou no outro.</td></tr>
+</table>
+</div>
+
+<pre class="term">ana@notebook:~$ cd Documentos
+ana@notebook:~/Documentos$ cd
+ana@notebook:~$ history 3
+   19  2026-10-15 10:51:23  cd Documentos
+   20  2026-10-15 10:51:23  cd
+   21  2026-10-15 10:51:23  history 3</pre>
+<p>A data e a hora aparecem graças ao <code>HISTTIMEFORMAT</code>. Elas são gravadas no <code>~/.bash_history</code> em linhas de comentário (<code>#</code> seguido dos segundos desde 1970, como <code>#1792079483</code>) logo acima de cada comando.</p>
+
+<h4>Bônus: a busca com ↑ pelo começo, no <code>inputrc</code></h4>
+<p>O <code>~/.inputrc</code> configura o <strong>readline</strong>, a biblioteca que faz a edição de linha do Bash. Esta é a configuração preferida de muita gente: digite <code>git</code> e aperte <kbd>↑</kbd> para ver só os comandos anteriores que <strong>começam</strong> com <code>git</code>. Veja <a href="ref-atalhos.html">Atalhos do Teclado</a>.</p>
+<pre class="file" data-file="~/dotfiles/inputrc"># ~/.inputrc — configura o readline (a edição de linha do Bash)
+$include /etc/inputrc
+
+# Seta para cima/baixo: busca no histórico pelo que já foi digitado
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+
+set completion-ignore-case on      # Tab ignora maiúsculas/minúsculas
+set show-all-if-ambiguous on       # um Tab só já mostra as opções
+set colored-stats on               # cores na lista do Tab, como no ls
+</pre>
+<pre class="term">$ bind -p | grep history-search
+"\e[5~": history-search-backward
+"\e[A": history-search-backward
+"\e[6~": history-search-forward
+"\e[B": history-search-forward</pre>
+<p>O <code>\e[A</code> é o código que o terminal manda para a seta para cima (e <code>\e[B</code>, para baixo). As linhas <code>\e[5~</code> e <code>\e[6~</code> (Page Up e Page Down) vieram do <code>/etc/inputrc</code> do sistema, incluído na primeira linha. O <code>$include</code> é importante: sem ele, você perderia as configurações do sistema.</p>
+
+<div class="try" data-goal="var:HISTCONTROL=ignoreboth:erasedups,ran:shopt +-s +histappend" data-solucao="HISTCONTROL=ignoreboth:erasedups;;shopt -s histappend">
+<p class="try-task"><strong>Missão:</strong> no terminal, configure o <code>HISTCONTROL</code> para ignorar espaços e repetidos e apagar duplicatas antigas, e ligue a opção <code>histappend</code>.</p>
+</div>
+</li>
+
+<li>
+<h3>Etapa 5 — Versionar com git</h3>
+<p><strong>O que vamos fazer e por quê:</strong> com git, cada mudança nos dotfiles vira um ponto na história: dá para ver o que mudou, voltar atrás e levar tudo para outro computador (via GitHub, GitLab ou um pendrive). O git não existe no simulador; esta sessão é do Bash real.</p>
+
+<pre class="term">$ cd dotfiles
+$ git init -b main
+Repositório vazio Git inicializado em  /home/ana/dotfiles/.git/
+$ git config --global user.name "Ana"
+$ git config --global user.email "ana@notebook"
+$ git add .
+$ git status --short
+A  bashrc
+A  bashrc.d/10-historico.sh
+A  bashrc.d/20-aliases.sh
+A  bashrc.d/30-funcoes.sh
+A  bashrc.d/40-prompt.sh
+A  inputrc
+A  instalar.sh
+$ git commit -m "Meus dotfiles: bashrc em módulos, inputrc e instalador"
+[main (root-commit) c51b66d] Meus dotfiles: bashrc em módulos, inputrc e instalador
+ 7 files changed, 142 insertions(+)
+ create mode 100644 bashrc
+ create mode 100644 bashrc.d/10-historico.sh
+ create mode 100644 bashrc.d/20-aliases.sh
+ create mode 100644 bashrc.d/30-funcoes.sh
+ create mode 100644 bashrc.d/40-prompt.sh
+ create mode 100644 inputrc
+ create mode 100755 instalar.sh            « 755: o git guardou a permissão de execução</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>git init -b main</code></td><td>Transforma a pasta num repositório (cria a pasta oculta <code>.git</code>), com o ramo principal chamado <code>main</code>.</td></tr>
+<tr><td><code>git config --global user.name/email</code></td><td>Quem assina os commits. Uma vez por computador.</td></tr>
+<tr><td><code>git add .</code></td><td>Marca todos os arquivos para o próximo commit (o <code>A</code> do <code>status</code> = <em>added</em>).</td></tr>
+<tr><td><code>git commit -m "…"</code></td><td>Grava a "fotografia" com uma mensagem. O <code>c51b66d</code> é o começo do identificador do commit.</td></tr>
+</table>
+</div>
+
+<p>Daí em diante, o ciclo é: editar, ver o que mudou, gravar.</p>
+<pre class="term">$ echo "alias gs='git status --short'" &gt;&gt; bashrc.d/20-aliases.sh
+$ git diff
+diff --git a/bashrc.d/20-aliases.sh b/bashrc.d/20-aliases.sh
+index 4bf70db..c2f307c 100644
+--- a/bashrc.d/20-aliases.sh
++++ b/bashrc.d/20-aliases.sh
+@@ -8,3 +8,4 @@ alias ...='cd ../..'
+ alias rm='rm -I'                   # pergunta antes de apagar mais de 3 arquivos
+ alias df='df -h'
+ alias du='du -h'
++alias gs='git status --short'                « a linha nova, com +
+$ git commit -am "Alias gs"
+[main eb477e3] Alias gs
+ 1 file changed, 1 insertion(+)
+$ git log --oneline
+eb477e3 Alias gs
+c51b66d Meus dotfiles: bashrc em módulos, inputrc e instalador</pre>
+
+<div class="warning">
+<strong>Nunca coloque segredos no repositório</strong>
+<p>Senhas, tokens de API e chaves SSH não vão para os dotfiles, principalmente se o repositório for público. Coloque-os no <code>~/.bashrc.local</code> (que o <code>bashrc</code> carrega, mas que fica fora da pasta <code>dotfiles</code>) e proteja-o com <code>chmod 600</code>.</p>
+</div>
+</li>
+
+<li>
+<h3>Etapa 6 — O <code>instalar.sh</code>: links simbólicos com backup</h3>
+<p><strong>O que vamos fazer e por quê:</strong> num computador novo, o roteiro será: <code>git clone … ~/dotfiles</code> e <code>~/dotfiles/instalar.sh</code>. O instalador troca cada arquivo de configuração por um link para a pasta <code>dotfiles</code>, e <strong>nunca apaga</strong> nada: o que existia ganha um nome de backup. E pode rodar de novo sem estragar nada (idempotente).</p>
+
+<pre class="file" data-file="~/dotfiles/instalar.sh">#!/usr/bin/env bash
+# instalar.sh — liga os arquivos de ~/dotfiles nos lugares certos.
+# O que já existir é guardado com o sufixo .backup-DATA, nunca apagado.
+# Pode rodar quantas vezes quiser.
+set -euo pipefail
+
+pasta=$(cd -- "$(dirname -- "$0")" &amp;&amp; pwd)    # onde este script está
+data=$(date +%F_%H%M%S)
+
+# linkar ORIGEM DESTINO — faz DESTINO apontar para ORIGEM
+linkar() {
+  local origem=$pasta/$1 destino=$2
+  if [[ -L $destino &amp;&amp; $destino -ef $origem ]]; then
+    echo "ok:      $destino (já aponta para $origem)"
+    return
+  fi
+  if [[ -e $destino || -L $destino ]]; then
+    mv -- "$destino" "$destino.backup-$data"
+    echo "backup:  $destino -&gt; $destino.backup-$data"
+  fi
+  ln -s -- "$origem" "$destino"
+  echo "link:    $destino -&gt; $origem"
+}
+
+linkar bashrc    ~/.bashrc
+linkar bashrc.d  ~/.bashrc.d
+linkar inputrc   ~/.inputrc
+
+echo "Pronto. Abra um terminal novo (ou rode: source ~/.bashrc)."
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>pasta=$(cd -- "$(dirname -- "$0")" &amp;&amp; pwd)</code></td><td>O caminho absoluto da pasta do próprio script, de onde quer que ele seja chamado. Os links precisam de caminho absoluto: um link relativo é resolvido a partir da pasta do link.</td></tr>
+<tr><td><code>[[ -L $destino &amp;&amp; $destino -ef $origem ]]</code></td><td><code>-L</code> = "é um link simbólico"; <code>-ef</code> = "é o mesmo arquivo" (mesmo dispositivo e inode, seguindo links). Já está certo: não faz nada.</td></tr>
+<tr><td><code>[[ -e $destino || -L $destino ]]</code></td><td>Existe alguma coisa ali? O <code>-L</code> pega também um link "quebrado", que aponta para algo que não existe (o <code>-e</code> segue o link e diria "não existe").</td></tr>
+<tr><td><code>mv … "$destino.backup-$data"</code></td><td>Guarda o antigo com a data no nome.</td></tr>
+<tr><td><code>ln -s -- "$origem" "$destino"</code></td><td>Cria o link simbólico (<code>-s</code>): primeiro <strong>para onde</strong> aponta, depois <strong>onde</strong> fica. Veja <a href="criar-copiar.html">Criar, Copiar e Mover</a>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ls -l .bashrc
+-rw-r--r-- 1 ana ana 377 mar 26  2026 .bashrc
+$ ./dotfiles/instalar.sh
+backup:  /home/ana/.bashrc -&gt; /home/ana/.bashrc.backup-2026-10-15_104529
+link:    /home/ana/.bashrc -&gt; /home/ana/dotfiles/bashrc
+link:    /home/ana/.bashrc.d -&gt; /home/ana/dotfiles/bashrc.d
+link:    /home/ana/.inputrc -&gt; /home/ana/dotfiles/inputrc
+Pronto. Abra um terminal novo (ou rode: source ~/.bashrc).
+$ ls -l .bashrc .bashrc.d .inputrc .bashrc.backup-*
+lrwxrwxrwx 1 ana ana  25 out 15 10:45 .bashrc -&gt; /home/ana/dotfiles/bashrc
+-rw-r--r-- 1 ana ana 377 mar 26  2026 .bashrc.backup-2026-10-15_104529
+lrwxrwxrwx 1 ana ana  27 out 15 10:45 .bashrc.d -&gt; /home/ana/dotfiles/bashrc.d
+lrwxrwxrwx 1 ana ana  26 out 15 10:45 .inputrc -&gt; /home/ana/dotfiles/inputrc
+$ ./dotfiles/instalar.sh                      « de novo: nada a fazer
+ok:      /home/ana/.bashrc (já aponta para /home/ana/dotfiles/bashrc)
+ok:      /home/ana/.bashrc.d (já aponta para /home/ana/dotfiles/bashrc.d)
+ok:      /home/ana/.inputrc (já aponta para /home/ana/dotfiles/inputrc)
+Pronto. Abra um terminal novo (ou rode: source ~/.bashrc).
+$ echo $?
+0</pre>
+<p>No <code>ls -l</code>, o <code>l</code> no começo e a seta <code>-&gt;</code> mostram que são links. O <code>.bashrc</code> original está a salvo no backup; para desfazer tudo, basta apagar o link e renomear o backup de volta.</p>
+
+<div class="tryscript" data-file="instalar.sh" data-setup="mkdir dotfiles;;echo 'alias oi=&quot;echo oi&quot;' &gt; dotfiles/bashrc" data-goal="contains:~/.bashrc=alias oi,out:backup">
+<p class="try-task"><strong>Missão:</strong> rode como está: o <code>ln</code> falha porque o <code>~/.bashrc</code> já existe. Complete a função <code>linkar</code> para, antes do <code>ln</code>, mover o que existir para <code>DESTINO.backup-DATA</code> e avisar com <code>echo "backup: …"</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+set -euo pipefail
+pasta=~/dotfiles
+data=$(date +%F_%H%M%S)
+
+linkar() {
+  local origem=$pasta/$1 destino=$2
+  # se já existir algo em $destino, faça o backup aqui
+
+  ln -s -- "$origem" "$destino"
+  echo "link:    $destino -&gt; $origem"
+}
+
+linkar bashrc ~/.bashrc
+cat ~/.bashrc
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+set -euo pipefail
+pasta=~/dotfiles
+data=$(date +%F_%H%M%S)
+
+linkar() {
+  local origem=$pasta/$1 destino=$2
+  if [[ -e $destino || -L $destino ]]; then
+    mv -- "$destino" "$destino.backup-$data"
+    echo "backup:  $destino -&gt; $destino.backup-$data"
+  fi
+  ln -s -- "$origem" "$destino"
+  echo "link:    $destino -&gt; $origem"
+}
+
+linkar bashrc ~/.bashrc
+cat ~/.bashrc
+</pre>
+</div>
+</li>
+
+</ol>
+
+<hr>
+
+<h2>Num computador novo</h2>
+<pre class="term">$ git clone https://github.com/SEU-USUARIO/dotfiles.git ~/dotfiles
+$ ~/dotfiles/instalar.sh
+$ exec bash                       « troca o shell atual por um novo, já com tudo carregado</pre>
+<p>(Saída do <code>git clone</code> omitida: depende do seu repositório.) O <code>exec bash</code> é mais limpo que <code>source ~/.bashrc</code>: o <code>source</code> roda os módulos <strong>de novo por cima</strong> do que já estava carregado, e o <code>PROMPT_COMMAND</code>, por exemplo, ficaria com <code>__prompt</code> duas vezes.</p>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Nada mudou no terminal novo</strong>
+<p><strong>O que aconteceu:</strong> o terminal abre um shell de <strong>login</strong> (comum no macOS e em conexões SSH), que lê o <code>~/.bash_profile</code> ou o <code>~/.profile</code>, e não o <code>~/.bashrc</code>. <strong>Como confirmar:</strong> <code>shopt -q login_shell &amp;&amp; echo login</code>. <strong>Como resolver:</strong> no <code>~/.bash_profile</code>, acrescente <code>[[ -r ~/.bashrc ]] &amp;&amp; source ~/.bashrc</code>. Veja <a href="inicializacao.html">Arquivos de Inicialização</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal abre e fecha na hora</strong>
+<p><strong>O que aconteceu:</strong> um módulo tem <code>exit</code> ou <code>set -e</code> (num <code>.bashrc</code>, o <code>set -e</code> derruba o terminal no primeiro comando que falhar). <strong>Como resolver:</strong> abra um terminal sem configuração (<code>bash --norc</code>, ou o modo de recuperação do emulador de terminal), conserte ou renomeie o módulo para <code>.off</code>. Nunca use <code>set -e</code> em arquivos carregados com <code>source</code> pelo shell interativo.</p>
+</div>
+
+<div class="cenario">
+<strong>O prompt nunca mostra o código de erro</strong>
+<p><strong>O que aconteceu:</strong> algum comando roda antes do <code>__prompt</code> no <code>PROMPT_COMMAND</code> e "zera" o <code>$?</code>. <strong>Como confirmar:</strong> <code>echo "$PROMPT_COMMAND"</code>; o <code>__prompt</code> precisa ser o primeiro.</p>
+</div>
+
+<div class="cenario">
+<strong>Linhas compridas se sobrepõem ao editar</strong>
+<p><strong>O que aconteceu:</strong> faltou o <code>\[ … \]</code> em volta de alguma sequência de cor do <code>PS1</code>, e o Bash calcula errado o tamanho do prompt. Veja <a href="ps1.html">Personalizar o Prompt</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>ln: falha ao criar link simbólico '.inputrc': Arquivo existe</code></strong>
+<p><strong>O que aconteceu:</strong> o <code>ln -s</code> não sobrescreve. É o caso que a função <code>linkar</code> resolve com o backup. Evite <code>ln -sf</code> num instalador: o <code>-f</code> apagaria o arquivo antigo sem backup.</p>
+</div>
+
+<hr>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li><strong>Mais dotfiles:</strong> leve também o <code>~/.gitconfig</code>, o <code>~/.vimrc</code> ou <code>~/.config/…</code> (crie a pasta pai com <code>mkdir -p</code> antes do link).</li>
+  <li><strong>Desinstalar:</strong> um <code>desinstalar.sh</code> que apaga os links e devolve o backup mais recente de cada arquivo.</li>
+  <li><strong>Modo simulação:</strong> <code>instalar.sh -n</code> mostra o que faria, como no <a href="projeto-organizador.html">organizador</a>.</li>
+  <li><strong>Git no prompt:</strong> mostre o ramo atual com <code>git branch --show-current 2&gt;/dev/null</code> no <code>__prompt</code> (ou use o <code>__git_ps1</code> que vem com o git).</li>
+  <li><strong>Medir:</strong> <code>time bash -ic exit</code> mostra quanto o seu <code>.bashrc</code> demora. Acima de 0,2 s você sente; descubra o módulo culpado.</li>
+</ul>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Carregar os módulos</h3>
+<p>Complete o laço que carrega os arquivos <code>.sh</code> de <code>~/.bashrc.d</code>:</p>
+<div class="ex-code">for modulo in <input data-answer="~/.bashrc.d/*.sh|$HOME/.bashrc.d/*.sh|&quot;$HOME&quot;/.bashrc.d/*.sh" aria-label="curinga">; do [[ -r $modulo ]] &amp;&amp; source "$modulo"; done</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Por que <code>mkcd</code> tem que ser uma função, e não um script <code>mkcd.sh</code>?</p>
+<label><input type="radio" name="q2"> Porque scripts não podem usar <code>mkdir</code>.</label>
+<label><input type="radio" name="q2"> Porque funções são mais rápidas.</label>
+<label><input type="radio" name="q2"> Porque um script roda num processo filho: o <code>cd</code> mudaria a pasta dele, não a do seu terminal.</label>
+<label><input type="radio" name="q2"> Porque o <code>cd</code> não aceita <code>--</code>.</label>
+</div>
+
+<div class="exercise">
+<h3>3. O código no prompt</h3>
+<p>Complete a primeira linha da função <code>__prompt</code>, que guarda o código do último comando:</p>
+<div class="ex-code">local codigo=<input data-answer="$?" aria-label="variável"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O que o <code>HISTCONTROL=ignoreboth</code> faz?</p>
+<label><input type="radio" name="q4"> Não guarda nenhum comando.</label>
+<label><input type="radio" name="q4"> Não guarda comandos que começam com espaço nem repetições seguidas.</label>
+<label><input type="radio" name="q4"> Guarda os comandos em dois arquivos.</label>
+<label><input type="radio" name="q4"> Ignora o <code>~/.bash_history</code>.</label>
+</div>
+
+<div class="exercise">
+<h3>5. Criar o link</h3>
+<p>Complete para fazer <code>~/.inputrc</code> ser um link simbólico para <code>~/dotfiles/inputrc</code>:</p>
+<div class="ex-code">ln <input data-answer="-s" aria-label="opção"> ~/dotfiles/inputrc ~/.inputrc</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. No <code>instalar.sh</code>, por que testar <code>[[ -e $destino || -L $destino ]]</code> e não só <code>-e</code>?</p>
+<label><input type="radio" name="q6"> Porque o <code>-e</code> segue o link e diz "não existe" para um link quebrado, que mesmo assim impediria o <code>ln</code>.</label>
+<label><input type="radio" name="q6"> Porque <code>-e</code> só funciona com pastas.</label>
+<label><input type="radio" name="q6"> Porque o <code>-L</code> faz o backup.</label>
+<label><input type="radio" name="q6"> Não há diferença.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Arquivos de verdade em <code>~/dotfiles</code> (com git); nos lugares de costume, links simbólicos.</li>
+  <li><code>.bashrc</code> mínimo: teste de interativo + laço <code>for m in ~/.bashrc.d/*.sh; do source "$m"; done</code>.</li>
+  <li>Funções (<code>mkcd</code>, <code>up</code>, <code>extrair</code>) quando precisa de argumentos ou de mudar a pasta do terminal; aliases para o resto.</li>
+  <li><code>PROMPT_COMMAND</code> + <code>local codigo=$?</code> na primeira linha = prompt que mostra erros.</li>
+  <li>Histórico: <code>ignoreboth:erasedups</code>, tamanhos grandes, <code>histappend</code> e <code>history -a</code>.</li>
+  <li>Instalador idempotente, que faz backup em vez de apagar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
