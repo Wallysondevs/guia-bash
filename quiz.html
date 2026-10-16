@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Quiz — 36 perguntas sobre os três níveis do guia | Guia Bash</title>
+<meta name="description" content="Quiz geral do Guia Bash: 36 perguntas de múltipla escolha sobre o Bash, do iniciante ao avançado, com placar, explicação de cada resposta e link para a aula do assunto.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Quiz</span></h1>
+
+<p class="intro">Trinta e seis perguntas, doze de cada nível do guia. Cada uma corrige na hora; depois de responder, abra "Por quê?" para ler a explicação e siga o link "Revise" se quiser rever a aula. Quase nenhuma é decoreba: a maioria pede para você prever o que o Bash vai fazer ou interpretar uma saída. Todas as saídas foram conferidas no Bash 5.3.</p>
+
+<p>Acertos: <strong id="placar">0 de 36</strong></p>
+
+<h2>Nível 1 · Iniciante</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. O que aparece depois disto?</p>
+<pre class="term">$ ls nada
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+$ echo $?</pre>
+<label><input type="radio" name="q1"> <code>0</code></label>
+<label><input type="radio" name="q1"> <code>1</code></label>
+<label><input type="radio" name="q1"> <code>2</code></label>
+<label><input type="radio" name="q1"> <code>127</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>O <code>$?</code> guarda o código de saída do último comando. O <code>ls</code> usa 2 para "problema sério" (arquivo inexistente). 0 seria sucesso; 127 é "comando não encontrado", que não é o caso. Revise: <a href="codigo-saida.html">Código de Saída</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. No prompt <code>ana@notebook:~$</code>, o que é o <code>~</code>?</p>
+<label><input type="radio" name="q2"> A raiz do sistema, <code>/</code>.</label>
+<label><input type="radio" name="q2"> A pasta atual, que é a pasta pessoal da Ana (<code>/home/ana</code>).</label>
+<label><input type="radio" name="q2"> Um sinal de que a Ana é administradora.</label>
+<label><input type="radio" name="q2"> O nome da máquina.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>O prompt mostra <code>usuária@máquina:pasta</code>, e <code>~</code> é a abreviação da pasta pessoal. O <code>$</code> no fim indica usuário comum (root teria <code>#</code>). Revise: <a href="prompt.html">Lendo o Prompt</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. Dentro de <code>~/Documentos</code> (que tem <code>acesso.log alunos.csv notas.txt projetos relatorio.odt</code>), o que <code>echo *.txt</code> mostra?</p>
+<label><input type="radio" name="q3"> <code>notas.txt</code></label>
+<label><input type="radio" name="q3"> <code>*.txt</code></label>
+<label><input type="radio" name="q3"> O conteúdo de <code>notas.txt</code>.</label>
+<label><input type="radio" name="q3"> <code>notas.txt relatorio.odt</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Quem troca o curinga pelos nomes é o Bash, antes de o <code>echo</code> rodar; o <code>echo</code> só recebe <code>notas.txt</code>. O texto <code>*.txt</code> só ficaria literal se nenhum arquivo casasse. Revise: <a href="curingas.html">Curingas</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. O que <code>echo arq{1..3}.txt</code> mostra?</p>
+<label><input type="radio" name="q4"> <code>arq{1..3}.txt</code></label>
+<label><input type="radio" name="q4"> <code>arq1..3.txt</code></label>
+<label><input type="radio" name="q4"> Só os arquivos que existirem.</label>
+<label><input type="radio" name="q4"> <code>arq1.txt arq2.txt arq3.txt</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>A expansão de chaves gera texto sem olhar o disco: <code>{1..3}</code> vira 1, 2 e 3, e cada um ganha o <code>arq</code> antes e o <code>.txt</code> depois. Revise: <a href="chaves.html">Chaves</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Com <code>nome=Ana</code>, o que <code>echo 'Olá, $nome'</code> mostra?</p>
+<label><input type="radio" name="q5"> <code>Olá, Ana</code></label>
+<label><input type="radio" name="q5"> <code>Olá, $nome</code></label>
+<label><input type="radio" name="q5"> <code>Olá,</code></label>
+<label><input type="radio" name="q5"> Um erro.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Entre aspas <strong>simples</strong>, nada é expandido: o <code>$nome</code> fica como texto. Com aspas duplas, <code>"Olá, $nome"</code>, sairia <code>Olá, Ana</code>. Revise: <a href="aspas.html">Aspas e Escapes</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">6. Por que isto deu erro?</p>
+<pre class="term">$ nome = Ana
+bash: nome: comando não encontrado</pre>
+<label><input type="radio" name="q6"> Porque nomes de variável precisam de maiúsculas.</label>
+<label><input type="radio" name="q6"> Porque faltaram aspas em <code>Ana</code>.</label>
+<label><input type="radio" name="q6"> Porque, com espaços em volta do <code>=</code>, o Bash entendeu <code>nome</code> como um comando.</label>
+<label><input type="radio" name="q6"> Porque a variável <code>nome</code> já existia.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Atribuição é tudo junto: <code>nome=Ana</code>. Com espaços, a primeira palavra vira o comando e o resto, argumentos. Revise: <a href="variaveis-intro.html">Variáveis: o Básico</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">7. Em <code>mkdir backup &amp;&amp; cp notas.txt backup/</code>, quando o <code>cp</code> roda?</p>
+<label><input type="radio" name="q7"> Só se o <code>mkdir</code> deu certo (código 0).</label>
+<label><input type="radio" name="q7"> Sempre, depois do <code>mkdir</code>.</label>
+<label><input type="radio" name="q7"> Só se o <code>mkdir</code> falhou.</label>
+<label><input type="radio" name="q7"> Ao mesmo tempo que o <code>mkdir</code>.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>&amp;&amp;</code> = "e então, se deu certo". <code>;</code> rodaria sempre; <code>||</code> rodaria só na falha. Revise: <a href="operadores.html">; &amp;&amp; ||</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">8. A Ana rodou <code>date &gt; hora.txt</code> duas vezes seguidas. Quantas linhas tem <code>hora.txt</code>?</p>
+<label><input type="radio" name="q8"> Duas.</label>
+<label><input type="radio" name="q8"> Nenhuma.</label>
+<label><input type="radio" name="q8"> Depende do dia.</label>
+<label><input type="radio" name="q8"> Uma: o <code>&gt;</code> apaga o conteúdo antes de gravar.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>&gt;</code> esvazia o arquivo e grava; <code>&gt;&gt;</code> acrescenta no fim. Com <code>&gt;&gt;</code>, seriam duas linhas. Revise: <a href="redirecionamento.html">Redirecionamento</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">9. O que o <code>2&gt;/dev/null</code> faz em <code>find / -name notas.txt 2&gt;/dev/null</code>?</p>
+<label><input type="radio" name="q9"> Limita a busca a 2 resultados.</label>
+<label><input type="radio" name="q9"> Joga fora as mensagens de erro (como "Permissão negada"), deixando só os resultados.</label>
+<label><input type="radio" name="q9"> Salva os resultados num arquivo chamado <code>null</code>.</label>
+<label><input type="radio" name="q9"> Roda o comando duas vezes.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>2&gt;</code> redireciona o descritor 2, a saída de erro; <code>/dev/null</code> é o "buraco negro" que descarta tudo. A saída normal (descritor 1) continua na tela. Revise: <a href="redirecionamento.html">Redirecionamento</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">10. <code>frutas.txt</code> tem banana (3 vezes), maçã (2), laranja e uva. O que este pipe mostra?</p>
+<pre class="term">$ sort frutas.txt | uniq -c | sort -rn | head -1</pre>
+<label><input type="radio" name="q10"> <code>banana</code></label>
+<label><input type="radio" name="q10"> <code>      1 uva</code></label>
+<label><input type="radio" name="q10"> <code>      3 banana</code></label>
+<label><input type="radio" name="q10"> <code>3</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>sort</code> junta as iguais, <code>uniq -c</code> conta as vizinhas repetidas (com o número alinhado à direita), <code>sort -rn</code> põe o maior número em cima e <code>head -1</code> fica com a primeira linha. Revise: <a href="pipes.html">Pipes</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">11. Você digitou um comando comprido ontem e quer achá-lo de novo, sabendo só um pedaço dele. Qual atalho?</p>
+<label><input type="radio" name="q11"> <kbd>Ctrl</kbd>+<kbd>R</kbd> e digitar o pedaço.</label>
+<label><input type="radio" name="q11"> <kbd>Ctrl</kbd>+<kbd>C</kbd>.</label>
+<label><input type="radio" name="q11"> <kbd>Ctrl</kbd>+<kbd>L</kbd>.</label>
+<label><input type="radio" name="q11"> <kbd>Tab</kbd> <kbd>Tab</kbd>.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><kbd>Ctrl</kbd>+<kbd>R</kbd> faz a busca reversa no histórico enquanto você digita; repetir o atalho vai para a ocorrência anterior. Revise: <a href="historico.html">Histórico</a> e <a href="ref-atalhos.html">Atalhos</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">12. Qual comando mostra só as 3 primeiras linhas de <code>alunos.csv</code>?</p>
+<label><input type="radio" name="q12"> <code>tail -3 alunos.csv</code></label>
+<label><input type="radio" name="q12"> <code>cat -3 alunos.csv</code></label>
+<label><input type="radio" name="q12"> <code>less 3 alunos.csv</code></label>
+<label><input type="radio" name="q12"> <code>head -n 3 alunos.csv</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>head</code> = cabeça (o começo); <code>tail</code> = cauda (o fim). <code>-n 3</code> (ou <code>-3</code>) diz quantas linhas. Revise: <a href="ver-arquivos.html">Ver Arquivos</a>.</p></details>
+</div>
+
+<h2>Nível 2 · Intermediário</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">13. Para que serve a primeira linha <code>#!/usr/bin/env bash</code> de um script?</p>
+<label><input type="radio" name="q13"> É um comentário decorativo, sem efeito.</label>
+<label><input type="radio" name="q13"> Diz ao sistema para executar o arquivo com o <code>bash</code> encontrado no PATH, quando você roda <code>./script</code>.</label>
+<label><input type="radio" name="q13"> Liga o modo estrito.</label>
+<label><input type="radio" name="q13"> Dá permissão de execução ao arquivo.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>É o <strong>shebang</strong>. O <code>env</code> procura o <code>bash</code> no PATH, o que funciona mesmo onde ele não está em <code>/bin</code>. A permissão continua sendo trabalho do <code>chmod +x</code>. Revise: <a href="script-primeiro.html">Seu Primeiro Script</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">14. O que resolve isto?</p>
+<pre class="term">$ ./backup.sh
+bash: ./backup.sh: Permissão negada</pre>
+<label><input type="radio" name="q14"> <code>sudo ./backup.sh</code></label>
+<label><input type="radio" name="q14"> Trocar o shebang.</label>
+<label><input type="radio" name="q14"> <code>chmod +x backup.sh</code> (ou rodar com <code>bash backup.sh</code>).</label>
+<label><input type="radio" name="q14"> Mover o script para <code>/tmp</code>.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Falta a permissão de execução (código 126). <code>sudo</code> não é a resposta: rodar como root um script que você nem conseguiu executar é arriscado e desnecessário. Revise: <a href="executar.html">Formas de Executar</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">15. O script <code>conta.sh</code> tem <code>for x in "$@"; do echo "[$x]"; done</code>. Quantas linhas <code>./conta.sh "a b" c</code> mostra?</p>
+<label><input type="radio" name="q15"> 2: <code>[a b]</code> e <code>[c]</code></label>
+<label><input type="radio" name="q15"> 3: <code>[a]</code>, <code>[b]</code> e <code>[c]</code></label>
+<label><input type="radio" name="q15"> 1: <code>[a b c]</code></label>
+<label><input type="radio" name="q15"> Nenhuma.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>"$@"</code> (com aspas) mantém cada argumento intacto, inclusive com espaços. <code>"$*"</code> daria uma linha só; <code>$@</code> sem aspas daria três. Revise: <a href="argumentos.html">Argumentos</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">16. Com <code>arq=notas.txt</code>, o que <code>echo ${arq%.txt}</code> mostra?</p>
+<label><input type="radio" name="q16"> <code>.txt</code></label>
+<label><input type="radio" name="q16"> <code>notas.txt</code></label>
+<label><input type="radio" name="q16"> <code>txt</code></label>
+<label><input type="radio" name="q16"> <code>notas</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>%</code> remove do <strong>fim</strong> o trecho que casa com o padrão; <code>#</code> removeria do começo. Útil para trocar extensões: <code>"${arq%.txt}.bak"</code>. Revise: <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">17. Quanto vale <code>$(( 7 / 2 ))</code>?</p>
+<label><input type="radio" name="q17"> <code>3.5</code></label>
+<label><input type="radio" name="q17"> <code>3</code></label>
+<label><input type="radio" name="q17"> <code>4</code></label>
+<label><input type="radio" name="q17"> Dá erro.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>A aritmética do Bash só trabalha com inteiros e corta a parte decimal. Para 3,5, use <code>bc</code> ou <code>awk</code>. O resto da divisão é <code>$(( 7 % 2 ))</code> = 1. Revise: <a href="aritmetica.html">Contas</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">18. O script foi chamado sem argumentos e mostrou isto. Qual é a correção?</p>
+<pre class="term">$ ./confirma.sh
+./confirma.sh: linha 2: [: =: esperava operador unário</pre>
+<label><input type="radio" name="q18"> Trocar <code>=</code> por <code>-eq</code>.</label>
+<label><input type="radio" name="q18"> Tirar os espaços dentro dos colchetes.</label>
+<label><input type="radio" name="q18"> Pôr aspas na variável: <code>[ "$1" = sim ]</code> (ou usar <code>[[ ]]</code>).</label>
+<label><input type="radio" name="q18"> Trocar <code>[</code> por <code>(</code>.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Vazio e sem aspas, o <code>$1</code> some, e o <code>[</code> recebe só <code>= sim</code>. Com aspas, recebe um texto vazio, que é um valor válido. Os espaços dentro dos colchetes são obrigatórios. Revise: <a href="testes.html">Testes</a> e <a href="problemas.html">Erros Comuns</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">19. Num <code>case "$arq" in</code>, o que significa a linha <code>*.jpg|*.png) echo imagem ;;</code>?</p>
+<label><input type="radio" name="q19"> Se o nome terminar em <code>.jpg</code> <strong>ou</strong> em <code>.png</code>, escreva "imagem".</label>
+<label><input type="radio" name="q19"> Mande a saída dos <code>.jpg</code> para os <code>.png</code> (um pipe).</label>
+<label><input type="radio" name="q19"> Se o arquivo for ao mesmo tempo <code>.jpg</code> e <code>.png</code>.</label>
+<label><input type="radio" name="q19"> Converta <code>.jpg</code> em <code>.png</code>.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>No <code>case</code>, <code>|</code> separa padrões alternativos, e os padrões são curingas. <code>;;</code> encerra o ramo. Revise: <a href="case.html">case</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">20. Por que este script mostra <code>total=0</code>?</p>
+<pre class="term">$ total=0; printf '1\n2\n3\n' | while read -r n; do total=$((total + n)); done; echo "total=$total"
+total=0</pre>
+<label><input type="radio" name="q20"> Porque o <code>read</code> não lê números.</label>
+<label><input type="radio" name="q20"> Porque faltou <code>export total</code>.</label>
+<label><input type="radio" name="q20"> Porque o <code>printf</code> não escreveu nada.</label>
+<label><input type="radio" name="q20"> Porque o <code>while</code> depois do <code>|</code> rodou num subshell, e a soma morreu com ele.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Cada parte de um pipe roda num subshell. Com <code>done &lt; &lt;(printf …)</code> o laço roda no shell atual e o total fica 6. Revise: <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a> e <a href="subshell.html">Subshells</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">21. O que isto mostra?</p>
+<pre class="term">$ for i in 1 2 3; do [[ $i == 2 ]] &amp;&amp; continue; echo $i; done</pre>
+<label><input type="radio" name="q21"> <code>1</code></label>
+<label><input type="radio" name="q21"> <code>1</code> e <code>3</code></label>
+<label><input type="radio" name="q21"> <code>2</code></label>
+<label><input type="radio" name="q21"> <code>1</code>, <code>2</code> e <code>3</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>continue</code> pula o resto da volta atual e segue para a próxima; <code>break</code> sairia do laço (mostraria só <code>1</code>). Revise: <a href="break-continue.html">break e continue</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">22. Como uma função devolve um <strong>texto</strong> (como o resultado de uma conta) para quem a chamou?</p>
+<label><input type="radio" name="q22"> Com <code>return "$resultado"</code>.</label>
+<label><input type="radio" name="q22"> Com <code>export resultado</code>.</label>
+<label><input type="radio" name="q22"> Escrevendo-o com <code>echo</code>, e quem chama captura com <code>r=$(funcao)</code>.</label>
+<label><input type="radio" name="q22"> Funções não podem devolver nada.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>return</code> só devolve um código de saída (0 a 255). O jeito comum de devolver dados é escrever na saída padrão e usar substituição de comando (ou <code>printf -v</code>/nameref). Revise: <a href="funcoes-retorno.html">local, return e Saída</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">23. O que <code>printf '%-5s|\n' ab</code> mostra?</p>
+<label><input type="radio" name="q23"> <code>ab   |</code></label>
+<label><input type="radio" name="q23"> <code>   ab|</code></label>
+<label><input type="radio" name="q23"> <code>ab|</code></label>
+<label><input type="radio" name="q23"> <code>-5ab|</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>%5s</code> reserva 5 colunas; o <code>-</code> alinha à esquerda, completando com espaços à direita. Sem o <code>-</code>, os espaços viriam antes. Revise: <a href="printf.html">printf e echo</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">24. Um alias <code>ll</code> funciona no terminal, mas um script que usa <code>ll</code> diz "comando não encontrado". Por quê?</p>
+<label><input type="radio" name="q24"> Porque o script precisa de <code>sudo</code>.</label>
+<label><input type="radio" name="q24"> Porque aliases só funcionam com letras maiúsculas em scripts.</label>
+<label><input type="radio" name="q24"> Porque o <code>ll</code> não existe no Linux.</label>
+<label><input type="radio" name="q24"> Porque o script roda num shell não interativo, que não lê o <code>.bashrc</code> e não expande aliases.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Em scripts, use o comando completo (<code>ls -alF</code>) ou uma função definida no próprio script. Revise: <a href="alias.html">alias</a> e <a href="inicializacao.html">Arquivos de Inicialização</a>.</p></details>
+</div>
+
+<h2>Nível 3 · Avançado</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">25. Com <code>a=(um dois três)</code>, o que <code>echo ${#a[@]}</code> mostra?</p>
+<label><input type="radio" name="q25"> <code>2</code></label>
+<label><input type="radio" name="q25"> <code>3</code></label>
+<label><input type="radio" name="q25"> <code>12</code> (o total de letras)</label>
+<label><input type="radio" name="q25"> <code>um</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>${#a[@]}</code> é a quantidade de itens. O índice do último é 2 (começa em 0), mas a quantidade é 3. <code>${#a[0]}</code> seria o tamanho do primeiro item (2). Revise: <a href="arrays.html">Arrays</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">26. A Ana escreveu <code>conta[jpg]=1; conta[pdf]=5; echo ${conta[jpg]}</code> sem declarar nada antes, e apareceu <code>5</code>. O que faltou?</p>
+<label><input type="radio" name="q26"> Aspas em <code>jpg</code>.</label>
+<label><input type="radio" name="q26"> Um <code>export conta</code>.</label>
+<label><input type="radio" name="q26"> <code>declare -A conta</code>: sem ele, o array é indexado por números, e <code>jpg</code> e <code>pdf</code> viram o índice 0.</label>
+<label><input type="radio" name="q26"> Usar <code>(( ))</code>.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Num array comum, o índice é avaliado como conta; a palavra <code>jpg</code> é uma variável inexistente, que vale 0. As duas atribuições caem na posição 0, e a última vence. Revise: <a href="arrays-associativos.html">Arrays Associativos</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">27. Um script com <code>set -euo pipefail</code> tem a linha <code>grep -q erro log.txt</code>, e o log não tem a palavra "erro". O que acontece?</p>
+<label><input type="radio" name="q27"> O script termina ali, com código 1, sem mensagem.</label>
+<label><input type="radio" name="q27"> Nada: o <code>grep -q</code> nunca falha.</label>
+<label><input type="radio" name="q27"> O <code>grep</code> mostra um erro e o script continua.</label>
+<label><input type="radio" name="q27"> O script pede confirmação.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>O <code>grep</code> devolve 1 quando não encontra, e o <code>set -e</code> trata isso como falha. Para testes assim, use <code>if grep -q erro log.txt; then …</code> (dentro de um <code>if</code>, o <code>-e</code> não age). Revise: <a href="modo-estrito.html">set -euo pipefail</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">28. Quando roda a função registrada com <code>trap limpar EXIT</code>?</p>
+<label><input type="radio" name="q28"> Só quando o usuário aperta <kbd>Ctrl</kbd>+<kbd>C</kbd>.</label>
+<label><input type="radio" name="q28"> Só se o script der erro.</label>
+<label><input type="radio" name="q28"> Logo depois da linha do <code>trap</code>.</label>
+<label><input type="radio" name="q28"> Sempre que o script terminar: no fim normal, num <code>exit</code> ou quando o <code>set -e</code> o derruba.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>EXIT</code> é um pseudo-sinal do Bash, disparado na saída do shell por qualquer motivo, o que o torna perfeito para apagar arquivos temporários. Revise: <a href="trap.html">trap e Sinais</a> e o projeto <a href="projeto-backup.html">Backup com Rotação</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">29. Qual comando confere a sintaxe de um script <strong>sem executá-lo</strong>?</p>
+<label><input type="radio" name="q29"> <code>bash -x script.sh</code></label>
+<label><input type="radio" name="q29"> <code>bash -n script.sh</code></label>
+<label><input type="radio" name="q29"> <code>bash -e script.sh</code></label>
+<label><input type="radio" name="q29"> <code>bash -c script.sh</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>-n</code> (<em>noexec</em>) só lê e acusa erros de sintaxe. <code>-x</code> executa mostrando cada comando; <code>-c</code> executa um texto como comando. Revise: <a href="depuracao.html">Depurar</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">30. Em <code>getopts 'vo:' opt</code>, o que significa o <code>:</code> depois do <code>o</code>?</p>
+<label><input type="radio" name="q30"> Que <code>-o</code> é obrigatória.</label>
+<label><input type="radio" name="q30"> Que <code>-v</code> e <code>-o</code> não podem vir juntas.</label>
+<label><input type="radio" name="q30"> Que <code>-o</code> recebe um valor (<code>-o arquivo</code>), entregue em <code>$OPTARG</code>.</label>
+<label><input type="radio" name="q30"> Que o <code>getopts</code> fica em modo silencioso.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>O <code>:</code> <strong>depois</strong> de uma letra = "essa opção leva valor". Um <code>:</code> no <strong>começo</strong> da lista (<code>':vo:'</code>) é que liga o modo silencioso. Revise: <a href="getopts.html">Opções com getopts</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">31. Com <code>x=12a</code>, o que <code>[[ $x =~ ^[0-9]+$ ]] &amp;&amp; echo sim || echo não</code> mostra?</p>
+<label><input type="radio" name="q31"> <code>não</code></label>
+<label><input type="radio" name="q31"> <code>sim</code></label>
+<label><input type="radio" name="q31"> <code>sim</code> e <code>não</code></label>
+<label><input type="radio" name="q31"> Um erro de sintaxe.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>^</code> e <code>$</code> exigem que o texto <strong>inteiro</strong> seja de dígitos; o <code>a</code> no fim impede. Sem as âncoras, <code>12a</code> passaria (tem dígitos). Revise: <a href="regex.html">Regex com [[ =~ ]]</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">32. Por que <code>n=3; echo {1..$n}</code> mostra <code>{1..3}</code> e não <code>1 2 3</code>?</p>
+<label><input type="radio" name="q32"> Porque faltaram aspas.</label>
+<label><input type="radio" name="q32"> Porque <code>n</code> não foi exportada.</label>
+<label><input type="radio" name="q32"> Porque chaves só aceitam letras.</label>
+<label><input type="radio" name="q32"> Porque a expansão de chaves acontece antes da de variáveis.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Quando as chaves são processadas, ainda está escrito <code>$n</code>, que não é um número: as chaves ficam como estão. Depois o <code>$n</code> vira 3. Use <code>seq 1 "$n"</code> ou <code>for ((i=1; i&lt;=n; i++))</code>. Revise: <a href="ordem-expansoes.html">A Ordem das Expansões</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">33. Depois de <code>./baixar.sh &amp;</code>, como o script principal espera ele terminar e pega o código de saída?</p>
+<label><input type="radio" name="q33"> <code>sleep 60</code></label>
+<label><input type="radio" name="q33"> <code>pid=$!</code> logo depois do <code>&amp;</code>, e mais tarde <code>wait "$pid"; echo $?</code></label>
+<label><input type="radio" name="q33"> <code>fg; echo $?</code></label>
+<label><input type="radio" name="q33"> <code>jobs -l</code></label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>$!</code> guarda o PID do último comando em segundo plano, e <code>wait PID</code> espera por ele e devolve o código dele. O <code>fg</code> é para uso interativo. Revise: <a href="jobs.html">Jobs</a> e <a href="paralelo.html">Rodar em Paralelo</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">34. Um script começa com <code>#!/bin/sh</code> e usa <code>[[ ]]</code>. No Ubuntu, o que acontece?</p>
+<pre class="term">$ ./teste.sh
+./teste.sh: 3: [[: not found</pre>
+<label><input type="radio" name="q34"> O Ubuntu não tem o comando <code>[[</code> instalado.</label>
+<label><input type="radio" name="q34"> Falta permissão de execução.</label>
+<label><input type="radio" name="q34"> O <code>/bin/sh</code> do Ubuntu é o <code>dash</code>, que não conhece o <code>[[</code> do Bash; troque o shebang para <code>#!/usr/bin/env bash</code>.</label>
+<label><input type="radio" name="q34"> O script tem quebras de linha do Windows.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>[[ ]]</code> é um bashismo. O <code>dash</code> o procura como comando e não acha. A mensagem em inglês e com "3:" em vez de "linha 3:" já entrega que não é o Bash. Revise: <a href="portabilidade.html">POSIX sh e Bashismos</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">35. O que <code>mapfile -t linhas &lt; frutas.txt</code> faz?</p>
+<label><input type="radio" name="q35"> Lê cada linha do arquivo para um item do array <code>linhas</code>, sem o <code>\n</code> do fim.</label>
+<label><input type="radio" name="q35"> Cria um mapa (array associativo) de frutas.</label>
+<label><input type="radio" name="q35"> Conta as linhas do arquivo.</label>
+<label><input type="radio" name="q35"> Lê só a primeira linha.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p><code>mapfile</code> (ou <code>readarray</code>) carrega o arquivo inteiro num array indexado; <code>-t</code> remove a quebra de linha de cada item. <code>${#linhas[@]}</code> daria 7. Revise: <a href="mapfile.html">mapfile e readarray</a>.</p></details>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">36. O ShellCheck apontou <code>SC2086: Double quote to prevent globbing and word splitting</code> na linha <code>rm $arquivo</code>. Qual é o risco real?</p>
+<label><input type="radio" name="q36"> Nenhum: é só estilo.</label>
+<label><input type="radio" name="q36"> O <code>rm</code> fica mais lento.</label>
+<label><input type="radio" name="q36"> O arquivo é apagado duas vezes.</label>
+<label><input type="radio" name="q36"> Com <code>arquivo="meu arquivo.txt"</code>, o <code>rm</code> receberia <code>meu</code> e <code>arquivo.txt</code>, e poderia apagar arquivos errados.</label>
+<details style="margin-top:8px"><summary>Por quê?</summary><p>Sem aspas, o valor passa pela separação de palavras e pelos curingas. <code>rm "$arquivo"</code> apaga exatamente um arquivo, com o nome que for. Revise: <a href="shellcheck.html">ShellCheck</a> e <a href="aspas.html">Aspas</a>.</p></details>
+</div>
+
+<hr>
+
+<h2>E agora?</h2>
+<ul>
+  <li>Errou várias do Nível 1? Refaça as aulas de <a href="curingas.html">Expansões</a> e <a href="redirecionamento.html">Juntando Comandos</a>: elas sustentam todo o resto.</li>
+  <li>Foi bem nos três níveis? Escolha um dos <a href="projetos.html">projetos</a> e construa algo de verdade.</li>
+  <li>Travou numa mensagem de erro? Procure em <a href="problemas.html">Erros Comuns</a>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
