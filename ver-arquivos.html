@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Ver Arquivos — cat, less, head, tail, wc e file | Guia Bash</title>
+<meta name="description" content="Aprenda a ver o conteúdo de arquivos no terminal: cat (-n, -A), less, head e tail (-n, -f, -n +2), wc e file, com cada parte explicada, saídas reais do Bash, códigos de saída, erros comuns e missões no simulador.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Ver Arquivos</span></h1>
+
+<p class="intro">Grande parte do trabalho no terminal é <strong>olhar</strong> arquivos: ler uma anotação, conferir as últimas linhas de um log, contar quantos alunos há numa planilha. Nesta aula você conhece os comandos que fazem isso: <code>cat</code>, <code>less</code>, <code>head</code>, <code>tail</code>, <code>wc</code> e <code>file</code>. Nenhum deles muda o arquivo: eles só leem.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Mostrar um arquivo inteiro com <code>cat</code>, com números de linha (<code>-n</code>) e com os caracteres invisíveis à mostra (<code>-A</code>).</li>
+  <li>Ler arquivos grandes, página por página, com <code>less</code>.</li>
+  <li>Ver só o começo ou só o fim com <code>head</code> e <code>tail</code>, incluindo <code>-n +2</code> (pular o cabeçalho) e <code>-f</code> (acompanhar um log).</li>
+  <li>Contar linhas, palavras e caracteres com <code>wc</code> e descobrir o tipo de um arquivo com <code>file</code>.</li>
+  <li>O que é o "uso inútil do cat" e o que fazer quando o comando "trava".</li>
+</ul>
+</div>
+
+<p>Os exemplos acontecem na pasta pessoal da Ana (<code>/home/ana</code>), na máquina fictícia <strong>notebook</strong>. Os arquivos que aparecem aqui (<code>frutas.txt</code>, <code>Documentos/notas.txt</code>, <code>Documentos/alunos.csv</code>, <code>Documentos/acesso.log</code>) já existem no simulador, então você pode repetir tudo.</p>
+
+<hr>
+
+<h2>Antes da sintaxe: que perguntas você faz a um arquivo?</h2>
+<p>Pense numa planilha impressa. Às vezes você quer ler tudo. Às vezes ela tem 300 páginas e você quer folhear. Às vezes só quer o título (o começo) ou o último registro (o fim). Às vezes só quer saber <em>quantas</em> linhas ela tem. Cada pergunta tem um comando:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Comando</th><th>Nome vem de…</th></tr>
+<tr><td>"Mostre tudo."</td><td><code>cat</code></td><td><em>concatenate</em>, "encadear" (juntar arquivos)</td></tr>
+<tr><td>"Deixe eu folhear com calma."</td><td><code>less</code></td><td>Brincadeira com o antigo <code>more</code> ("mais"): <em>less is more</em></td></tr>
+<tr><td>"Só o começo."</td><td><code>head</code></td><td>"cabeça"</td></tr>
+<tr><td>"Só o fim."</td><td><code>tail</code></td><td>"cauda"</td></tr>
+<tr><td>"Quantas linhas / palavras?"</td><td><code>wc</code></td><td><em>word count</em>, "contagem de palavras"</td></tr>
+<tr><td>"Que tipo de arquivo é este?"</td><td><code>file</code></td><td>"arquivo"</td></tr>
+</table>
+</div>
+
+<p>Nenhum desses é um comando do Bash. São <strong>programas</strong> separados (do pacote GNU coreutils, quase sempre). O papel do Bash é ler a linha que você digitou, separar as palavras, expandir coisas como <code>*.txt</code> e entregar a lista de nomes ao programa. Isso vai fazer diferença várias vezes nesta aula.</p>
+
+<hr>
+
+<h2>cat: mostrar o arquivo inteiro</h2>
+
+<dl class="anatomy">
+  <dt>cat</dt><dd>O programa. Lê os arquivos que recebeu e escreve o conteúdo na tela, do começo ao fim.</dd>
+  <dt>frutas.txt</dt><dd>O argumento: o arquivo a mostrar. O caminho é relativo à pasta atual (aqui, <code>~</code>).</dd>
+</dl>
+
+<pre class="term">$ cat frutas.txt
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana
+$ echo $?
+0                     « 0 = deu certo</pre>
+
+<p>O <code>cat</code> não enfeita nada: o que está no arquivo aparece igual na tela, linha por linha. Cada linha do arquivo é uma linha da saída. Depois, <code>echo $?</code> mostra o <strong>código de saída</strong> do último comando: <code>0</code> quer dizer sucesso (veja <a href="codigo-saida.html">Código de Saída</a>).</p>
+
+<p>Um arquivo dentro de outra pasta é só um caminho mais longo:</p>
+
+<pre class="term">$ cat Documentos/notas.txt
+Comprar café
+Ligar para o João
+Estudar Bash
+Fazer backup das fotos</pre>
+
+<h3>Numerar as linhas: <code>-n</code></h3>
+<p>A opção <code>-n</code> (de <em>number</em>) coloca o número de cada linha na frente. Ótimo quando alguém diz "o erro está na linha 3".</p>
+
+<dl class="anatomy">
+  <dt>cat</dt><dd>O programa.</dd>
+  <dt>-n</dt><dd>Numera todas as linhas da saída. A forma longa é <code>--number</code>.</dd>
+  <dt>frutas.txt</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term">$ cat -n frutas.txt
+     1  banana
+     2  maçã
+     3  laranja
+     4  banana
+     5  uva
+     6  maçã
+     7  banana</pre>
+
+<p>O número vem alinhado à direita, seguido de uma tabulação. O arquivo <strong>não</strong> mudou: os números só existem na tela. O comando <code>nl</code> (<em>number lines</em>) faz quase o mesmo, mas por padrão pula as linhas em branco.</p>
+
+<h3>Vários arquivos: é para isso que o cat existe</h3>
+<p>"Concatenar" é juntar uma coisa depois da outra. Dê dois nomes ao <code>cat</code> e ele mostra um arquivo logo depois do outro, sem separação nenhuma:</p>
+
+<pre class="term">$ cat frutas.txt Documentos/notas.txt
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana
+Comprar café              « daqui para baixo é o notas.txt
+Ligar para o João
+Estudar Bash
+Fazer backup das fotos</pre>
+
+<p>Juntando com o <code>&gt;</code>, você grava a junção num arquivo novo: <code>cat parte1.txt parte2.txt &gt; inteiro.txt</code>. O <code>&gt;</code> é assunto de <a href="redirecionamento.html">Redirecionamento</a>.</p>
+
+<p>E se um dos arquivos não existir? O <code>cat</code> reclama daquele, mostra os outros e, no fim, devolve <code>1</code>:</p>
+
+<pre class="term">$ cat frutas.txt nada.txt
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana
+cat: nada.txt: Arquivo ou diretório inexistente
+$ echo $?
+1                     « basta um arquivo falhar para o código não ser 0</pre>
+
+<h3>Quem expande o <code>*</code> é o Bash</h3>
+<p>Você pode usar curingas com o <code>cat</code>. Mas repare: o <code>cat</code> nunca vê o <code>*</code>. O Bash troca <code>*.txt</code> pela lista de arquivos que terminam em <code>.txt</code> e só então chama o <code>cat</code> com essa lista. Com <code>set -x</code> o Bash mostra o comando já expandido, numa linha que começa com <code>+</code>:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ set -x
+$ cat *.txt
++ cat notas.txt            « o Bash já trocou *.txt por notas.txt
+Comprar café
+Ligar para o João
+Estudar Bash
+Fazer backup das fotos
+$ set +x
++ set +x</pre>
+
+<p>Os curingas têm uma aula só para eles: <a href="curingas.html">Curingas</a>.</p>
+
+<h3>Ver o invisível: <code>-A</code></h3>
+<p>Um arquivo de texto tem caracteres que você não vê: a quebra de linha, a tabulação, o "retorno de carro" dos arquivos vindos do Windows. A opção <code>-A</code> (de <em>show all</em>, "mostre tudo") troca cada um por um símbolo visível:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Símbolo no <code>cat -A</code></th><th>O que é</th></tr>
+<tr><td><code>$</code> no fim da linha</td><td>A quebra de linha (o "Enter" gravado no arquivo).</td></tr>
+<tr><td><code>^I</code></td><td>Uma tabulação (tecla Tab).</td></tr>
+<tr><td><code>^M</code> antes do <code>$</code></td><td>O retorno de carro (<code>\r</code>) dos arquivos do Windows, que terminam as linhas com <code>\r\n</code>.</td></tr>
+<tr><td><code>M-CM-)</code> e parecidos</td><td>Bytes acima de 127: as letras acentuadas em UTF-8 ocupam dois bytes, e o <code>-A</code> mostra cada byte em código.</td></tr>
+</table>
+</div>
+
+<p>Veja um arquivo que parece normal, mas veio de uma planilha do Windows:</p>
+
+<pre class="term">$ printf 'nome\tidade\r\nAna\t29\r\n' &gt; planilha.txt
+$ cat planilha.txt
+nome    idade
+Ana     29                « parece perfeito…
+$ cat -A planilha.txt
+nome^Iidade^M$
+Ana^I29^M$                « …mas tem Tab (^I) e o \r do Windows (^M)</pre>
+
+<p>O <code>printf</code> da primeira linha só serve para criar o arquivo de exemplo: <code>\t</code> vira uma tabulação e <code>\r\n</code> é o fim de linha do Windows. Esse <code>^M</code> escondido é a causa de muitos erros estranhos em scripts copiados do Windows (como <code>$'\r': comando não encontrado</code>).</p>
+
+<p>Com acentos, o <code>-A</code> fica esquisito, mas é só a forma de mostrar os bytes:</p>
+
+<pre class="term">$ cat -A Documentos/notas.txt
+Comprar cafM-CM-)$        « "é" ocupa dois bytes em UTF-8
+Ligar para o JoM-CM-#o$
+Estudar Bash$
+Fazer backup das fotos$</pre>
+
+<p>Outro uso do <code>-A</code>: descobrir se a última linha tem quebra de linha. Repare que o <code>b</code> abaixo não tem <code>$</code>:</p>
+
+<pre class="term">$ printf 'a\nb' &gt; semfim.txt
+$ cat -A semfim.txt
+a$
+bana@notebook:~$          « o "b" não tem "$", e o prompt grudou nele</pre>
+
+<p>O <code>printf 'a\nb'</code> grava "a", uma quebra de linha e "b", sem quebra no fim. Como o arquivo termina logo depois do <code>b</code>, o cursor fica na mesma linha e o próximo prompt do Bash aparece grudado: <code>b</code> + <code>ana@notebook:~$</code>.</p>
+
+<p>Isso importa, porque o <code>wc -l</code> conta <strong>quebras de linha</strong>. Para ele, esse arquivo de duas linhas tem uma só (você vai ver o <code>wc</code> daqui a pouco).</p>
+
+<div class="warning">
+<strong>Não use cat em arquivos que não são texto</strong>
+<p>Uma foto, um PDF ou um programa são bytes que não foram feitos para a tela. Se você der <code>cat</code> num deles, aparecem símbolos estranhos, o terminal pode apitar e, às vezes, fica com as letras trocadas. Para consertar, digite <code>reset</code> e aperte Enter (mesmo sem ver o que digita). Para saber se um arquivo é texto <strong>antes</strong> de abrir, use <code>file</code> (mais abaixo).</p>
+</div>
+
+<div class="try" data-goal="ran:cat\s+(-n|--number)\b.*notas\.txt,outre:4\s+Fazer backup das fotos" data-solucao="cat -n Documentos/notas.txt">
+<p class="try-task"><strong>Missão:</strong> mostre o arquivo <code>Documentos/notas.txt</code> com o número de cada linha na frente, usando o <code>cat</code>. Qual é a tarefa da linha 4?</p>
+</div>
+
+<hr>
+
+<h2>less: folhear arquivos grandes</h2>
+<p>O <code>cat</code> despeja tudo de uma vez. Num arquivo de 5 mil linhas, o começo some lá em cima antes de você ler. O <code>less</code> abre o arquivo <strong>numa tela própria</strong>, mostra uma página e espera você mandar.</p>
+
+<dl class="anatomy">
+  <dt>less</dt><dd>O "paginador": mostra uma tela por vez e deixa você andar para frente, para trás e buscar.</dd>
+  <dt>Documentos/acesso.log</dt><dd>O arquivo a abrir.</dd>
+</dl>
+
+<p>Depois de <code>less Documentos/acesso.log</code>, a tela fica mais ou menos assim (ilustração, encurtada):</p>
+
+<pre class="syntax">192.168.0.10 - - [15/Oct/2026:09:01:12] "GET / HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:01:40] "GET /contato HTTP/1.1" 200
+192.168.0.10 - - [15/Oct/2026:09:02:03] "GET /admin HTTP/1.1" 403
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+192.168.0.10 - - [15/Oct/2026:09:06:44] "POST /login HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:07:02] "GET / HTTP/1.1" 200
+~
+~
+(END)                      ← o less está esperando uma tecla</pre>
+
+<p>Os <code>~</code> marcam linhas vazias depois do fim do arquivo. Na última linha, o <code>less</code> mostra <code>:</code> (quando há mais para ler) ou <code>(END)</code> (quando chegou ao fim). Você não volta ao prompt até apertar <kbd>q</kbd>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>O que faz</th></tr>
+<tr><td><kbd>Espaço</kbd> ou <kbd>PgDn</kbd></td><td>Avança uma página.</td></tr>
+<tr><td><kbd>b</kbd> ou <kbd>PgUp</kbd></td><td>Volta uma página (<em>back</em>).</td></tr>
+<tr><td><kbd>↓</kbd> / <kbd>↑</kbd> (ou <kbd>j</kbd> / <kbd>k</kbd>)</td><td>Uma linha para baixo / para cima.</td></tr>
+<tr><td><kbd>g</kbd> / <kbd>G</kbd></td><td>Vai para o começo / para o fim do arquivo.</td></tr>
+<tr><td><kbd>/</kbd>texto <kbd>Enter</kbd></td><td>Busca "texto" para a frente. Os achados ficam destacados.</td></tr>
+<tr><td><kbd>?</kbd>texto <kbd>Enter</kbd></td><td>Busca para trás.</td></tr>
+<tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Próximo / anterior resultado da busca (<em>next</em>).</td></tr>
+<tr><td><kbd>h</kbd></td><td>Ajuda com todas as teclas (<kbd>q</kbd> sai da ajuda).</td></tr>
+<tr><td><kbd>q</kbd></td><td>Sai do <code>less</code> e volta ao prompt (<em>quit</em>).</td></tr>
+</table>
+</div>
+
+<p>Duas opções úteis: <code>less -N arquivo</code> numera as linhas (como o <code>cat -n</code>) e <code>less +G arquivo</code> já abre no fim. As mesmas teclas valem para o <code>man</code>, que usa o <code>less</code> por baixo (veja <a href="ajuda.html">Obtendo Ajuda</a>).</p>
+
+<div class="note">
+<strong>No simulador</strong>
+<p>O terminal simulado deste guia não tem tela interativa: lá, <code>less</code> mostra o arquivo inteiro de uma vez, como o <code>cat</code>. Pratique as teclas no seu terminal de verdade, por exemplo com <code>less /etc/services</code>, que é bem comprido.</p>
+</div>
+
+<hr>
+
+<h2>head e tail: só o começo ou só o fim</h2>
+
+<h3>head: as primeiras linhas</h3>
+
+<dl class="anatomy">
+  <dt>head</dt><dd>Mostra o começo do arquivo. Sem opção, as <strong>10</strong> primeiras linhas.</dd>
+  <dt>-n 3</dt><dd>Quantas linhas (<em>number</em>). O número vem logo depois do <code>-n</code>.</dd>
+  <dt>frutas.txt</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term">$ head -n 3 frutas.txt
+banana
+maçã
+laranja</pre>
+
+<p>Pedir mais linhas do que o arquivo tem não é erro: o <code>head</code> mostra o que existe e devolve <code>0</code>.</p>
+
+<pre class="term">$ head -n 20 frutas.txt
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana                « o arquivo só tem 7 linhas
+$ echo $?
+0</pre>
+
+<p>Você também vai ver a forma curta <code>head -3</code>, sem o <code>n</code>. Ela funciona, mas é antiga; prefira <code>-n 3</code>, que é a forma padrão e mais fácil de ler.</p>
+
+<h3>tail: as últimas linhas</h3>
+<p>O <code>tail</code> é o espelho do <code>head</code>. Ele é o preferido para logs, onde o que interessa é o que aconteceu por último:</p>
+
+<pre class="term">$ tail -n 3 Documentos/acesso.log
+192.168.0.57 - - [15/Oct/2026:09:05:19] "GET /fotos HTTP/1.1" 404
+192.168.0.10 - - [15/Oct/2026:09:06:44] "POST /login HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:07:02] "GET / HTTP/1.1" 200</pre>
+
+<h3>Pular o cabeçalho: <code>tail -n +2</code></h3>
+<p>Com um <code>+</code> na frente do número, o significado muda: <code>tail -n +2</code> quer dizer "comece <strong>na linha 2</strong> e vá até o fim". É o jeito clássico de tirar o cabeçalho de um CSV:</p>
+
+<dl class="anatomy">
+  <dt>tail</dt><dd>O programa.</dd>
+  <dt>-n +2</dt><dd>"A partir da linha 2". Sem o <code>+</code>, seria "as 2 últimas".</dd>
+  <dt>Documentos/alunos.csv</dt><dd>A planilha, cuja linha 1 é <code>nome,idade,cidade,nota</code>.</dd>
+</dl>
+
+<pre class="term">$ head -n 1 Documentos/alunos.csv
+nome,idade,cidade,nota          « o cabeçalho
+$ tail -n +2 Documentos/alunos.csv
+Ana,29,Recife,9.5               « só os dados, sem o cabeçalho
+Bruno,34,Curitiba,7.0
+Carla,22,Salvador,8.5
+Diego,41,Manaus,6.0
+Elisa,27,Porto Alegre,10.0</pre>
+
+<p>O <code>head</code> tem o contrário: <code>head -n -2</code> (com <strong>menos</strong>) mostra tudo <strong>menos</strong> as 2 últimas linhas.</p>
+
+<pre class="term">$ head -n -2 frutas.txt
+banana
+maçã
+laranja
+banana
+uva                   « faltam "maçã" e "banana", as duas últimas</pre>
+
+<h3>Vários arquivos de uma vez</h3>
+<p>Com mais de um arquivo, <code>head</code> e <code>tail</code> põem um título <code>==&gt; nome &lt;==</code> antes de cada um. Aqui o Bash expandiu <code>*.csv *.txt</code> antes de o <code>head</code> rodar:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ head -n 1 *.csv *.txt
+==&gt; alunos.csv &lt;==
+nome,idade,cidade,nota
+
+==&gt; notas.txt &lt;==
+Comprar café</pre>
+
+<h3>Uma linha no meio: juntando head e tail</h3>
+<p>Para ver só a linha 3, pegue as 3 primeiras e, delas, a última. A barra <code>|</code> (o <em>pipe</em>) liga a saída do primeiro comando à entrada do segundo; ele tem uma aula própria em <a href="pipes.html">Pipes</a>.</p>
+
+<pre class="term">$ head -n 3 Documentos/alunos.csv | tail -n 1
+Bruno,34,Curitiba,7.0           « linha 3 = segundo aluno (a 1 é o cabeçalho)</pre>
+
+<p>O <code>sed</code> faz o mesmo de forma mais direta: <code>sed -n 3p Documentos/alunos.csv</code> ("imprima só a linha 3"). Ele aparece em <a href="ferramentas-texto.html">grep, sed, awk e cia.</a></p>
+
+<h3>Acompanhar um arquivo que cresce: <code>tail -f</code></h3>
+<p>Um servidor escreve no log o tempo todo. Com <code>-f</code> (de <em>follow</em>, "seguir"), o <code>tail</code> mostra as últimas linhas e <strong>fica esperando</strong>: cada linha nova que entrar no arquivo aparece na sua tela na hora.</p>
+
+<dl class="anatomy">
+  <dt>tail</dt><dd>O programa.</dd>
+  <dt>-n 2</dt><dd>Comece mostrando as 2 últimas linhas.</dd>
+  <dt>-f</dt><dd>Não termine: continue lendo o que for acrescentado.</dd>
+  <dt>servidor.log</dt><dd>O arquivo a acompanhar.</dd>
+</dl>
+
+<pre class="term">$ tail -n 2 -f servidor.log
+192.168.0.10 - - [15/Oct/2026:09:06:44] "POST /login HTTP/1.1" 200
+192.168.0.23 - - [15/Oct/2026:09:07:02] "GET / HTTP/1.1" 200
+192.168.0.99 - - [15/Oct/2026:10:30:05] "GET /novo HTTP/1.1" 200   « chegou agora
+^C                                                                 « Ctrl+C para parar</pre>
+
+<p>A terceira linha não estava no arquivo quando o comando começou: outro programa a escreveu enquanto o <code>tail</code> esperava. O cursor fica parado e o prompt não volta. Isso é normal. Para sair, aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>. (No laboratório, a linha nova foi escrita por um comando em segundo plano; o <code>^C</code> é o que você vê ao apertar <kbd>Ctrl</kbd>+<kbd>C</kbd> no terminal.)</p>
+
+<div class="note">
+<strong>tail -f no simulador</strong>
+<p>No simulador nada escreve no arquivo enquanto você olha, então lá o <code>tail -f</code> só faz sentido no seu terminal de verdade, por exemplo com um log do sistema.</p>
+</div>
+
+<div class="try" data-goal="ran:\btail\b,outre:09:06:44.*\n.*09:07:02" data-solucao="tail -n 2 Documentos/acesso.log">
+<p class="try-task"><strong>Missão:</strong> mostre <strong>só as 2 últimas linhas</strong> do arquivo <code>Documentos/acesso.log</code>. Depois, experimente <code>head -n 1</code> no mesmo arquivo para ver a primeira.</p>
+</div>
+
+<hr>
+
+<h2>wc: contar linhas, palavras e caracteres</h2>
+
+<dl class="anatomy">
+  <dt>wc</dt><dd>Conta. Sem opção, mostra três números: linhas, palavras e bytes.</dd>
+  <dt>frutas.txt</dt><dd>O arquivo a contar.</dd>
+</dl>
+
+<pre class="term">$ wc frutas.txt
+ 7  7 47 frutas.txt</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Número</th><th>Significa</th></tr>
+<tr><td><code>7</code></td><td>Linhas (na verdade, quantas quebras de linha).</td></tr>
+<tr><td><code>7</code></td><td>Palavras: pedaços separados por espaço, Tab ou quebra de linha. Cada fruta é uma palavra.</td></tr>
+<tr><td><code>47</code></td><td>Bytes, o tamanho do arquivo.</td></tr>
+</table>
+</div>
+
+<p>Na prática, você quase sempre pede um número só:</p>
+
+<pre class="term">$ wc -l frutas.txt
+7 frutas.txt                    « -l = linhas (lines)
+$ wc -w Documentos/notas.txt
+12 Documentos/notas.txt         « -w = palavras (words)
+$ wc -c frutas.txt
+47 frutas.txt                   « -c = bytes
+$ wc -m frutas.txt
+43 frutas.txt                   « -m = caracteres</pre>
+
+<p>Por que 47 bytes e 43 caracteres? Porque <code>ç</code> e <code>ã</code> ocupam dois bytes cada em UTF-8, e <code>maçã</code> aparece duas vezes: 4 letras acentuadas, 4 bytes "a mais". Para texto em português, se você quer contar <strong>letras</strong>, use <code>-m</code>.</p>
+
+<h3>Vários arquivos e o total</h3>
+
+<pre class="term">$ wc -l frutas.txt Documentos/notas.txt Documentos/alunos.csv
+  7 frutas.txt
+  4 Documentos/notas.txt
+  6 Documentos/alunos.csv
+ 17 total                       « a soma, de brinde</pre>
+
+<p>Com um curinga, o Bash monta a lista. Mas cuidado: o <code>*</code> sozinho também pega pastas, e o <code>wc</code> não sabe contar uma pasta:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ wc -l *
+      6 acesso.log
+      6 alunos.csv
+      4 notas.txt
+      0 projetos
+wc: projetos: É um diretório      « o Bash entregou a pasta junto
+      0 relatorio.odt
+     16 total
+$ echo $?
+1</pre>
+
+<p>Repare também no <code>0 relatorio.odt</code>: um arquivo do LibreOffice não é texto, então "linhas" não fazem sentido para ele. Seja específico: <code>wc -l *.txt *.csv *.log</code>.</p>
+
+<h3>Só o número, sem o nome</h3>
+<p>Quando o arquivo chega pelo <code>&lt;</code>, o <code>wc</code> recebe só o conteúdo e não sabe o nome. Então mostra só o número, perfeito para usar num script:</p>
+
+<pre class="term">$ wc -l &lt; frutas.txt
+7</pre>
+
+<p>Lembra do arquivo sem quebra de linha no fim? O <code>wc -l</code> diz que ele tem 1 linha, embora você veja duas:</p>
+
+<pre class="term">$ wc -l semfim.txt
+1 semfim.txt                    « conta quebras de linha; a última linha não tem</pre>
+
+<div class="try" data-goal="ran:\bwc\b,outre:^\s*5\s*$" data-solucao="tail -n +2 Documentos/alunos.csv | wc -l">
+<p class="try-task"><strong>Missão:</strong> quantos <strong>alunos</strong> existem em <code>Documentos/alunos.csv</code>? O arquivo tem uma linha de cabeçalho que não é aluno. Faça o terminal mostrar só o número <code>5</code>, usando <code>tail -n +2</code>, <code>|</code> e <code>wc -l</code>.</p>
+</div>
+
+<hr>
+
+<h2>file: que tipo de arquivo é este?</h2>
+<p>No Linux, a extensão (<code>.txt</code>, <code>.jpg</code>) é só parte do nome. Ela não manda em nada. O <code>file</code> abre o arquivo, olha os primeiros bytes e diz o que ele <strong>realmente</strong> é.</p>
+
+<dl class="anatomy">
+  <dt>file</dt><dd>Examina o conteúdo e descreve o tipo.</dd>
+  <dt>frutas.txt Documentos …</dt><dd>Um ou mais arquivos (ou pastas).</dd>
+</dl>
+
+<pre class="term">$ file frutas.txt Documentos Documentos/projetos/backup.sh planilha.txt
+frutas.txt:                    Unicode text, UTF-8 text
+Documentos:                    directory
+Documentos/projetos/backup.sh: Bourne-Again shell script, ASCII text executable
+planilha.txt:                  ASCII text, with CRLF line terminators</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Resposta</th><th>Em português</th></tr>
+<tr><td><code>Unicode text, UTF-8 text</code></td><td>Texto com acentos, codificado em UTF-8. Pode usar <code>cat</code>.</td></tr>
+<tr><td><code>directory</code></td><td>É uma pasta.</td></tr>
+<tr><td><code>Bourne-Again shell script</code></td><td>Um script do Bash (Bourne-Again shell é o nome completo do Bash), descoberto pela linha <code>#!</code>.</td></tr>
+<tr><td><code>with CRLF line terminators</code></td><td>Linhas terminadas no estilo Windows (<code>\r\n</code>), o mesmo <code>^M</code> do <code>cat -A</code>.</td></tr>
+</table>
+</div>
+
+<p>A prova de que a extensão não importa: copie o <code>frutas.txt</code> com nome de foto.</p>
+
+<pre class="term">$ cp frutas.txt foto.jpg
+$ file foto.jpg
+foto.jpg: Unicode text, UTF-8 text      « o nome diz .jpg, o conteúdo é texto</pre>
+
+<p>O <code>file</code> responde em inglês mesmo com o sistema em português. E tem uma pegadinha: se o arquivo não existe, ele avisa na própria saída, mas devolve <code>0</code>:</p>
+
+<pre class="term">$ file nada
+nada: cannot open `nada' (No such file or directory)
+$ echo $?
+0                     « o file "conseguiu" responder, então diz sucesso</pre>
+
+<hr>
+
+<h2>O "uso inútil do cat"</h2>
+<p>Quem começa costuma escrever <code>cat arquivo | outro-comando</code>, como se todo comando precisasse do <code>cat</code> para ler um arquivo. Funciona, mas o <code>cat</code> está sobrando: o <code>grep</code>, o <code>wc</code>, o <code>head</code>, o <code>sort</code> e quase todos os outros recebem o nome do arquivo direto.</p>
+
+<pre class="term">$ cat frutas.txt | grep banana       « funciona, mas são dois programas
+banana
+banana
+banana
+$ grep banana frutas.txt              « mesmo resultado, um programa só
+banana
+banana
+banana</pre>
+
+<p>Esse hábito ficou conhecido, com bom humor, como <em>useless use of cat</em>, "uso inútil do cat". Não é um erro grave, mas cria um processo a mais, e em alguns casos você perde informação: <code>wc -l frutas.txt</code> mostra o nome do arquivo, e <code>head</code> com vários arquivos mostra os títulos <code>==&gt;</code>, coisas que somem quando tudo chega por um <code>|</code>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Em vez de…</th><th>Escreva</th></tr>
+<tr><td><code>cat frutas.txt | grep uva</code></td><td><code>grep uva frutas.txt</code></td></tr>
+<tr><td><code>cat frutas.txt | wc -l</code></td><td><code>wc -l frutas.txt</code> (ou <code>wc -l &lt; frutas.txt</code> para só o número)</td></tr>
+<tr><td><code>cat acesso.log | tail -n 5</code></td><td><code>tail -n 5 acesso.log</code></td></tr>
+<tr><td><code>cat frutas.txt | sort</code></td><td><code>sort frutas.txt</code></td></tr>
+</table>
+</div>
+
+<p>O <code>cat</code> continua sendo a escolha certa para o que ele faz de melhor: <strong>mostrar</strong> um arquivo curto, <strong>juntar</strong> vários e revelar invisíveis com <code>-A</code>.</p>
+
+<hr>
+
+<h2>Qual usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Comando</th><th>Por quê</th></tr>
+<tr><td>Arquivo curto (cabe na tela)</td><td><code>cat arquivo</code></td><td>Mostra tudo e volta ao prompt.</td></tr>
+<tr><td>Arquivo longo, ler com calma ou buscar</td><td><code>less arquivo</code></td><td>Página por página, com busca <kbd>/</kbd>.</td></tr>
+<tr><td>Ver o cabeçalho de um CSV</td><td><code>head -n 1 arquivo</code></td><td>Lê só o começo, mesmo de arquivos enormes.</td></tr>
+<tr><td>O que aconteceu por último num log</td><td><code>tail -n 20 arquivo</code></td><td>Lê só o fim.</td></tr>
+<tr><td>Acompanhar um log ao vivo</td><td><code>tail -f arquivo</code></td><td>Mostra as linhas novas na hora; <kbd>Ctrl</kbd>+<kbd>C</kbd> sai.</td></tr>
+<tr><td>Tudo menos o cabeçalho</td><td><code>tail -n +2 arquivo</code></td><td>Começa na linha 2.</td></tr>
+<tr><td>Citar números de linha</td><td><code>cat -n</code>, <code>nl</code> ou <code>less -N</code></td><td>Numeram na tela, sem mudar o arquivo.</td></tr>
+<tr><td>Algo "invisível" atrapalhando</td><td><code>cat -A arquivo</code></td><td>Mostra Tab, <code>\r</code> e fim de linha.</td></tr>
+<tr><td>Não sei se é texto</td><td><code>file arquivo</code></td><td>Olha o conteúdo, não a extensão.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ cat nada.txt
+cat: nada.txt: Arquivo ou diretório inexistente
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> não há arquivo com esse nome <strong>na pasta atual</strong>. Ou o nome está errado (maiúsculas contam: <code>Notas.txt</code> ≠ <code>notas.txt</code>), ou o arquivo está em outra pasta.</p>
+<p><strong>Como confirmar:</strong> <code>pwd</code> mostra onde você está; <code>ls</code> mostra o que há ali.</p>
+<p><strong>Como resolver:</strong> use o caminho certo (<code>cat Documentos/notas.txt</code>) e deixe o <kbd>Tab</kbd> completar o nome para você (veja <a href="completar.html">Completar com Tab</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Nome com espaço virou três arquivos</strong>
+<pre class="term">$ cat lista de compras.txt
+cat: lista: Arquivo ou diretório inexistente
+cat: de: Arquivo ou diretório inexistente
+cat: compras.txt: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o arquivo se chama <code>lista de compras.txt</code>, mas o Bash separa as palavras nos espaços. O <code>cat</code> recebeu <strong>três</strong> argumentos: <code>lista</code>, <code>de</code> e <code>compras.txt</code>.</p>
+<p><strong>Como resolver:</strong> diga ao Bash que é um nome só, com aspas ou barra invertida:</p>
+<pre class="term">$ cat "lista de compras.txt"
+pão
+leite
+$ cat lista\ de\ compras.txt
+pão
+leite</pre>
+<p>As aspas são o assunto de <a href="aspas.html">Aspas e Escapes</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"É um diretório"</strong>
+<pre class="term">$ cat Documentos
+cat: Documentos: É um diretório
+$ tail -n 5 Documentos
+tail: erro ao ler 'Documentos': É um diretório</pre>
+<p><strong>O que aconteceu:</strong> <code>cat</code>, <code>head</code> e <code>tail</code> leem arquivos. Para ver o que há <strong>dentro</strong> de uma pasta, o comando é outro.</p>
+<p><strong>Como resolver:</strong> <code>ls Documentos</code> (veja <a href="ls.html">Listar</a>) e depois <code>cat Documentos/notas.txt</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada e o prompt não volta</strong>
+<pre class="term">$ cat
+█                     « o cursor fica parado esperando</pre>
+<p><strong>O que aconteceu:</strong> sem nenhum arquivo, o <code>cat</code> lê do <strong>teclado</strong>. Ele está esperando você digitar; cada linha que você digitar ele repete. O mesmo acontece com <code>head</code>, <code>wc</code>, <code>sort</code>… sem arquivo, e com o <code>tail -f</code>, que espera de propósito.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Ctrl</kbd>+<kbd>D</kbd> (avisa "acabou a entrada") ou <kbd>Ctrl</kbd>+<kbd>C</kbd> (interrompe). Depois, rode de novo com o nome do arquivo. Se foi uma aspa que ficou aberta e o prompt virou <code>&gt;</code>, também é <kbd>Ctrl</kbd>+<kbd>C</kbd> (veja <a href="aspas.html">Aspas</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"número inválido de linhas"</strong>
+<pre class="term">$ head -n abc frutas.txt
+head: número inválido de linhas: ‘abc’
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o que vem depois de <code>-n</code> tem que ser um número. Isso acontece muito quando o número vem de uma variável vazia ou errada, num script.</p>
+<p><strong>Como resolver:</strong> confira o valor: <code>head -n 5 frutas.txt</code>. Num script, mostre a variável com <code>echo "$n"</code> antes.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal ficou cheio de símbolos estranhos</strong>
+<p><strong>O que aconteceu:</strong> você deu <code>cat</code> (ou <code>head</code>) num arquivo que não é texto, como uma foto ou um <code>.zip</code>. Alguns bytes são comandos para o terminal e mudam cores ou letras.</p>
+<p><strong>Como resolver:</strong> digite <code>reset</code> e Enter, mesmo que as letras apareçam erradas. Da próxima vez, confira antes com <code>file arquivo</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Script dá <code>$'\r': comando não encontrado</code></strong>
+<p><strong>O que aconteceu:</strong> o arquivo foi salvo no Windows e cada linha termina com <code>\r\n</code>. O Bash enxerga o <code>\r</code> como parte do comando.</p>
+<p><strong>Como confirmar:</strong> <code>cat -A script.sh</code> mostra <code>^M$</code> no fim das linhas; <code>file script.sh</code> diz <code>with CRLF line terminators</code>.</p>
+<p><strong>Como resolver:</strong> remova os <code>\r</code>: <code>sed -i 's/\r$//' script.sh</code> (ou o programa <code>dos2unix</code>, se instalado).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>cat arq</code></td><td>Mostra o arquivo inteiro</td><td><code>cat frutas.txt</code></td></tr>
+<tr><td><code>cat a b</code></td><td>Mostra um depois do outro (concatena)</td><td><code>cat parte1 parte2</code></td></tr>
+<tr><td><code>cat -n</code></td><td>Numera as linhas</td><td><code>cat -n notas.txt</code></td></tr>
+<tr><td><code>cat -A</code></td><td>Mostra Tab (<code>^I</code>), <code>\r</code> (<code>^M</code>) e fim de linha (<code>$</code>)</td><td><code>cat -A planilha.txt</code></td></tr>
+<tr><td><code>less arq</code></td><td>Abre para folhear (<kbd>q</kbd> sai)</td><td><code>less acesso.log</code></td></tr>
+<tr><td><code>head -n N</code></td><td>As N primeiras linhas (padrão 10)</td><td><code>head -n 1 alunos.csv</code></td></tr>
+<tr><td><code>head -n -N</code></td><td>Tudo menos as N últimas</td><td><code>head -n -2 frutas.txt</code></td></tr>
+<tr><td><code>tail -n N</code></td><td>As N últimas linhas (padrão 10)</td><td><code>tail -n 3 acesso.log</code></td></tr>
+<tr><td><code>tail -n +N</code></td><td>Da linha N até o fim</td><td><code>tail -n +2 alunos.csv</code></td></tr>
+<tr><td><code>tail -f</code></td><td>Continua mostrando o que for acrescentado</td><td><code>tail -f servidor.log</code></td></tr>
+<tr><td><code>wc</code></td><td>Linhas, palavras e bytes</td><td><code>wc frutas.txt</code></td></tr>
+<tr><td><code>wc -l / -w / -c / -m</code></td><td>Só linhas / palavras / bytes / caracteres</td><td><code>wc -l &lt; frutas.txt</code></td></tr>
+<tr><td><code>file arq</code></td><td>Tipo real do arquivo, pelo conteúdo</td><td><code>file foto.jpg</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. As 5 primeiras</h3>
+<p>Complete para mostrar só as 5 primeiras linhas de <code>acesso.log</code>:</p>
+<div class="ex-code"><input data-answer="head -n 5|head -5|head -n5" aria-label="comando"> acesso.log</div>
+</div>
+
+<div class="exercise">
+<h3>2. Sem o cabeçalho</h3>
+<p>Complete para mostrar <code>alunos.csv</code> a partir da linha 2:</p>
+<div class="ex-code">tail -n <input data-answer="+2" aria-label="número"> alunos.csv</div>
+</div>
+
+<div class="exercise">
+<h3>3. Só o número de linhas</h3>
+<p>Complete para o <code>wc</code> contar as linhas de <code>frutas.txt</code>:</p>
+<div class="ex-code">wc <input data-answer="-l|--lines" aria-label="opção"> frutas.txt</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O <code>cat -A</code> mostrou <code>Ana^I29^M$</code>. O que é o <code>^M</code>?</p>
+<label><input type="radio" name="q4"> Uma tabulação.</label>
+<label><input type="radio" name="q4"> O retorno de carro (<code>\r</code>) de um arquivo vindo do Windows.</label>
+<label><input type="radio" name="q4"> Uma letra acentuada.</label>
+<label><input type="radio" name="q4"> O fim do arquivo.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Você digitou <code>tail -f servidor.log</code> e o prompt não voltou. O que fazer?</p>
+<label><input type="radio" name="q5"> Esperar: ele termina sozinho em alguns minutos.</label>
+<label><input type="radio" name="q5"> Fechar o terminal, porque o Bash travou.</label>
+<label><input type="radio" name="q5"> Nada de errado: o <code>-f</code> fica esperando linhas novas; aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para sair.</label>
+<label><input type="radio" name="q5"> Apertar <kbd>q</kbd>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Qual destes é o "uso inútil do cat"?</p>
+<label><input type="radio" name="q6"> <code>cat notas.txt | grep café</code></label>
+<label><input type="radio" name="q6"> <code>cat parte1.txt parte2.txt</code></label>
+<label><input type="radio" name="q6"> <code>cat -A script.sh</code></label>
+<label><input type="radio" name="q6"> <code>cat -n notas.txt</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">7. Em <code>cat *.txt</code>, quem transforma <code>*.txt</code> na lista de arquivos?</p>
+<label><input type="radio" name="q7"> O <code>cat</code>.</label>
+<label><input type="radio" name="q7"> O terminal (a janela).</label>
+<label><input type="radio" name="q7"> O sistema de arquivos.</label>
+<label><input type="radio" name="q7"> O Bash, antes de chamar o <code>cat</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>cat</code> mostra (e junta) arquivos; <code>-n</code> numera e <code>-A</code> revela Tab, <code>\r</code> e fim de linha.</li>
+  <li><code>less</code> folheia arquivos grandes: <kbd>Espaço</kbd> avança, <kbd>/</kbd> busca, <kbd>q</kbd> sai.</li>
+  <li><code>head -n N</code> e <code>tail -n N</code> mostram o começo e o fim; <code>tail -n +2</code> pula o cabeçalho; <code>tail -f</code> acompanha um log.</li>
+  <li><code>wc -l</code> conta linhas (quebras de linha); <code>-m</code> conta caracteres; <code>wc -l &lt; arq</code> dá só o número.</li>
+  <li><code>file</code> diz o tipo pelo conteúdo, não pela extensão.</li>
+  <li>Nomes com espaço precisam de aspas, quem expande <code>*</code> é o Bash, e um comando "parado" sem arquivo está lendo o teclado: <kbd>Ctrl</kbd>+<kbd>D</kbd> ou <kbd>Ctrl</kbd>+<kbd>C</kbd>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
