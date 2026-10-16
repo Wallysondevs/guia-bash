@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Completar com Tab — nomes de comandos, arquivos e variáveis | Guia Bash</title>
+<meta name="description" content="Use a tecla Tab no Bash: completar comandos, arquivos, pastas e variáveis, Tab Tab para ver as opções, nomes com espaço, por que às vezes o Tab não faz nada e o pacote bash-completion, que completa opções de git, apt e outros programas.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Completar com Tab</span></h1>
+
+<p class="intro">A tecla <kbd>Tab</kbd> é a melhor amiga de quem usa o terminal. Digite o começo de um nome e aperte <kbd>Tab</kbd>: o Bash completa o resto. Você digita menos, não erra nomes de arquivos e ainda descobre o que existe. Usuários experientes apertam <kbd>Tab</kbd> o tempo todo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A completar nomes de comandos, arquivos, pastas e variáveis com <kbd>Tab</kbd>.</li>
+  <li>A ver todas as possibilidades com <kbd>Tab</kbd> <kbd>Tab</kbd>.</li>
+  <li>Como o <kbd>Tab</kbd> lida com nomes que têm espaços.</li>
+  <li>Por que às vezes o <kbd>Tab</kbd> não faz nada, e o que isso está dizendo.</li>
+  <li>O que é o pacote <strong>bash-completion</strong>, que completa opções de programas.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Um <kbd>Tab</kbd>: completar</h2>
+<p>A Ana quer listar a pasta <code>Documentos</code>. Em vez de digitar o nome inteiro, ela digita <code>ls Doc</code> e aperta <kbd>Tab</kbd>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você digita</th><th>Depois do <kbd>Tab</kbd></th><th>Por quê</th></tr>
+<tr><td><code>ls Doc█</code></td><td><code>ls Documentos/█</code></td><td>Só um nome começa com "Doc". O <code>/</code> no fim avisa que é uma pasta.</td></tr>
+<tr><td><code>ech█</code></td><td><code>echo █</code></td><td>Só um comando começa com "ech". O espaço no fim já prepara o próximo argumento.</td></tr>
+<tr><td><code>cat Documentos/al█</code></td><td><code>cat Documentos/alunos.csv █</code></td><td>Completa dentro de outra pasta também.</td></tr>
+<tr><td><code>cd Documentos/projetos/s█</code></td><td><code>cd Documentos/projetos/site/█</code></td><td>Dá para encadear: <code>Doc</code><kbd>Tab</kbd><code>pro</code><kbd>Tab</kbd><code>s</code><kbd>Tab</kbd>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ls Documentos/                   « digitou "ls Doc", apertou Tab, depois Enter
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt</pre>
+
+<p>O <kbd>Tab</kbd> sabe o que completar pela <strong>posição</strong> da palavra: na primeira palavra da linha, ele procura <strong>comandos</strong>; nas outras, procura <strong>arquivos e pastas</strong>.</p>
+
+<div class="try" data-goal="cwd:~/Documentos/projetos/site" data-solucao="cd Documentos/projetos/site">
+<p class="try-task"><strong>Missão:</strong> entre na pasta <code>Documentos/projetos/site</code> usando o <kbd>Tab</kbd>: digite <code>cd Doc</code>, aperte <kbd>Tab</kbd>, depois <code>pro</code> e <kbd>Tab</kbd>, depois <code>s</code> e <kbd>Tab</kbd>, e <kbd>Enter</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Dois <kbd>Tab</kbd>: ver as possibilidades</h2>
+<p>E se mais de um nome combina? Na pasta da Ana, <code>Documentos</code> e <code>Downloads</code> começam com "Do". O Bash completa o que é igual para todos e para, às vezes com um bipe. Um segundo <kbd>Tab</kbd> mostra as opções:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Passo</th><th>Linha</th><th>O que aconteceu</th></tr>
+<tr><td>Digita <code>ls D</code> + <kbd>Tab</kbd></td><td><code>ls Do█</code></td><td>Completou o "o", que os dois têm em comum, e bipou.</td></tr>
+<tr><td>Mais um <kbd>Tab</kbd></td><td><code>ls Do█</code></td><td>Listou as possibilidades (abaixo) e devolveu a linha.</td></tr>
+<tr><td>Digita <code>c</code> + <kbd>Tab</kbd></td><td><code>ls Documentos/█</code></td><td>Agora só um combina.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ls Do
+Documentos/ Downloads/             « a lista que o Tab Tab mostrou
+$ ls Do                            « a linha volta como estava, esperando mais letras</pre>
+
+<p>O <kbd>Tab</kbd> <kbd>Tab</kbd> também é uma forma rápida de espiar uma pasta sem sair da linha:</p>
+<pre class="term">$ cat Documentos/
+acesso.log     alunos.csv     notas.txt      projetos/      relatorio.odt   « Tab Tab depois da /</pre>
+
+<p>As pastas aparecem com <code>/</code> no fim, para você distinguir dos arquivos.</p>
+
+<h3>Muitas possibilidades</h3>
+<p>Se você apertar <kbd>Tab</kbd> <kbd>Tab</kbd> numa linha quase vazia (por exemplo, depois de digitar só <code>a</code>), o Bash pode ter centenas de comandos para mostrar. Ele pergunta antes (saída ilustrativa; o número depende do sistema):</p>
+<pre class="term">$ a
+Display all 152 possibilities? (y or n)</pre>
+<p>Aperte <kbd>n</kbd> para desistir ou <kbd>y</kbd> para ver. Se a lista passar de uma tela, aparece <code>--More--</code>: <kbd>Espaço</kbd> avança, <kbd>q</kbd> sai. Essas mensagens vêm da readline e ficam em inglês.</p>
+
+<hr>
+
+<h2>Completar variáveis: <code>$HO</code><kbd>Tab</kbd></h2>
+<p>Quando a palavra começa com <code>$</code>, o <kbd>Tab</kbd> completa nomes de <strong>variáveis</strong>:</p>
+
+<pre class="term">$ echo $HO
+$HOME      $HOSTNAME  $HOSTTYPE    « Tab Tab depois de "$HO": três variáveis começam assim
+$ echo $HOME
+/home/ana</pre>
+
+<p>Útil para lembrar o nome exato de uma variável (era <code>HISTSIZE</code> ou <code>HIST_SIZE</code>?). Variáveis são o assunto de <a href="variaveis-intro.html">Variáveis: o Básico</a>. Há também <code>~</code><kbd>Tab</kbd>, que completa nomes de usuários (<code>~ana/</code>).</p>
+
+<div class="try" data-goal="ran:\$HOME,out:/home/ana" data-solucao="echo $HOME">
+<p class="try-task"><strong>Missão:</strong> digite <code>echo $HO</code> e aperte <kbd>Tab</kbd> duas vezes para ver as variáveis que começam com "HO". Complete para <code>$HOME</code> e rode.</p>
+</div>
+
+<hr>
+
+<h2>Nomes com espaço</h2>
+<p>Lembra que o espaço separa argumentos (<a href="sintaxe.html">Anatomia de um Comando</a>)? O <kbd>Tab</kbd> sabe disso e protege os espaços para você, colocando uma <code>\</code> antes de cada um:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você digita</th><th>Depois do <kbd>Tab</kbd></th></tr>
+<tr><td><code>cd Área█</code></td><td><code>cd Área\ de\ trabalho/█</code></td></tr>
+<tr><td><code>ls "Ár█</code> (abrindo aspas)</td><td><code>ls "Área de trabalho"/█</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ cd Área\ de\ trabalho/            « escrito pelo Tab: cada espaço ganhou uma \
+$ pwd
+/home/ana/Área de trabalho</pre>
+
+<p>A <code>\</code> diz "este espaço faz parte do nome". Se você começar com aspas, o <kbd>Tab</kbd> fecha as aspas no lugar certo. As duas formas funcionam; veja mais em <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<div class="tip">
+<strong>Acentos e maiúsculas</strong>
+<p>Por padrão, o <kbd>Tab</kbd> diferencia maiúsculas: <code>doc</code><kbd>Tab</kbd> não acha <code>Documentos</code>. Para ignorar, coloque <code>bind 'set completion-ignore-case on'</code> no <code>~/.bashrc</code> (ou <code>set completion-ignore-case on</code> no <code>~/.inputrc</code>). Acentos, porém, contam como outras letras: <code>Area</code><kbd>Tab</kbd> não acha <code>Área de trabalho</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando o <kbd>Tab</kbd> não faz nada</h2>
+<p>O silêncio do <kbd>Tab</kbd> também é uma informação. Se nada acontece (ou só um bipe), aperte <kbd>Tab</kbd> de novo:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Segundo <kbd>Tab</kbd> mostra…</th><th>Quer dizer</th><th>O que fazer</th></tr>
+<tr><td>Uma lista</td><td>Há várias possibilidades</td><td>Digite mais uma ou duas letras e <kbd>Tab</kbd> de novo.</td></tr>
+<tr><td>Nada</td><td><strong>Nenhum</strong> nome combina</td><td>Confira a grafia, as maiúsculas e a pasta onde você está (<code>pwd</code>).</td></tr>
+<tr><td>Nada, numa pasta</td><td>A pasta está vazia</td><td>Confira com <code>ls</code>.</td></tr>
+</table>
+</div>
+
+<p>Exemplos na máquina da Ana: <code>ls Música/</code><kbd>Tab</kbd><kbd>Tab</kbd> não mostra nada, porque a pasta está vazia. <code>xyz</code><kbd>Tab</kbd><kbd>Tab</kbd> também não, porque nenhum comando começa com "xyz". Um <kbd>Tab</kbd> que não completa é um aviso antecipado de que o comando ia falhar: melhor descobrir antes do <kbd>Enter</kbd>.</p>
+
+<hr>
+
+<h2>bash-completion: completar opções de programas</h2>
+<p>Sozinho, o Bash completa nomes de comandos, arquivos e variáveis. Ele não sabe que o <code>git</code> tem os subcomandos <code>commit</code> e <code>push</code>, nem que o <code>apt</code> tem <code>install</code>. Quem ensina isso é o pacote <strong>bash-completion</strong>: uma coleção de regras de completar para centenas de programas.</p>
+
+<p>Ele vem instalado e ligado na maioria dos Linux de desktop. Para saber se está ativo, conte quantas regras existem com <code>complete -p</code> ("mostre as regras de completar"):</p>
+
+<pre class="term">$ complete -p | wc -l
+0                                  « nenhuma regra: o bash-completion não está ativo
+$ source /usr/share/bash-completion/bash_completion
+$ complete -p | wc -l
+150                                « carregou as regras básicas (as outras vêm sob demanda)</pre>
+
+<p>No laboratório deste guia ele está instalado, mas desligado, como acontece em alguns servidores e contêineres. O <code>source</code> carregou o arquivo principal na hora. Com ele ativo, o <kbd>Tab</kbd> passa a completar opções:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você digita</th><th>Depois do <kbd>Tab</kbd> (com bash-completion)</th></tr>
+<tr><td><code>wc --l█</code></td><td><code>wc --lines █</code></td></tr>
+<tr><td><code>git ch█</code> + <kbd>Tab</kbd> <kbd>Tab</kbd></td><td><code>checkout  cherry  cherry-pick</code> (ilustrativo)</td></tr>
+<tr><td><code>git checkout ma█</code></td><td><code>git checkout main█</code>: completa nomes de ramos (ilustrativo)</td></tr>
+<tr><td><code>sudo apt ins█</code></td><td><code>sudo apt install █</code>, e depois completa nomes de pacotes (ilustrativo)</td></tr>
+<tr><td><code>ssh ser█</code></td><td>Nomes de servidores do seu <code>~/.ssh/config</code> (ilustrativo)</td></tr>
+</table>
+</div>
+
+<h3>Instalar e ligar</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Instalar</th></tr>
+<tr><td>Debian, Ubuntu</td><td><code>sudo apt install bash-completion</code></td></tr>
+<tr><td>Fedora</td><td><code>sudo dnf install bash-completion</code></td></tr>
+<tr><td>Arch</td><td><code>sudo pacman -S bash-completion</code></td></tr>
+<tr><td>macOS (Bash do Homebrew)</td><td><code>brew install bash-completion@2</code> e seguir a instrução que ele mostra</td></tr>
+</table>
+</div>
+
+<p>Depois de instalar, abra um terminal novo. Se ainda não funcionar, confira se o <code>~/.bashrc</code> (ou o <code>/etc/bash.bashrc</code>) tem as linhas que carregam o <code>/usr/share/bash-completion/bash_completion</code>; no Debian e no Ubuntu elas já vêm prontas. Escrever as suas próprias regras, para os seus scripts, é o assunto de <a href="complete.html">Completar Programável</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O <kbd>Tab</kbd> completa arquivos, mas não opções do <code>git</code></strong>
+<p><strong>O que aconteceu:</strong> o bash-completion não está instalado ou não foi carregado.</p>
+<p><strong>Como confirmar:</strong> <code>complete -p | wc -l</code> mostra <code>0</code>, ou:</p>
+<pre class="term">$ complete -p git
+bash: complete: git: nenhuma especificação de completação
+$ echo $?
+1</pre>
+<p><strong>Como resolver:</strong> instale o pacote e abra um terminal novo. Para testar na hora: <code>source /usr/share/bash-completion/bash_completion</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <kbd>Tab</kbd> não acha um arquivo que existe</strong>
+<p><strong>O que aconteceu:</strong> as causas mais comuns são: maiúscula diferente (<code>doc</code> × <code>Documentos</code>), você está em outra pasta, ou o arquivo começa com ponto (escondido; digite o ponto: <code>.bas</code><kbd>Tab</kbd>).</p>
+<p><strong>Como confirmar:</strong> <code>pwd</code> e <code>ls -a</code>.</p>
+<p><strong>Como resolver:</strong> digite a primeira letra certa, ou ligue o <code>completion-ignore-case</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Com bash-completion, o <kbd>Tab</kbd> não completa um arquivo que eu quero</strong>
+<p><strong>O que aconteceu:</strong> as regras dos programas filtram os nomes. Por exemplo, a regra de um descompactador só oferece arquivos com a extensão certa. É ajuda, mas às vezes atrapalha.</p>
+<p><strong>Como resolver:</strong> <kbd>Alt</kbd>+<kbd>/</kbd> completa como nome de arquivo, ignorando as regras do programa.</p>
+</div>
+
+<div class="cenario">
+<strong>O <kbd>Tab</kbd> inseriu um espaço de tabulação de verdade</strong>
+<p><strong>O que aconteceu:</strong> você não está digitando para o Bash, e sim para um programa que lê do teclado sem a readline (por exemplo, um <code>cat</code> esperando texto, ou um script com <code>read</code> sem <code>-e</code>).</p>
+<p><strong>Como resolver:</strong> <kbd>Ctrl</kbd>+<kbd>C</kbd> para voltar ao prompt.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla / comando</th><th>O que faz</th></tr>
+<tr><td><kbd>Tab</kbd></td><td>Completa o nome (comando, arquivo, pasta, variável)</td></tr>
+<tr><td><kbd>Tab</kbd> <kbd>Tab</kbd></td><td>Lista as possibilidades</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>/</kbd></td><td>Completa como nome de arquivo, ignorando regras de programas</td></tr>
+<tr><td><code>$NOM</code><kbd>Tab</kbd></td><td>Completa nomes de variáveis</td></tr>
+<tr><td><code>~nom</code><kbd>Tab</kbd></td><td>Completa nomes de usuários</td></tr>
+<tr><td><code>complete -p</code></td><td>Lista as regras de completar ativas</td></tr>
+<tr><td><code>bind 'set completion-ignore-case on'</code></td><td>Ignora maiúsculas ao completar</td></tr>
+<tr><td><code>bind 'set show-all-if-ambiguous on'</code></td><td>Mostra a lista já no primeiro <kbd>Tab</kbd></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. A Ana digita <code>ls D</code> e aperta <kbd>Tab</kbd>. A linha vira <code>ls Do</code> e para. Por quê?</p>
+<label><input type="radio" name="q1"> O <kbd>Tab</kbd> está com defeito.</label>
+<label><input type="radio" name="q1"> Há mais de um nome começando com "Do" (Documentos e Downloads).</label>
+<label><input type="radio" name="q1"> Não existe nada começando com "D".</label>
+<label><input type="radio" name="q1"> Falta o bash-completion.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">2. O que o <kbd>Tab</kbd> escreve ao completar <code>cd Área</code>?</p>
+<label><input type="radio" name="q2"> <code>cd Área de trabalho</code></label>
+<label><input type="radio" name="q2"> <code>cd Área_de_trabalho/</code></label>
+<label><input type="radio" name="q2"> <code>cd 'Área'</code></label>
+<label><input type="radio" name="q2"> <code>cd Área\ de\ trabalho/</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. <code>xyz</code><kbd>Tab</kbd><kbd>Tab</kbd> não mostrou nada. O que isso indica?</p>
+<label><input type="radio" name="q3"> Nenhum comando começa com "xyz".</label>
+<label><input type="radio" name="q3"> Existem muitos comandos com "xyz".</label>
+<label><input type="radio" name="q3"> O terminal travou.</label>
+<label><input type="radio" name="q3"> O comando <code>xyz</code> está rodando.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Qual pacote faz o <kbd>Tab</kbd> completar <code>git chec</code> para <code>git checkout</code>?</p>
+<label><input type="radio" name="q4"> readline</label>
+<label><input type="radio" name="q4"> git-tab</label>
+<label><input type="radio" name="q4"> bash-completion</label>
+<label><input type="radio" name="q4"> coreutils</label>
+</div>
+
+<div class="exercise">
+<h3>5. Contar as regras</h3>
+<p>Complete para listar as regras de completar ativas:</p>
+<div class="ex-code">complete <input data-answer="-p" aria-label="opção"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><kbd>Tab</kbd> completa; <kbd>Tab</kbd> <kbd>Tab</kbd> lista as possibilidades.</li>
+  <li>Na primeira palavra, completa comandos; nas outras, arquivos e pastas; depois de <code>$</code>, variáveis.</li>
+  <li>Nomes com espaço ganham <code>\</code> antes de cada espaço (ou as aspas são fechadas para você).</li>
+  <li><kbd>Tab</kbd> que não faz nada = nenhum nome combina (ou a pasta está vazia).</li>
+  <li>O pacote bash-completion ensina o <kbd>Tab</kbd> a completar opções de <code>git</code>, <code>apt</code>, <code>ssh</code>…; criar regras próprias é de <a href="complete.html">Completar Programável</a>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
