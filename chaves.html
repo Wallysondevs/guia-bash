@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Chaves — {a,b} e {1..10} gerando nomes | Guia Bash</title>
+<meta name="description" content="Aprenda a expansão de chaves do Bash: listas {a,b,c}, sequências {1..10}, {01..10}, {a..e} e {1..10..2}, chaves aninhadas, cp arq{,.bak}, mkdir -p projeto/{src,doc}, por que {1..$n} não funciona e a diferença para os curingas.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Chaves {a,b} e {1..10}</span></h1>
+
+<p class="intro">As chaves são uma "máquina de gerar palavras" do Bash. Você escreve <code>foto{1,2,3}.jpg</code> e o Bash transforma isso em <code>foto1.jpg foto2.jpg foto3.jpg</code> <strong>antes</strong> de chamar o comando. Com elas você cria 12 pastas, faz um backup ou monta a estrutura de um projeto inteiro digitando uma linha só.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Listas <code>{a,b,c}</code> e sequências <code>{1..10}</code>, <code>{01..10}</code>, <code>{a..e}</code>, <code>{1..10..2}</code>.</li>
+  <li>Como usar prefixo, sufixo e chaves dentro de chaves.</li>
+  <li>Os dois truques mais usados: <code>cp arq{,.bak}</code> e <code>mkdir -p projeto/{src,doc,teste}</code>.</li>
+  <li>Por que <code>{1..$n}</code> não funciona, e o que usar no lugar.</li>
+  <li>A diferença entre chaves e curingas: chaves geram nomes que <strong>não precisam existir</strong>.</li>
+</ul>
+</div>
+
+<p>Todos os exemplos acontecem na pasta da Ana (<code>/home/ana</code>), a mesma do terminal simulado. Você pode repetir tudo nas caixas "Experimente".</p>
+
+<hr>
+
+<h2>O problema: digitar a mesma coisa várias vezes</h2>
+<p>A Ana quer criar três relatórios: <code>relatorio-jan.txt</code>, <code>relatorio-fev.txt</code> e <code>relatorio-mar.txt</code>. Escrevendo tudo, ela repete <code>relatorio-</code> e <code>.txt</code> três vezes. Se fossem 12 meses, seriam 12 vezes, e um erro de digitação em qualquer uma delas cria um arquivo com nome errado.</p>
+<p>As chaves resolvem isso: você escreve a parte que se repete <strong>uma vez</strong> e coloca entre chaves só o que muda.</p>
+
+<p>O jeito mais seguro de aprender chaves é com o <code>echo</code>. Ele só mostra na tela as palavras que recebeu, então você vê exatamente o que o Bash gerou, sem criar nem apagar nada:</p>
+
+<pre class="term">$ echo relatorio-{jan,fev,mar}.txt
+relatorio-jan.txt relatorio-fev.txt relatorio-mar.txt      « três palavras saíram de uma</pre>
+
+<dl class="anatomy">
+  <dt>echo</dt><dd>O comando. Mostra as palavras que recebeu, separadas por espaço.</dd>
+  <dt>relatorio-</dt><dd>O <strong>prefixo</strong>: o texto colado antes das chaves. Vai para o começo de cada palavra gerada.</dd>
+  <dt>{jan,fev,mar}</dt><dd>As opções, separadas por vírgula e <strong>sem espaços</strong>. Cada uma gera uma palavra.</dd>
+  <dt>.txt</dt><dd>O <strong>sufixo</strong>: o texto colado depois. Vai para o fim de cada palavra.</dd>
+</dl>
+
+<h3>Quem faz isso é o Bash, não o comando</h3>
+<p>Esse é o ponto mais importante da aula. O <code>echo</code> <strong>nunca viu</strong> as chaves. O Bash leu a linha, fez a <strong>expansão de chaves</strong> (<em>brace expansion</em>) e só depois chamou o <code>echo</code> com três argumentos prontos:</p>
+
+<pre class="syntax">você digita:     echo relatorio-{jan,fev,mar}.txt
+o Bash expande:  echo relatorio-jan.txt relatorio-fev.txt relatorio-mar.txt
+o echo recebe:   3 argumentos</pre>
+
+<p>Por isso as chaves funcionam com <strong>qualquer</strong> comando: <code>mkdir</code>, <code>touch</code>, <code>cp</code>, <code>rm</code>, <code>ls</code>… Nenhum deles precisa saber o que são chaves. É o mesmo princípio dos <a href="curingas.html">curingas</a>: o shell prepara as palavras, o comando só recebe o resultado.</p>
+
+<p>E como sempre, o comando que deu certo devolve o código de saída <code>0</code>:</p>
+
+<pre class="term">$ echo foto{1,2,3}.jpg
+foto1.jpg foto2.jpg foto3.jpg
+$ echo $?
+0</pre>
+
+<hr>
+
+<h2>Listas: <code>{a,b,c}</code></h2>
+<p>A forma mais simples é uma lista de opções separadas por vírgula. Cada opção vira uma palavra, <strong>na ordem em que você escreveu</strong> (as chaves não colocam nada em ordem alfabética):</p>
+
+<pre class="term">$ echo {a,b,c}
+a b c
+$ printf '%s\n' {jan,fev,mar}
+jan
+fev
+mar                       « printf com '%s\n' mostra uma palavra por linha</pre>
+
+<p>O <code>printf '%s\n'</code> repete o formato para cada argumento, então ele deixa claro que são três palavras separadas. Você vai aprender o <code>printf</code> em <a href="printf.html">printf e echo</a>.</p>
+
+<h3>Prefixo e sufixo</h3>
+<p>Tudo o que estiver colado nas chaves (sem espaço) entra em todas as palavras geradas. Pode ser só prefixo, só sufixo, os dois, ou nenhum:</p>
+
+<pre class="term">$ echo pre-{a,b}-pos
+pre-a-pos pre-b-pos
+$ echo a{b,c}d
+abd acd
+$ echo {1..3}" vez"
+1 vez 2 vez 3 vez         « o sufixo pode até estar entre aspas</pre>
+
+<p>Repare no último: <code>" vez"</code> está colado nas chaves, então faz parte da mesma palavra. As aspas só protegem o espaço dentro do sufixo.</p>
+
+<h3>Uma opção vazia: <code>{,.bak}</code></h3>
+<p>Uma das opções pode ser <strong>vazia</strong>. Em <code>arq{,.bak}</code>, a primeira opção é "nada" e a segunda é <code>.bak</code>:</p>
+
+<pre class="term">$ echo arq{,.bak}
+arq arq.bak</pre>
+
+<p>Guarde esse truque: ele é a base do backup rápido que você vai ver daqui a pouco.</p>
+
+<hr>
+
+<h2>Sequências: <code>{1..10}</code></h2>
+<p>Quando o que muda é um número ou uma letra em ordem, você não precisa listar tudo. Escreva o <strong>começo</strong>, dois pontos e o <strong>fim</strong>:</p>
+
+<dl class="anatomy">
+  <dt>{</dt><dd>Abre a expansão.</dd>
+  <dt>1</dt><dd>O primeiro valor.</dd>
+  <dt>..</dt><dd>"Até". Exatamente dois pontos.</dd>
+  <dt>10</dt><dd>O último valor, que também entra na lista.</dd>
+  <dt>}</dt><dd>Fecha.</dd>
+</dl>
+
+<pre class="term">$ echo {1..10}
+1 2 3 4 5 6 7 8 9 10
+$ echo {10..1}
+10 9 8 7 6 5 4 3 2 1         « de trás para frente também funciona
+$ echo {-1..2}
+-1 0 1 2                     « e com números negativos</pre>
+
+<h3>Com zeros na frente: <code>{01..10}</code></h3>
+<p>Se você escrever o começo (ou o fim) com zeros à esquerda, o Bash deixa <strong>todos</strong> os números com a mesma largura:</p>
+
+<pre class="term">$ echo {01..10}
+01 02 03 04 05 06 07 08 09 10
+$ echo {01..100..10}
+001 011 021 031 041 051 061 071 081 091   « a largura segue o maior: 100 tem 3 dígitos</pre>
+
+<p>Por que isso importa? Porque o <code>ls</code> organiza os nomes comparando letra por letra. Veja a diferença com dez arquivos criados das duas formas:</p>
+
+<pre class="term">$ mkdir aulas teste
+$ cd aulas
+$ touch aula{01..10}.txt
+$ ls
+aula01.txt  aula03.txt  aula05.txt  aula07.txt  aula09.txt
+aula02.txt  aula04.txt  aula06.txt  aula08.txt  aula10.txt   « ordem certa
+$ cd ../teste
+$ touch aula{1..10}.txt
+$ ls
+aula10.txt  aula2.txt  aula4.txt  aula6.txt  aula8.txt
+aula1.txt   aula3.txt  aula5.txt  aula7.txt  aula9.txt       « aula10 veio primeiro!</pre>
+
+<p>Sem os zeros, <code>aula10.txt</code> aparece antes de <code>aula1.txt</code>: depois de "aula1", o próximo caractere é "0" num nome e "." no outro, e a comparação do português ignora a pontuação e compara "0" com "t". Com zeros, todos têm o mesmo tamanho e a ordem fica natural. O <code>ls</code> lê as colunas de cima para baixo.</p>
+
+<h3>Letras: <code>{a..e}</code></h3>
+<p>Sequências também funcionam com <strong>uma</strong> letra no começo e no fim:</p>
+
+<pre class="term">$ echo {a..e}
+a b c d e
+$ echo {z..u}
+z y x w v u</pre>
+
+<p>Só uma letra de cada lado. <code>{a..zz}</code> não é uma sequência válida, então o Bash deixa o texto como está:</p>
+
+<pre class="term">$ echo {a..zz}
+{a..zz}</pre>
+
+<h3>Com passo: <code>{1..10..2}</code></h3>
+<p>Um terceiro número, depois de mais dois pontos, é o <strong>passo</strong> (<em>increment</em>): de quanto em quanto pular.</p>
+
+<dl class="anatomy">
+  <dt>1</dt><dd>Começo.</dd>
+  <dt>..10</dt><dd>Fim (só entra se cair exatamente nele).</dd>
+  <dt>..2</dt><dd>Passo: de 2 em 2.</dd>
+</dl>
+
+<pre class="term">$ echo {1..10..2}
+1 3 5 7 9                   « 11 passaria do fim, então para no 9
+$ echo {0..100..25}
+0 25 50 75 100
+$ echo {5..1..2}
+5 3 1</pre>
+
+<p>O passo existe desde o <span class="versao">bash 4.0+</span>, assim como os zeros à esquerda. No <code>/bin/bash</code> 3.2 do macOS, <code>{1..10..2}</code> não funciona; use <code>seq 1 2 10</code>.</p>
+
+<hr>
+
+<h2>Combinando chaves</h2>
+
+<h3>Lado a lado: todas as combinações</h3>
+<p>Duas chaves coladas geram <strong>todas as combinações</strong>. A primeira chave "manda": para cada valor dela, o Bash percorre todos os valores da segunda.</p>
+
+<pre class="term">$ echo {1..3}{a,b}
+1a 1b 2a 2b 3a 3b
+$ echo {jan,fev}-{2025,2026}
+jan-2025 jan-2026 fev-2025 fev-2026
+$ echo {a,b}{1,2}{X,Y}
+a1X a1Y a2X a2Y b1X b1Y b2X b2Y        « 2 × 2 × 2 = 8 palavras</pre>
+
+<h3>Uma dentro da outra (aninhadas)</h3>
+<p>Uma opção pode ter suas próprias chaves. O Bash resolve de fora para dentro:</p>
+
+<pre class="term">$ echo pasta/{src,doc/{manual,api},teste}
+pasta/src pasta/doc/manual pasta/doc/api pasta/teste</pre>
+
+<dl class="anatomy">
+  <dt>pasta/</dt><dd>Prefixo de todas as palavras.</dd>
+  <dt>src</dt><dd>Primeira opção: gera <code>pasta/src</code>.</dd>
+  <dt>doc/{manual,api}</dt><dd>Segunda opção, com chaves dentro: gera <code>pasta/doc/manual</code> e <code>pasta/doc/api</code>.</dd>
+  <dt>teste</dt><dd>Terceira opção: gera <code>pasta/teste</code>.</dd>
+</dl>
+
+<p>Também dá para colocar uma sequência dentro de uma lista, ou o contrário: <code>echo ab{c,d}{,e}</code> mostra <code>abc abce abd abde</code>.</p>
+
+<hr>
+
+<h2>Na prática: os truques que você vai usar sempre</h2>
+
+<h3>Criar a estrutura de um projeto: <code>mkdir -p projeto/{src,doc,teste}</code></h3>
+<p>O <code>mkdir</code> recebe três caminhos prontos. A opção <code>-p</code> cria a pasta <code>projeto</code> antes, se ela ainda não existir (veja <a href="criar-copiar.html">Criar, Copiar e Mover</a>).</p>
+
+<pre class="term">$ mkdir -p projeto/{src,doc,teste}
+$ ls projeto
+doc  src  teste</pre>
+
+<p>Com chaves aninhadas e <code>-v</code> (de <em>verbose</em>, "detalhado"), você vê cada pasta sendo criada:</p>
+
+<pre class="term">$ mkdir -pv loja/{src,docs,testes/{unidade,integracao}}
+mkdir: foi criado o diretório 'loja'
+mkdir: foi criado o diretório 'loja/src'
+mkdir: foi criado o diretório 'loja/docs'
+mkdir: foi criado o diretório 'loja/testes'
+mkdir: foi criado o diretório 'loja/testes/unidade'
+mkdir: foi criado o diretório 'loja/testes/integracao'</pre>
+
+<p>Seis pastas, um comando. Antes de rodar algo assim pela primeira vez, troque o <code>mkdir -pv</code> por <code>echo</code> e confira os caminhos.</p>
+
+<h3>Backup rápido: <code>cp arq{,.bak}</code></h3>
+<p>Antes de editar um arquivo importante, faça uma cópia. Com a opção vazia, o nome só é digitado uma vez:</p>
+
+<pre class="term">$ cp frutas.txt{,.bak}
+$ ls frutas*
+frutas.txt  frutas.txt.bak</pre>
+
+<dl class="anatomy">
+  <dt>cp</dt><dd>Copia o primeiro argumento para o segundo.</dd>
+  <dt>frutas.txt{,.bak}</dt><dd>O Bash expande para <code>frutas.txt frutas.txt.bak</code>: origem e destino.</dd>
+</dl>
+
+<p>O mesmo truque serve para renomear com <code>mv</code>, acrescentando algo no fim do nome:</p>
+
+<pre class="term">$ mv frutas.txt.bak frutas-copia.txt
+$ mv frutas-copia.txt{,.old}         « vira: mv frutas-copia.txt frutas-copia.txt.old
+$ ls frutas*
+frutas-copia.txt.old  frutas.txt</pre>
+
+<h3>Vários arquivos de uma vez</h3>
+
+<pre class="term">$ touch aula{01..05}.txt
+$ echo $?
+0</pre>
+
+<p>O <code>touch</code> não mostra nada quando dá certo, por isso o <code>echo $?</code> confirma: <code>0</code> é sucesso. Você vai estudar esse número em <a href="codigo-saida.html">Código de Saída</a>.</p>
+
+<div class="try" data-setup="mkdir aulas;;cd aulas" data-goal="file:~/aulas/aula01.txt,file:~/aulas/aula05.txt,file:~/aulas/aula10.txt,absent:~/aulas/aula1.txt,ran:\{" data-solucao="touch aula{01..10}.txt">
+<p class="try-task"><strong>Missão:</strong> você está na pasta <code>aulas</code>, vazia. Crie os arquivos <code>aula01.txt</code> até <code>aula10.txt</code>, com o zero na frente, usando <strong>um único</strong> <code>touch</code> com chaves. Confira com <code>ls</code>. Dica: teste antes com <code>echo</code>.</p>
+</div>
+
+<div class="try" data-goal="dir:~/projeto/src,dir:~/projeto/doc,dir:~/projeto/teste,file:~/frutas.txt.bak,ran:\{" data-solucao="mkdir -p projeto/{src,doc,teste};;cp frutas.txt{,.bak}">
+<p class="try-task"><strong>Missão:</strong> crie, com um comando só, a pasta <code>projeto</code> com <code>src</code>, <code>doc</code> e <code>teste</code> dentro. Depois faça a cópia de segurança <code>frutas.txt.bak</code> usando o truque <code>{,.bak}</code>.</p>
+</div>
+
+<hr>
+
+<h2>Chaves acontecem antes das variáveis</h2>
+<p>Quando o Bash lê uma linha, ele faz as expansões numa <strong>ordem fixa</strong>. As chaves são a <strong>primeira</strong>: vêm antes do <code>~</code>, das variáveis (<code>$nome</code>), das contas e dos curingas. A ordem completa está em <a href="ordem-expansoes.html">A Ordem das Expansões</a>.</p>
+
+<p>Na maioria das vezes isso ajuda. Variáveis colocadas no prefixo ou no sufixo funcionam normalmente, porque elas ficam copiadas em cada palavra e são trocadas depois:</p>
+
+<pre class="term">$ echo ~/{Documentos,Downloads}
+/home/ana/Documentos /home/ana/Downloads
+$ echo {1..3}-$HOME
+1-/home/ana 2-/home/ana 3-/home/ana</pre>
+
+<h3>O problema: <code>{1..$n}</code></h3>
+<p>Mas uma variável <strong>dentro</strong> de uma sequência não funciona:</p>
+
+<pre class="term">$ n=5
+$ echo {1..$n}
+{1..5}                      « o texto saiu igual, só com o 5 trocado</pre>
+
+<p>Veja o que aconteceu, passo a passo:</p>
+<ol>
+  <li><strong>Chaves</strong> (primeiro passo): o Bash vê <code>{1..$n}</code>. <code>$n</code> ainda não é um número, então isso não é uma sequência válida. O Bash deixa o texto como está.</li>
+  <li><strong>Variáveis</strong> (passo seguinte): <code>$n</code> vira <code>5</code>. O texto fica <code>{1..5}</code>.</li>
+  <li>A expansão de chaves <strong>já passou</strong> e não volta. O <code>echo</code> recebe <code>{1..5}</code> literal.</li>
+</ol>
+
+<p>Num script, o erro é silencioso: o laço roda <strong>uma vez só</strong>, com o texto errado, e o código de saída ainda é <code>0</code>:</p>
+
+<pre class="file" data-file="linhas.sh">#!/usr/bin/env bash
+n=$1
+for i in {1..$n}; do
+  echo "Linha $i"
+done
+</pre>
+
+<pre class="term">$ bash linhas.sh 5
+Linha {1..5}                « esperava 5 linhas
+$ echo $?
+0</pre>
+
+<h3>As alternativas</h3>
+<p>Quando o fim da sequência está numa variável, use uma destas formas:</p>
+
+<p><strong>1. O laço <code>for (( ))</code> do Bash</strong>, que conta com variáveis sem chamar nenhum programa. Dentro de <code>(( ))</code> você pode escrever <code>n</code> sem o <code>$</code>:</p>
+
+<pre class="term">$ n=4
+$ for ((i=1; i&lt;=n; i++)); do echo "volta $i"; done
+volta 1
+volta 2
+volta 3
+volta 4</pre>
+
+<dl class="anatomy">
+  <dt>i=1</dt><dd>Começa com <code>i</code> valendo 1.</dd>
+  <dt>i&lt;=n</dt><dd>Repete enquanto <code>i</code> for menor ou igual a <code>n</code>.</dd>
+  <dt>i++</dt><dd>Depois de cada volta, soma 1 em <code>i</code>.</dd>
+</dl>
+
+<p><strong>2. O programa <code>seq</code></strong> (de <em>sequence</em>), que imprime números, um por linha. Com <code>$( )</code> a saída dele vira a lista do <code>for</code>:</p>
+
+<pre class="term">$ for i in $(seq 1 $n); do echo "volta $i"; done
+volta 1
+volta 2
+volta 3
+volta 4
+$ seq -w 1 10
+01
+02
+03
+…                           « encurtado
+10</pre>
+
+<p>O <code>seq -w</code> (de <em>equal width</em>) faz o papel do <code>{01..10}</code>, e <code>seq 1 2 10</code> faz o papel do <code>{1..10..2}</code> (no <code>seq</code>, o passo fica <strong>no meio</strong>). Você vai ver laços a fundo em <a href="for.html">for</a> e <code>$( )</code> em <a href="substituicao-comando.html">Substituição de Comando</a>.</p>
+
+<div class="tryscript" data-file="linhas.sh" data-args="5" data-goal="out:Linha 5">
+<p class="try-task"><strong>Missão:</strong> o script recebe um número e deveria mostrar "Linha 1" até "Linha N", mas mostra <code>Linha {1..5}</code>. Troque o <code>{1..$n}</code> por uma das alternativas (<code>for (( ))</code> ou <code>seq</code>) e clique em Rodar.</p>
+<pre class="script">#!/usr/bin/env bash
+n=$1
+for i in {1..$n}; do
+  echo "Linha $i"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+n=$1
+for ((i=1; i&lt;=n; i++)); do
+  echo "Linha $i"
+done
+</pre>
+</div>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td>Chaves</td><td><code>{1..10}</code>, <code>{01..12}</code></td><td>Os limites são fixos e você os conhece ao digitar.</td></tr>
+<tr><td><code>for (( ))</code></td><td><code>for ((i=1; i&lt;=n; i++))</code></td><td>O limite está numa variável. É do próprio Bash, não chama programa.</td></tr>
+<tr><td><code>seq</code></td><td><code>$(seq 1 $n)</code>, <code>seq -w 1 $n</code></td><td>Você quer a lista como texto (para um pipe ou arquivo), ou largura fixa com limite variável.</td></tr>
+<tr><td>Lista escrita</td><td><code>{jan,fev,mar}</code></td><td>Os valores não seguem uma sequência.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Chaves × curingas</h2>
+<p>Chaves e <a href="curingas.html">curingas</a> parecem parentes, e muitas vezes aparecem juntos. Mas fazem coisas opostas:</p>
+
+<ul>
+  <li>Os <strong>curingas</strong> (<code>*</code>, <code>?</code>, <code>[ ]</code>) <strong>procuram</strong> arquivos que já existem e são trocados pelos nomes encontrados.</li>
+  <li>As <strong>chaves</strong> <strong>geram</strong> texto. Elas não olham a pasta. Os nomes não precisam existir.</li>
+</ul>
+
+<p>Por isso você usa chaves para <strong>criar</strong> coisas novas. Compare, numa pasta sem nenhum arquivo <code>nota</code>:</p>
+
+<pre class="term">$ echo nota{1..3}.txt
+nota1.txt nota2.txt nota3.txt          « as chaves geram os nomes mesmo assim
+$ echo nota*.txt
+nota*.txt                              « o curinga não achou nada e ficou literal
+$ ls nota{1..3}.txt
+ls: não foi possível acessar 'nota1.txt': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'nota2.txt': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'nota3.txt': Arquivo ou diretório inexistente</pre>
+
+<p>O <code>ls</code> reclamou três vezes porque recebeu três nomes, gerados pelas chaves, e nenhum existe.</p>
+
+<h3>Juntos: chaves primeiro, curinga depois</h3>
+<p>Como as chaves vêm antes, você pode gerar vários curingas de uma vez. <code>Documentos/*.{txt,csv}</code> vira <code>Documentos/*.txt Documentos/*.csv</code>, e cada um é procurado depois:</p>
+
+<pre class="term">$ ls Documentos/*.{txt,csv}
+Documentos/alunos.csv  Documentos/notas.txt
+$ echo Documentos/*.{txt,pdf}
+Documentos/notas.txt Documentos/*.pdf      « não há .pdf: esse curinga ficou literal
+$ ls Documentos/*.{txt,pdf}
+ls: não foi possível acessar 'Documentos/*.pdf': Arquivo ou diretório inexistente
+Documentos/notas.txt
+$ echo $?
+2                                          « o ls mostrou o que achou, mas avisa que algo falhou</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Chaves <code>{a,b}</code> <code>{1..3}</code></th><th>Curingas <code>*</code> <code>?</code> <code>[ ]</code></th></tr>
+<tr><td>O que fazem</td><td>Geram texto</td><td>Procuram nomes de arquivos</td></tr>
+<tr><td>Os nomes precisam existir?</td><td>Não</td><td>Sim</td></tr>
+<tr><td>Quando acontecem</td><td>Primeira expansão</td><td>Uma das últimas</td></tr>
+<tr><td>Uso típico</td><td>Criar: <code>mkdir</code>, <code>touch</code>, <code>cp x{,.bak}</code></td><td>Usar o que existe: <code>ls *.txt</code>, <code>rm *.tmp</code></td></tr>
+<tr><td>Dentro de aspas</td><td>Não funcionam</td><td>Não funcionam</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>As chaves saíram iguais, sem expandir</strong>
+<pre class="term">$ echo {jan, fev}
+{jan, fev}
+$ echo {jan}
+{jan}
+$ echo "{a,b}"
+{a,b}</pre>
+<p><strong>O que aconteceu:</strong> o Bash só expande chaves que seguem as regras. No primeiro, o espaço depois da vírgula quebrou a linha em duas palavras (<code>{jan,</code> e <code>fev}</code>), e nenhuma delas tem chaves completas. No segundo, há uma opção só: sem vírgula e sem <code>..</code>, não há o que gerar. No terceiro, as aspas desligam a expansão (veja <a href="aspas.html">Aspas</a>).</p>
+<p><strong>Como confirmar:</strong> sempre teste com <code>echo</code> antes.</p>
+<p><strong>Como resolver:</strong> nada de espaços dentro das chaves; pelo menos duas opções ou uma sequência <code>..</code>; deixe as chaves fora das aspas. Se precisar de espaço numa opção, coloque aspas só nela: <code>echo {"Meus docs",Fotos}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O mkdir criou pastas com nomes estranhos</strong>
+<pre class="term">$ mkdir {jan, fev}
+$ ls -d *jan* *fev*
+fev}  {jan,</pre>
+<p><strong>O que aconteceu:</strong> o mesmo espaço depois da vírgula. Como as chaves não expandiram, o <code>mkdir</code> recebeu dois nomes literais, <code>{jan,</code> e <code>fev}</code>, e criou as duas pastas sem reclamar.</p>
+<p><strong>Como resolver:</strong> apague as pastas erradas, com aspas para o Bash não tentar interpretar nada, e crie de novo sem o espaço:</p>
+<pre class="term">$ rm -r '{jan,' 'fev}'
+$ mkdir {jan,fev}</pre>
+</div>
+
+<div class="cenario">
+<strong>Não deu erro, mas apareceu um arquivo <code>.bak</code></strong>
+<pre class="term">$ cp frutas.txt {,.bak}
+$ echo $?
+0
+$ ls -A
+'Área de trabalho'   .bashrc      frutas.txt   Música     Vídeos
+ .bak                Documentos   Imagens      .profile
+ .bash_history       Downloads    Modelos      Público</pre>
+<p><strong>O que aconteceu:</strong> o espaço entre <code>frutas.txt</code> e as chaves separou as palavras. <code>{,.bak}</code> sozinho vira só <code>.bak</code> (a opção vazia não gera palavra). O comando ficou <code>cp frutas.txt .bak</code>: uma cópia chamada <code>.bak</code>, um arquivo oculto que o <code>ls</code> comum nem mostra.</p>
+<p><strong>Como resolver:</strong> apague com <code>rm .bak</code> e escreva tudo colado: <code>cp frutas.txt{,.bak}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"não foi possível obter estado de 'frutas.txt{'"</strong>
+<pre class="term">$ cp frutas.txt{ ,.bak}
+cp: não foi possível obter estado de 'frutas.txt{': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> agora o espaço ficou <strong>dentro</strong> das chaves. O Bash cortou a linha ali, as chaves não fecharam e o <code>cp</code> recebeu <code>frutas.txt{</code> como nome. "Obter estado" é a tradução de <em>stat</em>, a consulta que o <code>cp</code> faz ao arquivo de origem.</p>
+<p><strong>Como resolver:</strong> tire o espaço: <code>cp frutas.txt{,.bak}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"cannot create directory … Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ mkdir site/{css,js}
+mkdir: cannot create directory ‘site/css’: Arquivo ou diretório inexistente
+mkdir: cannot create directory ‘site/js’: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> as chaves funcionaram (aparecem dois caminhos), mas a pasta <code>site</code> ainda não existe, e o <code>mkdir</code> só cria o último nível. A mensagem mistura inglês e português porque assim está na tradução do GNU coreutils.</p>
+<p><strong>Como resolver:</strong> use <code>mkdir -p site/{css,js}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A sequência não expandiu: <code>{1..$n}</code> ou <code>{a..zz}</code></strong>
+<p><strong>O que aconteceu:</strong> variáveis dentro da sequência só são trocadas depois que a expansão de chaves já passou; e sequências de letras aceitam uma letra só em cada ponta.</p>
+<p><strong>Como resolver:</strong> para limites em variáveis, use <code>for ((i=1; i&lt;=n; i++))</code> ou <code>$(seq 1 $n)</code>, como na seção acima.</p>
+</div>
+
+<div class="cenario">
+<strong>Funciona no terminal, mas não no script com <code>sh</code></strong>
+<pre class="term">$ sh -c 'echo {1..3}'
+{1..3}</pre>
+<p><strong>O que aconteceu:</strong> a expansão de chaves é do Bash (e do zsh), não do padrão POSIX. Quando você roda <code>sh script.sh</code>, no Debian e no Ubuntu quem roda é o <code>dash</code>, que não conhece chaves. O mesmo acontece se alguém desligou as chaves com <code>set +B</code> (religue com <code>set -B</code>).</p>
+<p><strong>Como resolver:</strong> rode com <code>bash script.sh</code> e comece o script com <code>#!/usr/bin/env bash</code>. Veja <a href="portabilidade.html">POSIX sh e Bashismos</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Chaves numa variável não expandem</strong>
+<pre class="term">$ x={a,b}
+$ echo $x
+{a,b}</pre>
+<p><strong>O que aconteceu:</strong> numa atribuição (<code>nome=valor</code>), o Bash não faz expansão de chaves. E, quando <code>$x</code> é usado depois, a fase das chaves já passou. Por isso o texto fica literal.</p>
+<p><strong>Como resolver:</strong> para guardar várias palavras numa variável, use um <a href="arrays.html">array</a>: <code>x=({a,b})</code> guarda <code>a</code> e <code>b</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td>Lista</td><td><code>{a,b,c}</code></td><td><code>a b c</code></td></tr>
+<tr><td>Prefixo e sufixo</td><td><code>foto{1,2}.jpg</code></td><td><code>foto1.jpg foto2.jpg</code></td></tr>
+<tr><td>Opção vazia</td><td><code>arq{,.bak}</code></td><td><code>arq arq.bak</code></td></tr>
+<tr><td>Sequência</td><td><code>{1..5}</code></td><td><code>1 2 3 4 5</code></td></tr>
+<tr><td>Decrescente</td><td><code>{5..1}</code></td><td><code>5 4 3 2 1</code></td></tr>
+<tr><td>Com zeros <span class="versao">4.0+</span></td><td><code>{01..10}</code></td><td><code>01 02 … 10</code></td></tr>
+<tr><td>Letras</td><td><code>{a..e}</code></td><td><code>a b c d e</code></td></tr>
+<tr><td>Com passo <span class="versao">4.0+</span></td><td><code>{1..10..2}</code></td><td><code>1 3 5 7 9</code></td></tr>
+<tr><td>Combinações</td><td><code>{1..2}{a,b}</code></td><td><code>1a 1b 2a 2b</code></td></tr>
+<tr><td>Aninhadas</td><td><code>{a,b/{c,d}}</code></td><td><code>a b/c b/d</code></td></tr>
+<tr><td>Desligar</td><td><code>"{a,b}"</code>, <code>\{a,b\}</code>, <code>set +B</code></td><td><code>{a,b}</code> literal</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Backup sem repetir o nome</h3>
+<p>Complete para copiar <code>alunos.csv</code> para <code>alunos.csv.bak</code>, digitando o nome uma vez só:</p>
+<div class="ex-code">cp alunos.csv<input data-answer="{,.bak}" aria-label="chaves"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Doze meses numerados</h3>
+<p>Complete para criar as pastas <code>mes01</code> até <code>mes12</code>:</p>
+<div class="ex-code">mkdir mes<input data-answer="{01..12}" aria-label="sequência"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Só os ímpares</h3>
+<p>Complete para o <code>echo</code> mostrar <code>1 3 5 7 9</code>:</p>
+<div class="ex-code">echo <input data-answer="{1..9..2}|{1..10..2}" aria-label="sequência com passo"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Qual é a saída de <code>echo {a,b}{1,2}</code>?</p>
+<label><input type="radio" name="q4"> <code>a b 1 2</code></label>
+<label><input type="radio" name="q4"> <code>a1 b2</code></label>
+<label><input type="radio" name="q4"> <code>a1 a2 b1 b2</code></label>
+<label><input type="radio" name="q4"> <code>{a,b}{1,2}</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Com <code>n=3</code>, o que <code>echo {1..$n}</code> mostra?</p>
+<label><input type="radio" name="q5"> <code>1 2 3</code></label>
+<label><input type="radio" name="q5"> <code>{1..3}</code></label>
+<label><input type="radio" name="q5"> <code>{1..$n}</code></label>
+<label><input type="radio" name="q5"> Uma mensagem de erro.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. A pasta está vazia. O que acontece com <code>touch relatorio{1..3}.txt</code>?</p>
+<label><input type="radio" name="q6"> Dá erro, porque os arquivos não existem.</label>
+<label><input type="radio" name="q6"> Cria um arquivo chamado <code>relatorio{1..3}.txt</code>.</label>
+<label><input type="radio" name="q6"> O <code>touch</code> entende as chaves e cria os arquivos.</label>
+<label><input type="radio" name="q6"> O Bash gera três nomes e o <code>touch</code> cria os três arquivos.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>As chaves geram palavras: <code>{a,b,c}</code> (lista), <code>{1..10}</code> (sequência), <code>{01..10}</code> (com zeros), <code>{a..e}</code> (letras), <code>{1..10..2}</code> (passo).</li>
+  <li>Quem expande é o Bash, antes de o comando rodar. Teste sempre com <code>echo</code>.</li>
+  <li>Sem espaços dentro das chaves, nem entre elas e o resto da palavra.</li>
+  <li><code>cp arq{,.bak}</code> faz backup; <code>mkdir -p projeto/{src,doc,teste}</code> monta uma estrutura.</li>
+  <li>Chaves vêm antes das variáveis: <code>{1..$n}</code> não funciona; use <code>for ((i=1; i&lt;=n; i++))</code> ou <code>seq</code>.</li>
+  <li>Chaves geram nomes que não precisam existir; curingas procuram nomes que existem.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
