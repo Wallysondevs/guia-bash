@@ -25,22 +25,30 @@
    O escalonador alterna os processos de um pipeline (yes | head -1).
 
    LIMITAÇÕES CONHECIDAS (diferenças em relação ao Bash 5.3 real):
-   - Não há rede, pacotes, editores, cron/systemd; tput só com
-     valores fixos; less/more mostram tudo de uma vez.
-   - Jobs em segundo plano rodam no relógio virtual: a saída de
-     "(sleep 2; echo x) &" aparece quando o relógio avança (sleep,
-     wait ou um novo comando), não em tempo real.
-   - Sinais: só TERM/INT/KILL/HUP/USR1/USR2 têm efeito; não há
-     SIGCHLD/SIGWINCH; Ctrl+Z (suspender) não existe.
-   - A ordem de saída entre stdout e stderr de processos paralelos
-     e de >( ) pode diferir da real (no Bash real ela também varia).
-   - awk é um subconjunto do mawk; sed, grep, find, sort e date
-     cobrem as opções usadas no guia (veja a seção 4 do CONTRIBUINDO).
-   - Arquivos binários (fotos, .iso…) são "cheios de zeros", como os
-     do laboratório; file/od mostram o básico.
-   - $$, $!, PIDs e inodes são fictícios (no laboratório variam).
-   - A ordem dos nomes com pontuação em ls/curingas segue o Intl
+   - Não há rede, pacotes, editores, cron/systemd, man/info, tar/gzip,
+     shellcheck, gawk; tput só com valores fixos; less/more mostram tudo
+     de uma vez. Para eles, uma mensagem "(simulador) …" (nunca uma
+     saída inventada).
+   - Relógio fixo: 15/10/2026 10:30 (-03). sleep, timeout e wait avançam
+     um relógio virtual; jobs em segundo plano andam nesse relógio (a
+     saída de "(sleep 2; echo x) &" aparece quando o relógio avança).
+   - PIDs ($$ = 3001; filhos 3100, 3101…), inodes e números do df/free/ps
+     são fictícios. Sinais: TERM, INT, KILL, HUP, USR1, USR2 e PIPE;
+     não há SIGCHLD/SIGWINCH nem Ctrl+Z (suspender).
+   - A ordem de saída entre processos paralelos e de >( ) pode diferir da
+     real (no Bash real ela também varia de uma execução para outra).
+   - find, du e grep -r usam a ordem do disco do laboratório para os
+     arquivos iniciais; arquivos novos saem na ordem de criação (ext4) ou
+     na ordem inversa (/tmp, tmpfs).
+   - awk é o mawk 1.3.4 sem as extensões raras (-W dump, srand
+     reprodutível igual ao real); sed, grep, sort, date e find cobrem as
+     opções usadas no guia; "sh" imita o dash só no básico (echo, [[,
+     arrays, mensagens "x: not found" e "Syntax error").
+   - Arquivos binários (fotos, .iso…) são cheios de zeros, como os do
+     laboratório; "file" e "od" mostram o básico.
+   - A ordem de nomes com pontuação (ls, curingas, sort) segue o Intl
      (ICU) em pt-BR, que quase sempre coincide com a glibc.
+   - O "help NOME" vem de assets/bashsim-ajuda.js, carregado sob demanda.
    ===================================================================== */
 (function (global) {
   "use strict";
@@ -286,7 +294,7 @@
     var n = 2; for (var k in no.c) if (no.c[k].t === "d") n++; return n;
   }
 
-  function precisaAspasLs(n) { return /[\s'"$`\\!*?&;|<>(){}\[\]#~=^]/.test(n) || n === ""; }
+  function precisaAspasLs(n) { return /[\s'"$`\\!*?&;|<>()\[=^]|^[#~]/.test(n) || n === "" || /[\x00-\x1f\x7f]/.test(n); }
   function aspasLs(n) { // estilo shell-escape do ls/stat do coreutils
     if (!/[\x00-\x1f\x7f]/.test(n)) return n.indexOf("'") === -1 ? "'" + n + "'" : '"' + n.replace(/(["\\$`])/g, "\\$1") + '"';
     return "'" + n.replace(/'/g, "'\\''").replace(/[\x00-\x1f\x7f]/g, function (c) { var m = { "\n": "n", "\t": "t" }[c]; return "'$'\\" + (m || ("0" + c.charCodeAt(0).toString(8)).slice(-3)) + "''"; }) + "'";
@@ -930,6 +938,7 @@
       if (n === "x" && (m = /^[0-9a-fA-F]{1,2}/.exec(s.slice(i + 1)))) { r += String.fromCharCode(parseInt(m[0], 16)); i += m[0].length; continue; }
       if ((n === "u" || n === "U") && (m = (n === "u" ? /^[0-9a-fA-F]{1,4}/ : /^[0-9a-fA-F]{1,8}/).exec(s.slice(i + 1)))) { r += String.fromCodePoint(parseInt(m[0], 16)); i += m[0].length; continue; }
       if (modoEcho && n === "0") { m = /^[0-7]{0,3}/.exec(s.slice(i + 1)); r += String.fromCharCode(parseInt(m[0] || "0", 8) & 255); i += m[0].length; continue; }
+      if (modoEcho === "b" && /[1-7]/.test(n)) { m = /^[0-7]{1,3}/.exec(s.slice(i)); r += String.fromCharCode(parseInt(m[0], 8) & 255); i += m[0].length - 1; continue; }
       if (!modoEcho && /[0-7]/.test(n)) { m = /^[0-7]{1,3}/.exec(s.slice(i)); r += String.fromCharCode(parseInt(m[0], 8) & 255); i += m[0].length - 1; continue; }
       if (n === "c" && !modoEcho && i + 1 < s.length) { r += String.fromCharCode(s.charCodeAt(++i) & 31); continue; }
       r += "\\" + n;
@@ -1013,7 +1022,7 @@
     c = s[this.i];
     if (c === "}") { this.i++; v.raw = s.slice(ini, this.i); return v; }
     if (v.ind && (v.name === "@" || v.name === "*") === false && (c === "*" || c === "@") && s[this.i + 1] === "}") { v.prefixo = c; this.i += 2; v.raw = s.slice(ini, this.i); return v; }
-    var ops = [":-", ":=", ":?", ":+", "-", "=", "?", "+", "##", "#", "%%", "%", "//", "/#", "/%", "/", "^^", "^", ",,", ",", "@", ":"];
+    var ops = [":-", ":=", ":?", ":+", "-", "=", "?", "+", "##", "#", "%%", "%", "//", "/#", "/%", "/", "^^", "^", ",,", ",", "~~", "~", "@", ":"];
     var op = null;
     for (var k = 0; k < ops.length; k++) if (s.substr(this.i, ops[k].length) === ops[k]) { op = ops[k]; break; }
     if (!op || (v.len && op !== null)) {
@@ -1705,6 +1714,7 @@
     this.ler();
     if (this.tok === "EOF") return 0;
     var v = this.virgula(true);
+    if (this.tok === "BAD") this.erro("erro de sintaxe aritmética: operador aritmético inválido");
     if (this.tok !== "EOF") this.erro("erro de sintaxe aritmética na expressão");
     return v;
   };
@@ -2317,7 +2327,7 @@
     if (opt.idx != null) {
       if (v.v instanceof Map) {
         var key = opt.idxStr ? String(opt.idx) : String(opt.idx);
-        if (key === "" ) { this.erro(nome + "[" + key + "]: subscrito de array incorreto"); return false; }
+        if (key === "" ) { this.erro(nome + "[" + (opt.idxRaw !== undefined ? opt.idxRaw : key) + "]: subscrito de array incorreto"); return false; }
         v.v.set(key, (opt.add && v.v.has(key) ? v.v.get(key) : "") + valor);
       } else {
         if (!Array.isArray(v.v)) v.v = v.v === undefined ? [] : [v.v];
@@ -2845,12 +2855,12 @@
       itens = itens.map(function (s) { return substituirPadrao(s, pat2, op, repSegs, usaAmp, ext); });
       return lista ? this.segsLista(itens, estrela, dq) : this.segsVal(itens[0], dq);
     }
-    if (op === "^" || op === "^^" || op === "," || op === ",,") {
+    if (op === "^" || op === "^^" || op === "," || op === ",," || op === "~" || op === "~~") {
       var pat3 = v.arg && v.arg.p.length ? yield* this.padraoDe(v.arg) : "?";
       itens = itens.map(function (s) {
         var cs = Array.from(s);
         for (var k = 0; k < cs.length; k++) {
-          if (casaPadrao(pat3, cs[k], { ext: ext })) cs[k] = op[0] === "^" ? cs[k].toUpperCase() : cs[k].toLowerCase();
+          if (casaPadrao(pat3, cs[k], { ext: ext })) cs[k] = op[0] === "^" ? cs[k].toUpperCase() : op[0] === "," ? cs[k].toLowerCase() : (cs[k] === cs[k].toUpperCase() ? cs[k].toLowerCase() : cs[k].toUpperCase());
           if (op.length === 1) break;
         }
         return cs.join("");
@@ -3430,6 +3440,8 @@
       return st;
     }, { bg: true, nome: nomeCmd(ao.p[0].cmds[0] || {}) });
     this.ultimoBg = proc.pid;
+    var selfB = this;
+    proc.onFim = function (pr) { (selfB.bgStatus = selfB.bgStatus || {})[pr.pid] = pr.status; };
     var job = { n: this.proxJob++, procs: [proc], txt: txt, pgid: proc.pid, avisado: false };
     this.jobs.push(job);
     this.jobAtual(job);
@@ -3976,7 +3988,7 @@
     if (a.idx) {
       var vr = this.acharVar(this.resolverRef(nome));
       var chave;
-      if (vr && vr.v instanceof Map) chave = this.expSync(a.idx);
+      if (vr && vr.v instanceof Map) { chave = this.expSync(a.idx); if (chave === "") { this.erro(nome + "[" + a.idxRaw + "]: subscrito de array incorreto"); return false; } }
       else { var e = this.expSync(a.idx); var r = this.aritmeticaSegura(e === "" ? "0" : e); if (r === null) return false; chave = Number(r); if (chave < 0) { var len = vr && Array.isArray(vr.v) ? vr.v.length : (vr && vr.v !== undefined ? 1 : 0); chave = len + chave; if (chave < 0) { this.erro(nome + "[" + a.idxRaw + "]: subscrito de array incorreto"); return false; } } }
       return this.atribuir(nome, v, { idx: chave, add: a.add, local: opt.local, global: opt.global });
     }
@@ -4067,6 +4079,7 @@
     else {
       if (nome === "") { this.erro(": comando não encontrado"); return 127; }
       caminho = this.hash[nome] ? this.hash[nome].path : this.acharNoPath(nome);
+      if (!caminho && this.valor("PATH") === null) { this.erro(nome + ": Arquivo ou diretório inexistente"); return 127; }
       if (!caminho) {
         var semX = this.acharNoPath(nome, true);
         if (semX) { this.erro(semX + ": Permissão negada"); return 126; }
@@ -4204,7 +4217,8 @@
     } finally {
       var i = this.pilhaLocal.lastIndexOf(escopo); if (i >= 0) this.pilhaLocal.splice(i, 1);
       this.pos = posVelho; this.loopNivel = loopVelho;
-      this.funcStack.pop();
+      var qf = this.funcStack.pop();
+      if (qf && qf.opcoesSalvas) this.o = qf.opcoesSalvas;
       this.lnBase = lnSalvo;
     }
     this.status = st;
@@ -4485,7 +4499,7 @@
         switch (conv) {
           case "s": case "b": case "q": case "Q": {
             usouArg = true; a = prox(); if (a === undefined) a = "";
-            if (conv === "b") { var r = decodificarAnsi(a, true); a = r.s; if (r.parar) { parar = true; } }
+            if (conv === "b") { var r = decodificarAnsi(a, "b"); a = r.s; if (r.parar) { parar = true; } }
             if (conv === "q") a = citarPrintfQ(a);
             if (conv === "Q") a = citarPrintfQ(prec !== null ? cortarBytes(a, prec) : a);
             if (prec !== null && conv !== "Q") a = cortarBytes(a, prec);
@@ -4825,7 +4839,11 @@
       }
     }
     var nomes = [];
-    for (; i < args.length; i++) nomes.push({ txt: args[i], d: opt.decl ? opt.decl[i] : null });
+    for (; i < args.length; i++) {
+      if (cmd === "local" && args[i] === "-" && this.funcStack.length) { var qd = this.funcStack[this.funcStack.length - 1]; if (!qd.opcoesSalvas) { qd.opcoesSalvas = {}; for (var ko in this.o) qd.opcoesSalvas[ko] = this.o[ko]; } continue; }
+      nomes.push({ txt: args[i], d: opt.decl ? opt.decl[i] : null });
+    }
+    if (cmd === "local" && !nomes.length && args.indexOf("-") > 0) return 0;
     var local = cmd === "local" || (this.pilhaLocal.filter(function (e) { return !e.__temp; }).length > 0 && !flags.g && (cmd === "declare" || cmd === "typeset"));
     if (cmd === "local" && !this.funcStack.length) { this.erro("local: somente pode ser usado em uma função"); return 1; }
     // listar
@@ -5574,7 +5592,8 @@
         var pid = +a[i], p = null;
         this.jobs.forEach(function (jj) { jj.procs.forEach(function (x) { if (x.pid === pid) p = x; }); });
         if (!p) { var pp = this.k.acharProc(pid); if (pp && pp.procSubst) p = pp; }
-        if (!p) { this.erro("wait: pid " + pid + " não é um filho deste shell"); st = 127; continue; }
+        if (!p && this.bgStatus && hasOwn(this.bgStatus, pid)) { st = this.bgStatus[pid]; continue; }
+        if (!p) { this.erro("wait: o pid " + pid + " não é um processo filho deste shell"); st = 127; continue; }
         procs = [p];
       }
       yield { t: "block", cond: function () { return procs.every(function (x) { return x.done; }); } };
@@ -5710,7 +5729,7 @@
     }
     var pref = a[i] || "", res = [];
     tipos.forEach(function (t) {
-      if (t === "a") res = res.concat(Object.keys(self.aliases));
+      if (t === "a") res = res.concat(Object.keys(self.aliases).sort(cmpBytes));
       if (t === "b") res = res.concat(Object.keys(BUILTINS).sort(cmpBytes));
       if (t === "k") res = res.concat(PALAVRAS_CHAVE);
       if (t === "f") res = res.concat(Object.keys(self.funcs));
@@ -5735,8 +5754,9 @@
     raiz.completes = raiz.completes || {};
     if (args.length === 1 || args[1] === "-p") {
       var ks = args.length > 2 ? args.slice(2) : Object.keys(raiz.completes).sort();
-      ks.forEach(function (k) { if (raiz.completes[k]) self.escrever(1, "complete " + raiz.completes[k] + " " + k + "\n"); });
-      return 0;
+      var stc = 0;
+      ks.forEach(function (k) { if (raiz.completes[k]) self.escrever(1, "complete " + raiz.completes[k] + " " + k + "\n"); else { self.erro("complete: " + k + ": nenhuma especificação de completação"); stc = 1; } });
+      return stc;
     }
     if (args[1] === "-r") { if (args.length > 2) args.slice(2).forEach(function (k) { delete raiz.completes[k]; }); else raiz.completes = {}; return 0; }
     var nome = args[args.length - 1];
@@ -5746,7 +5766,7 @@
   B("compopt", function* () { return 0; });
   ["ulimit", "suspend", "bind", "coproc"].forEach(function (n) {
     B(n, function* (args) {
-      if (n === "ulimit") { if (args.length === 1 || args[1] === "-f") { this.escrever(1, "unlimited\n"); return 0; } if (args[1] === "-n") { this.escrever(1, "1024\n"); return 0; } if (args[1] === "-a") { this.escrever(1, "real-time non-blocking time  (microseconds, -R) unlimited\ncore file size              (blocks, -c) 0\ndata seg size               (kbytes, -d) unlimited\nfile size                   (blocks, -f) unlimited\nopen files                          (-n) 1024\nstack size                  (kbytes, -s) 8192\ncpu time                   (seconds, -t) unlimited\nmax user processes                  (-u) 63432\n"); return 0; } }
+      if (n === "ulimit") { if (args.length === 1 || args[1] === "-f") { this.escrever(1, "unlimited\n"); return 0; } if (args[1] === "-n") { this.escrever(1, "524288\n"); return 0; } if (args[1] === "-a") { this.escrever(1, "real-time non-blocking time  (microseconds, -R) unlimited\ncore file size              (blocks, -c) 0\ndata seg size               (kbytes, -d) unlimited\nfile size                   (blocks, -f) unlimited\nopen files                          (-n) 1024\nstack size                  (kbytes, -s) 8192\ncpu time                   (seconds, -t) unlimited\nmax user processes                  (-u) 63432\n"); return 0; } }
       this.escrever(2, "(simulador) " + n + " não funciona neste simulador. Experimente no terminal de verdade.\n");
       return 1;
     });
@@ -6175,8 +6195,8 @@
     }
     return x.length - y.length;
   }
-  function tabular(de, ate) { var s = ""; while (ate > de) { if (Math.floor(ate / 8) > Math.floor((de + 1) / 8)) { s += "\t"; de += 8 - de % 8; } else { s += " "; de++; } } return s; }
-  function colunasLs(itens, larguraTela, horizontal) {
+  function tabular(de, ate, semTab) { if (semTab) return repete(" ", ate - de); var s = ""; while (ate > de) { if (Math.floor(ate / 8) > Math.floor((de + 1) / 8)) { s += "\t"; de += 8 - de % 8; } else { s += " "; de++; } } return s; }
+  function colunasLs(itens, larguraTela, horizontal, semTab) {
     // itens: [{txt, w}]
     var n = itens.length;
     if (!n) return [];
@@ -6203,7 +6223,7 @@
         if (ix >= n) break;
         var prox = horizontal ? ix + 1 : ix + rws;
         s += itens[ix].txt;
-        if (prox < n && (horizontal ? cc < melhor - 1 : true)) { var alvo = pos + melhorLarg[cc]; s += tabular(pos + itens[ix].w, alvo); pos = alvo; }
+        if (prox < n && (horizontal ? cc < melhor - 1 : true)) { var alvo = pos + melhorLarg[cc]; s += tabular(pos + itens[ix].w, alvo, semTab); pos = alvo; }
       }
       linhas.push(s);
     }
@@ -6332,7 +6352,7 @@
       }
       if (umPor) return fmt.map(function (f) { return f.txt; });
       var larg = parseInt(o.w || sh.valor("COLUMNS") || "80", 10) || 80;
-      return colunasLs(fmt, larg, !!o.x);
+      return colunasLs(fmt, larg, !!o.x, usaCor);
     }
     function total(l) { var t = 0; l.forEach(function (it) { t += blocos(it.no); }); return o.h || o.si ? (t === 0 ? "0" : humano(t * 1024, o.si)) : String(t); }
     var saida = [];
@@ -7912,7 +7932,7 @@
   SP.listaProcessos = function (extra) {
     var k = this.k, l = k.sistema.map(function (p) { return { pid: p.pid, ppid: p.ppid, u: p.u, tty: p.tty, cmd: p.cmd, comm: p.comm, stat: p.stat, start: p.start }; });
     if (!k.acharProc(3001)) l.push({ pid: 3001, ppid: 2950, u: UID, tty: "pts/0", cmd: "bash", comm: "bash", stat: "Ss", start: "10:10" });
-    k.procs.forEach(function (p) { if (p.done) return; l.push({ pid: p.pid, ppid: p.ppid === 1 ? 3001 : p.ppid, u: UID, tty: "pts/0", cmd: p.cmdline || p.nome, comm: p.nome, stat: p.pid === 3001 ? "Ss" : (p.state === "sleep" ? "S" : "S+"), start: "10:30" }); });
+    k.procs.forEach(function (p) { if (p.done) return; l.push({ pid: p.pid, ppid: p.pid === 3001 ? 2950 : (p.ppid === 1 ? 3001 : p.ppid), u: UID, tty: "pts/0", cmd: p.cmdline || p.nome, comm: p.nome, stat: p.pid === 3001 ? "Ss" : (p.state === "sleep" ? "S" : "S+"), start: "10:30" }); });
     if (extra) l.push(extra);
     var vistos = {};
     l = l.filter(function (p) { if (vistos[p.pid]) return false; vistos[p.pid] = 1; return true; });
@@ -7954,7 +7974,8 @@
     else if (o.a && o.x || o.x) cols = ["pid", "tty", "stat", "time", "command"];
     else cols = ["pid", "tty", "time", "cmd"];
     var CAB = { pid: "PID", ppid: "PPID", tty: "TTY", time: "TIME", cmd: "CMD", command: "COMMAND", comm: "COMMAND", user: "USER", uid: "UID", "%cpu": "%CPU", "%mem": "%MEM", vsz: "VSZ", rss: "RSS", stat: "STAT", start: "START", stime: "STIME", c: "C", args: "COMMAND", etime: "ELAPSED", ni: "NI", pri: "PRI" };
-    var DIR = { pid: 1, ppid: 1, "%cpu": 1, "%mem": 1, vsz: 1, rss: 1, c: 1, etime: 1, ni: 1, pri: 1 };
+    var DIR = { pid: 1, ppid: 1, "%cpu": 1, "%mem": 1, vsz: 1, rss: 1, c: 1, etime: 1, ni: 1, pri: 1, time: 1 };
+    var LARG = { pid: 7, ppid: 7, tty: 8, time: o.u ? 6 : 8, user: 8, uid: 8, "%cpu": 4, "%mem": 4, vsz: 6, rss: 5, stat: 4, start: 5, c: 2, stime: 5 };
     var nomeCols = cols.map(function (c) { var m = /^([^=]+)(?:=(.*))?$/.exec(c); return { k: m[1].toLowerCase(), cab: m[2] !== undefined ? m[2] : (CAB[m[1].toLowerCase()] || m[1].toUpperCase()) }; });
     function val(p, k) {
       switch (k) {
@@ -7968,7 +7989,7 @@
       return "-";
     }
     var tab = lista.map(function (p) { return nomeCols.map(function (c) { return val(p, c.k); }); });
-    var w = nomeCols.map(function (c, i) { var m = largura(c.cab); tab.forEach(function (r) { m = Math.max(m, largura(r[i])); }); if (c.k === "pid" || c.k === "ppid") m = Math.max(m, 7); if (c.k === "tty") m = Math.max(m, 8); if (c.k === "user" || c.k === "uid") m = Math.max(m, 8); return m; });
+    var w = nomeCols.map(function (c, i) { var m = largura(c.cab); tab.forEach(function (r) { m = Math.max(m, largura(r[i])); }); return Math.max(m, LARG[c.k] || 0); });
     function linha(r) { return r.map(function (v, i) { var c = nomeCols[i].k; if (i === r.length - 1) return v; return DIR[c] ? pad(v, w[i]) : pad(v, w[i], true); }).join(" "); }
     var out = (o.semCab || cols.every(function (c) { return /=$/.test(c); }) ? "" : linha(nomeCols.map(function (c) { return c.cab; })) + "\n") + tab.map(linha).join("\n") + (tab.length ? "\n" : "");
     io.out(out);
@@ -10638,7 +10659,7 @@
     if (this.main && this.main.done) {
       if (this.encerrado || (this.main.status !== null && this.main.porSinal === undefined && sh.saiu)) { }
     }
-    var linhas = sh.limparJobs(true);
+    var linhas = sh.limparJobs(!!sh.o.monitor);
     linhas.forEach(function (l) { k.saida("err", l + "\n"); });
     sh.lineno += this._linhas || 1;
     this.main = null;

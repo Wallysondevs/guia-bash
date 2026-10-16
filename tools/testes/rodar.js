@@ -110,7 +110,8 @@ function rodarSim(c) {
 
 // normalizações que não são diferenças reais (PIDs, horários do relógio de verdade…)
 function normalizar(s) {
-  return s.replace(/\r/g, "");
+  // PIDs de jobs ("[1] 12345") variam no Bash real
+  return s.replace(/\r/g, "").replace(/^\[(\d+)\] \d+$/gm, "[$1] PID");
 }
 
 function diff(a, b) {
