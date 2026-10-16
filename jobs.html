@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Jobs — &amp;, jobs, fg, bg, wait, disown e nohup | Guia Bash</title>
+<meta name="description" content="Rode comandos em segundo plano no Bash: &amp;, $!, jobs, fg, bg, Ctrl+Z, wait, kill %1, disown, nohup e o que acontece com os jobs quando você fecha o terminal. Saídas reais do Bash 5.3.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Jobs</span></h1>
+
+<p class="intro">Um <strong>job</strong> (em inglês, "trabalho", "tarefa") é um comando que o Bash está acompanhando para você. Com um <code>&amp;</code> no fim da linha, o comando roda <strong>em segundo plano</strong> e o terminal fica livre na hora. Com <code>Ctrl+Z</code>, <code>bg</code> e <code>fg</code> você pausa, solta e traz de volta comandos demorados. E, num script, o <code>wait</code> espera essas tarefas terminarem.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre primeiro plano e segundo plano, e o que o <code>&amp;</code> faz.</li>
+  <li>Ler a lista de <code>jobs</code> (o <code>+</code>, o <code>-</code>, "Executando", "Parado", "Concluído").</li>
+  <li>Pausar com <code>Ctrl+Z</code>, continuar com <code>bg</code>/<code>fg</code> e apontar jobs com <code>%1</code>, <code>%%</code>, <code>%-</code>, <code>%nome</code>.</li>
+  <li>Esperar tarefas num script com <code>wait</code>, <code>wait PID</code> e <code>wait -n</code>, pegando o código de saída de cada uma.</li>
+  <li>O que acontece quando você fecha o terminal, e como <code>disown</code> e <code>nohup</code> mantêm um comando vivo.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Primeiro plano e segundo plano</h2>
+<p>Pense numa cozinha. Você põe o feijão na panela de pressão e, <strong>enquanto ele cozinha</strong>, corta a salada. Você não fica parado olhando para a panela. Mas, de vez em quando, precisa saber se o feijão já ficou pronto.</p>
+<p>No terminal é igual. Normalmente o Bash roda um comando em <strong>primeiro plano</strong> (<em>foreground</em>): ele espera o comando terminar antes de mostrar o prompt de novo. Se o comando demora (conferir uma ISO de 6 GB, compactar uma pasta, um backup), você fica de mãos atadas. Em <strong>segundo plano</strong> (<em>background</em>), o comando trabalha sozinho e o prompt volta na hora.</p>
+
+<pre class="syntax">                     Ctrl+Z                       bg
+  ┌──────────────┐  ───────►  ┌──────────┐  ───────────►  ┌──────────────┐
+  │ 1º plano     │            │  Parado  │                │ 2º plano     │
+  │ (ocupa o     │  ◄───────  │ (pausado)│  ◄───────────  │ (terminal    │
+  │  terminal)   │    fg      └──────────┘    kill -STOP  │  livre)      │
+  └──────────────┘                                        └──────────────┘
+         ▲                         fg                            │
+         └───────────────────────────────────────────────────────┘
+  comando           → começa no 1º plano
+  comando &amp;         → começa direto no 2º plano</pre>
+
+<p>Cada comando que o Bash acompanha desse jeito ganha um <strong>número de job</strong> (1, 2, 3…), que vale só neste terminal, e tem também o <strong>PID</strong> (o número do processo no sistema inteiro, visto em <a href="glossario.html">glossário</a>).</p>
+
+<hr>
+
+<h2>Mandar para o segundo plano: <code>&amp;</code></h2>
+<p>A Ana baixou a ISO do Ubuntu e quer conferir o <em>checksum</em> (uma "impressão digital" do arquivo). O <code>sha256sum</code> leva uns 20 segundos nesse arquivo. Em vez de esperar, ela coloca um <code>&amp;</code> no fim:</p>
+
+<dl class="anatomy">
+  <dt>sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso</dt><dd>O comando demorado: calcula a impressão digital da ISO.</dd>
+  <dt>&gt; iso.sha256</dt><dd>Guarda o resultado num arquivo, para a resposta não "pular" no meio da tela depois.</dd>
+  <dt>&amp;</dt><dd>"Rode em segundo plano." O <code>&amp;</code> vai no <strong>fim</strong> do comando, depois dos redirecionamentos. Ele também separa comandos, como o <code>;</code>, só que sem esperar.</dd>
+</dl>
+
+<pre class="term">$ sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso &gt; iso.sha256 &amp;
+[1] 34797                          « job número 1, PID 34797
+$ ls Documentos                    « o prompt voltou na hora: dá para continuar
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+$ jobs
+[1]+  Executando                 sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso &gt; iso.sha256 &amp;
+$                                  « 20 segundos depois, a Ana tecla Enter…
+[1]+  Concluído                 sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso &gt; iso.sha256
+$ cat iso.sha256
+b924010460ad8ba24b4e1ca1427504ee4b0f004b4425345c8b6205097886c47f  Downloads/ubuntu-26.04-desktop-amd64.iso</pre>
+
+<p>Linha por linha:</p>
+<ul>
+  <li><code>[1] 34797</code>: o Bash avisa que criou o <strong>job 1</strong> e que o processo tem o <strong>PID 34797</strong>. O PID muda a cada vez; o número do job começa em 1 de novo quando não há outros jobs.</li>
+  <li>O <code>ls</code> rodou normalmente enquanto o <code>sha256sum</code> trabalhava.</li>
+  <li><code>jobs</code> lista o que está em andamento: o job 1 está <strong>Executando</strong>.</li>
+  <li><code>[1]+  Concluído …</code>: quando o job termina, o Bash <strong>não interrompe</strong> o que você está digitando. Ele espera o próximo prompt para avisar. Por isso a Ana só viu o aviso depois de teclar Enter.</li>
+</ul>
+
+<p>E o código de saída? Logo depois do <code>&amp;</code>, o <code>$?</code> é sempre <strong>0</strong>: ele diz só que o Bash conseguiu <em>disparar</em> o job, e não se o comando deu certo. Se o job terminar com erro, o aviso muda (veja abaixo) e, num script, você pega o código com <code>wait</code>.</p>
+
+<pre class="term">$ ls pasta-que-nao-existe &amp;
+[1] 41184
+$ ls: não foi possível acessar 'pasta-que-nao-existe': Arquivo ou diretório inexistente
+echo $?
+0                                  « 0 = o job foi disparado (não diz se deu certo)
+[1]+  Fim da execução com status 2   ls --color=auto pasta-que-nao-existe   « o resultado de verdade</pre>
+
+<p>(O <code>--color=auto</code> apareceu porque, na máquina da Ana, <code>ls</code> é um <a href="alias.html">alias</a>: o aviso mostra o comando já com o alias trocado.)</p>
+
+<p>Repare na mensagem do <code>ls</code> "colada" no prompt: um job em segundo plano continua escrevendo <strong>na mesma tela</strong>. Ele não tem uma janela só dele. Os avisos de fim que você pode ver são:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Aviso</th><th>Significa</th></tr>
+<tr><td><code>[1]+  Concluído        cmd</code></td><td>Terminou com código 0 (deu certo). Em inglês o Bash diz <em>Done</em>.</td></tr>
+<tr><td><code>[1]+  Fim da execução com status 2   cmd</code></td><td>Terminou com o código 2 (erro). Em inglês, <em>Exit 2</em>.</td></tr>
+<tr><td><code>[1]+  Terminado        cmd</code></td><td>Foi encerrado por um sinal <code>TERM</code> (por exemplo, um <code>kill</code>).</td></tr>
+<tr><td><code>[1]+  Parado           cmd</code></td><td>Está pausado (<code>Ctrl+Z</code>), esperando um <code>bg</code> ou <code>fg</code>.</td></tr>
+</table>
+</div>
+
+<h3>O PID do último job: <code>$!</code></h3>
+<p>A variável especial <code>$!</code> guarda o PID do último comando mandado para o segundo plano. O <code>!</code> lembra "o que acabou de sair". Ela é a ponte para o <code>kill</code> e para o <code>wait</code> em scripts.</p>
+
+<pre class="term">$ sleep 300 &amp;
+[1] 33779
+$ echo "O PID do último job é $!"
+O PID do último job é 33779
+$ kill %1
+$
+[1]+  Terminado                  sleep 300</pre>
+
+<p>O <code>sleep 300</code> só "dorme" 300 segundos. Ele é ótimo para treinar, porque não faz nada além de demorar.</p>
+
+<div class="try" data-goal="ran:sleep 500 *&amp;,var:pid,ran:^jobs -l" data-solucao="sleep 500 &amp;;;pid=$!;;jobs -l">
+<p class="try-task"><strong>Missão:</strong> rode <code>sleep 500</code> em segundo plano. Logo em seguida, guarde o PID dele numa variável chamada <code>pid</code> (use <code>$!</code>). Por fim, veja a lista de jobs com os PIDs usando <code>jobs -l</code>.</p>
+</div>
+
+<hr>
+
+<h2>A lista de jobs: <code>jobs</code></h2>
+<p>O comando interno <code>jobs</code> mostra os jobs <strong>deste</strong> terminal. Outro terminal tem a própria lista (para ver todos os processos do sistema, use <code>ps</code>).</p>
+
+<pre class="term">$ sleep 300 &amp;
+[1] 29646
+$ sleep 200 &amp;
+[2] 29669
+$ jobs
+[1]-  Executando                 sleep 300 &amp;
+[2]+  Executando                 sleep 200 &amp;
+$ jobs -l
+[1]- 29646 Executando                 sleep 300 &amp;
+[2]+ 29669 Executando                 sleep 200 &amp;
+$ jobs -p
+29646
+29669</pre>
+
+<dl class="anatomy">
+  <dt>[2]</dt><dd>O número do job. É ele que vai depois do <code>%</code>: <code>%2</code>.</dd>
+  <dt>+</dt><dd>O job <strong>atual</strong>: o que <code>fg</code> e <code>bg</code> usam quando você não diz qual. Normalmente é o último que você mexeu.</dd>
+  <dt>-</dt><dd>O job <strong>anterior</strong>: vira o atual quando o <code>+</code> terminar.</dd>
+  <dt>29669</dt><dd>O PID (só com <code>jobs -l</code>, de <em>long</em>).</dd>
+  <dt>Executando</dt><dd>O estado: Executando, Parado, Concluído, Terminado…</dd>
+  <dt>sleep 200 &amp;</dt><dd>O comando, como você digitou.</dd>
+</dl>
+
+<p><code>jobs -p</code> (de <em>PID</em>) mostra só os PIDs, um por linha. É útil para passar adiante: <code>kill $(jobs -p)</code> encerra todos os jobs do terminal. Quando não há nenhum job, <code>jobs</code> não mostra nada e devolve o código 0.</p>
+
+<hr>
+
+<h2>Pausar e continuar: <code>Ctrl+Z</code>, <code>bg</code> e <code>fg</code></h2>
+<p>E se você esqueceu o <code>&amp;</code>? Não precisa cancelar. Aperte <code>Ctrl+Z</code>: o comando é <strong>pausado</strong> (não morre) e você recebe o prompt de volta. Depois escolha:</p>
+<ul>
+  <li><code>bg</code> (<em>background</em>): continua rodando, em segundo plano.</li>
+  <li><code>fg</code> (<em>foreground</em>): continua rodando, em primeiro plano (ocupando o terminal de novo).</li>
+</ul>
+
+<pre class="term">$ sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso
+^Z                                 « a Ana apertou Ctrl+Z
+[1]+  Parado                     sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso
+$ bg
+[1]+ sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso &amp;   « continua, agora em 2º plano
+$ echo "posso continuar usando o terminal"
+posso continuar usando o terminal
+$
+b924010460ad8ba24b4e1ca1427504ee4b0f004b4425345c8b6205097886c47f  Downloads/ubuntu-26.04-desktop-amd64.iso
+[1]+  Concluído                 sha256sum Downloads/ubuntu-26.04-desktop-amd64.iso</pre>
+
+<ul>
+  <li><code>^Z</code> é como o terminal desenha o <code>Ctrl+Z</code>. Por trás, ele manda o sinal <code>SIGTSTP</code> ("pare, vindo do terminal"); veja <a href="trap.html">trap e sinais</a>.</li>
+  <li><code>bg</code> responde com a linha do job e um <code>&amp;</code> no fim, como se você tivesse digitado o comando com <code>&amp;</code> desde o começo.</li>
+  <li>Desta vez a Ana não redirecionou a saída, então o hash apareceu no meio da tela. No terminal de verdade, ele sai <strong>colado no prompt</strong> (<code>ana@notebook:~$ b9240104…</code>). Não foi você que digitou: é a saída do job. Tecle Enter para ter um prompt limpo.</li>
+</ul>
+
+<p>Agora o caminho de volta. <code>fg</code> traz um job para o primeiro plano e mostra o comando que voltou:</p>
+
+<pre class="term">$ sleep 600
+^Z
+[1]+  Parado                     sleep 600
+$ bg
+[1]+ sleep 600 &amp;
+$ sleep 700 &amp;
+[2] 34013
+$ jobs
+[1]-  Executando                 sleep 600 &amp;
+[2]+  Executando                 sleep 700 &amp;
+$ fg %-                            « traz o job anterior (o 1)
+sleep 600
+^C                                 « no 1º plano, o Ctrl+C encerra
+$ jobs
+[2]+  Executando                 sleep 700 &amp;
+$ kill %%
+$
+[2]+  Terminado                  sleep 700</pre>
+
+<div class="tip">
+<strong>Ctrl+Z × Ctrl+C</strong>
+<p><code>Ctrl+C</code> <strong>encerra</strong> o comando do primeiro plano (sinal <code>SIGINT</code>). <code>Ctrl+Z</code> só <strong>pausa</strong>: o comando continua na memória, com tudo o que já fez, esperando um <code>fg</code> ou <code>bg</code>. Um editor como o <code>nano</code> ou um <code>less</code> pausado com <code>Ctrl+Z</code> volta exatamente onde estava com <code>fg</code>.</p>
+</div>
+
+<h3>Como apontar um job</h3>
+<p>Os comandos <code>fg</code>, <code>bg</code>, <code>kill</code>, <code>wait</code> e <code>disown</code> aceitam uma <strong>especificação de job</strong>, que sempre começa com <code>%</code>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Quer dizer</th><th>Exemplo</th></tr>
+<tr><td><code>%1</code>, <code>%2</code>…</td><td>O job com esse número</td><td><code>fg %2</code></td></tr>
+<tr><td><code>%%</code> ou <code>%+</code></td><td>O job atual (o do <code>+</code>)</td><td><code>kill %%</code></td></tr>
+<tr><td><code>%-</code></td><td>O job anterior (o do <code>-</code>)</td><td><code>fg %-</code></td></tr>
+<tr><td><code>%nome</code></td><td>O job cujo comando <strong>começa</strong> com "nome"</td><td><code>fg %tail</code></td></tr>
+<tr><td><code>%?texto</code></td><td>O job cujo comando <strong>contém</strong> "texto"</td><td><code>fg %?300</code></td></tr>
+<tr><td>(nada)</td><td>O job atual</td><td><code>fg</code></td></tr>
+</table>
+</div>
+
+<p>Sem o <code>%</code>, o <code>kill</code> entende um <strong>PID</strong>: <code>kill 2</code> tentaria matar o processo 2 do sistema, e não o job 2! Já <code>fg 2</code> e <code>bg 2</code> aceitam o número sem <code>%</code>, mas acostume-se a escrever sempre <code>%2</code>.</p>
+
+<pre class="term">$ sleep 300 &amp;
+[1] 30812
+$ tail -f frutas.txt &amp;
+[2] 30819
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana
+$ fg %tail                         « o job cujo comando começa com "tail"
+tail -f frutas.txt
+^C
+$ fg %?300                         « o job cujo comando contém "300"
+sleep 300
+^C</pre>
+
+<p>Se o nome casar com mais de um job, o Bash não adivinha:</p>
+
+<pre class="term">$ kill %sleep
+bash: kill: sleep: especificação de trabalho ambígua</pre>
+
+<hr>
+
+<h2>Encerrar um job: <code>kill %1</code></h2>
+<p>O <code>kill</code> manda um sinal; por padrão, <code>TERM</code> ("termine, por favor"). Com <code>%</code>, ele aceita o número do job. O aviso <code>Terminado</code> só aparece no próximo prompt:</p>
+
+<pre class="term">$ sleep 300 &amp;
+[1] 33779
+$ kill %1
+$
+[1]+  Terminado                  sleep 300</pre>
+
+<p>Um job <strong>parado</strong> não consegue reagir ao <code>TERM</code> enquanto dorme. O <code>kill</code> do Bash percebe isso e o "acorda" (manda também um <code>CONT</code>), então ele termina logo em seguida. Se um programa ignorar o <code>TERM</code>, o último recurso é <code>kill -KILL %1</code> (ou <code>kill -9 %1</code>), que não pode ser ignorado, mas também não deixa o programa salvar nada.</p>
+
+<hr>
+
+<h2>Em scripts: <code>wait</code></h2>
+<p>Num script, o <code>&amp;</code> é a forma de fazer duas coisas ao mesmo tempo. Mas o script precisa saber <strong>quando</strong> as tarefas terminaram, antes de usar o resultado delas. É para isso que serve o <code>wait</code> ("espere").</p>
+
+<pre class="file" data-file="espera.sh">#!/usr/bin/env bash
+echo "Início: $(date +%T)"
+sleep 3 &amp;
+pid1=$!
+sleep 1 &amp;
+pid2=$!
+echo "Disparei $pid1 e $pid2"
+wait
+echo "Fim: $(date +%T)"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>sleep 3 &amp;</code></td><td>Dispara uma tarefa de 3 segundos e segue para a próxima linha sem esperar.</td></tr>
+<tr><td><code>pid1=$!</code></td><td>Guarda o PID dela. Faça isso <strong>logo depois</strong> do <code>&amp;</code>: o próximo <code>&amp;</code> troca o valor de <code>$!</code>.</td></tr>
+<tr><td><code>sleep 1 &amp;</code> / <code>pid2=$!</code></td><td>Dispara a segunda tarefa, que roda <strong>junto</strong> com a primeira.</td></tr>
+<tr><td><code>wait</code></td><td>Sem argumentos: espera <strong>todas</strong> as tarefas em segundo plano deste script terminarem.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash espera.sh
+Início: 10:30:00
+Disparei 31371 e 31372
+Fim: 10:30:03                      « 3 segundos, e não 3 + 1 = 4: as duas rodaram juntas</pre>
+
+<p>Repare: num script não aparece <code>[1] 31371</code> nem "Concluído". Esses avisos são só do terminal interativo (veja "Jobs só no terminal", abaixo).</p>
+
+<h3>Esperar uma tarefa e pegar o código de saída: <code>wait PID</code></h3>
+<p>Com um PID (ou <code>%1</code>), o <code>wait</code> espera só aquela tarefa e <strong>devolve o código de saída dela</strong> em <code>$?</code>. É assim que um script descobre se o trabalho em segundo plano deu certo.</p>
+
+<pre class="file" data-file="codigo.sh">(sleep 1; exit 7) &amp;
+pid=$!
+wait "$pid"
+echo "a tarefa terminou com código $?"
+</pre>
+
+<pre class="term">$ bash codigo.sh
+a tarefa terminou com código 7</pre>
+
+<p>O <code>( … )</code> roda os comandos num <a href="subshell.html">subshell</a>; o <code>exit 7</code> faz essa tarefa terminar com o código 7, só para a gente ver o número chegar. Na vida real, seria o código do <code>sha256sum</code>, do <code>tar</code>, do <code>rsync</code>…</p>
+
+<h3>Esperar a primeira que terminar: <code>wait -n</code> <span class="versao">bash 4.3+</span></h3>
+<p><code>wait -n</code> (de <em>next</em>, "a próxima") espera <strong>qualquer uma</strong> das tarefas terminar e devolve o código dela. Com <code>-p variavel</code> <span class="versao">bash 5.1+</span>, ele também diz <strong>qual</strong> terminou (o PID).</p>
+
+<pre class="file" data-file="primeiro.sh">sleep 3 &amp;
+sleep 1 &amp;
+(sleep 2; exit 4) &amp;
+wait -n
+echo "um terminou: código $?"
+wait -n -p quem
+echo "outro terminou: código $? (PID $quem)"
+wait -n
+echo "último: código $?"
+wait -n
+echo "sem mais tarefas: código $?"
+</pre>
+
+<pre class="term">$ bash primeiro.sh
+um terminou: código 0              « o sleep 1, depois de 1 s
+outro terminou: código 4 (PID 31529)   « a tarefa do exit 4, depois de 2 s
+último: código 0                   « o sleep 3
+sem mais tarefas: código 127       « não sobrou ninguém para esperar</pre>
+
+<p>O <code>wait -n</code> é a base para limitar quantas tarefas rodam ao mesmo tempo, assunto da aula <a href="paralelo.html">Rodar em Paralelo</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Espera</th><th><code>$?</code> depois</th></tr>
+<tr><td><code>wait</code></td><td>Todas as tarefas</td><td>0 (não diz se alguma falhou)</td></tr>
+<tr><td><code>wait "$pid"</code> / <code>wait %1</code></td><td>Só aquela</td><td>O código dela; 127 se não for filha deste shell</td></tr>
+<tr><td><code>wait "$p1" "$p2"</code></td><td>Todas as da lista</td><td>O código da <strong>última</strong> da lista</td></tr>
+<tr><td><code>wait -n</code></td><td>A próxima que terminar</td><td>O código dela; 127 se não houver nenhuma</td></tr>
+<tr><td><code>wait -n -p var</code></td><td>A próxima que terminar</td><td>O código dela; o PID vai para <code>var</code> (5.1+)</td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="baixar.sh" data-goal="src:\bwait\b,outre:foto\.jpg baixado[\s\S]*Tudo pronto!,outre:manual\.pdf baixado[\s\S]*Tudo pronto!">
+<p class="try-task"><strong>Missão:</strong> este script "baixa" dois arquivos ao mesmo tempo, mas anuncia "Tudo pronto!" antes de eles terminarem. Acrescente <strong>uma linha</strong> para que o "Tudo pronto!" só apareça depois dos dois downloads.</p>
+<pre class="script">#!/usr/bin/env bash
+baixar() {
+  sleep 1
+  echo "$1 baixado"
+}
+baixar foto.jpg &amp;
+baixar manual.pdf &amp;
+echo "Tudo pronto!"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+baixar() {
+  sleep 1
+  echo "$1 baixado"
+}
+baixar foto.jpg &amp;
+baixar manual.pdf &amp;
+wait
+echo "Tudo pronto!"
+</pre>
+</div>
+
+<p>Sem o <code>wait</code>, o Bash de verdade mostra <code>Tudo pronto!</code> primeiro, o script acaba, e as duas linhas "baixado" aparecem depois, soltas no terminal. Uma <a href="funcoes.html">função</a> com <code>&amp;</code> roda num subshell, como qualquer comando.</p>
+
+<hr>
+
+<h2>Jobs só no terminal: o "controle de jobs"</h2>
+<p><code>Ctrl+Z</code>, <code>fg</code>, <code>bg</code> e os avisos "Concluído" fazem parte do <strong>controle de jobs</strong> (<em>job control</em>), que o Bash liga sozinho no terminal interativo. Num script ele vem <strong>desligado</strong>: o <code>&amp;</code>, o <code>$!</code>, o <code>jobs</code>, o <code>kill %1</code> e o <code>wait</code> funcionam, mas não existe "trazer para o primeiro plano".</p>
+
+<pre class="file" data-file="j.sh">sleep 1 &amp;
+jobs
+fg
+</pre>
+
+<pre class="term">$ bash j.sh
+[1]+  Executando                 sleep 1 &amp;
+j.sh: linha 3: fg: nenhum controle de trabalho
+$ echo $?
+1</pre>
+
+<p>Para saber se o controle de jobs está ligado, olhe a letra <code>m</code> (de <em>monitor</em>) em <code>$-</code>: no terminal, <code>echo $-</code> mostra algo como <code>himBHs</code>; num script, não há <code>m</code>. Dá para ligar num script com <code>set -m</code>, mas quase nunca é preciso. As opções do shell são o assunto de <a href="shopt.html">set e shopt</a>.</p>
+
+<div class="note">
+<strong>E no Terminal Simulado?</strong>
+<p>No simulador do guia, o <code>sleep</code> é instantâneo e não há teclado de verdade para <code>Ctrl+Z</code>. Treine lá o <code>&amp;</code>, o <code>$!</code>, o <code>jobs</code>, o <code>wait</code> e o <code>kill %1</code>. O <code>Ctrl+Z</code>, o <code>fg</code> e o <code>bg</code> você treina no seu terminal, com <code>sleep 300</code>: ele não faz mal a nada.</p>
+</div>
+
+<hr>
+
+<h2>Fechar o terminal: SIGHUP, <code>disown</code> e <code>nohup</code></h2>
+<p>Quando você fecha a janela do terminal (ou a conexão SSH cai), o sistema manda ao Bash o sinal <strong>SIGHUP</strong>. O nome vem de <em>hang up</em>, "desligar o telefone", do tempo em que terminais eram ligados por linha telefônica. O Bash, ao receber o SIGHUP, <strong>repassa o sinal para todos os seus jobs</strong> e sai. A reação padrão de um programa ao SIGHUP é terminar. Resultado: o job morre junto com a janela.</p>
+
+<p>Há duas formas clássicas de evitar isso:</p>
+
+<dl class="anatomy">
+  <dt>disown %1</dt><dd>"Deserde" o job: o Bash tira o job 1 da sua lista. Ele continua rodando, mas o Bash não manda mais o SIGHUP para ele. Use depois de o comando já estar rodando.</dd>
+  <dt>nohup comando &amp;</dt><dd>Roda o comando <strong>imune</strong> ao SIGHUP (<em>no hang up</em>). Use quando você já sabe, antes de começar, que vai fechar o terminal.</dd>
+</dl>
+
+<p>A prova. No terminal abaixo a Ana dispara três <code>sleep</code>: um comum, um "deserdado" e um com <code>nohup</code>. Depois, em vez de fechar a janela, ela manda o próprio SIGHUP para o shell (<code>$$</code> é o PID do shell atual), que é exatamente o que acontece quando a janela fecha:</p>
+
+<pre class="term">$ sleep 41 &amp;
+[1] 32329
+$ sleep 42 &amp;
+[2] 32336
+$ disown %2
+$ jobs
+[1]+  Executando                 sleep 41 &amp;          « o 42 sumiu da lista, mas continua rodando
+$ nohup sleep 43 &amp;
+[2] 32361
+nohup: ignorando entrada e anexando saída a 'nohup.out'   « no terminal, sai colado no prompt
+$ kill -HUP $$                     « o mesmo que fechar a janela</pre>
+
+<p>A janela fechou. Num terminal novo, a Ana procura os <code>sleep</code> que sobraram:</p>
+
+<pre class="term">$ ps -eo pid,args | grep '[s]leep 4'
+  32336 sleep 42                   « o do disown sobreviveu
+  32361 sleep 43                   « o do nohup sobreviveu</pre>
+
+<p>O <code>sleep 41</code>, que era um job comum, recebeu o SIGHUP e morreu. (O <code>[s]</code> no <code>grep</code> é um truque para o próprio <code>grep</code> não aparecer na lista.)</p>
+
+<h3>A saída do <code>nohup</code>: <code>nohup.out</code></h3>
+<p>Depois que o terminal fecha, não há mais tela para escrever. Por isso o <code>nohup</code> desvia a saída: se ela iria para o terminal, ele grava no arquivo <code>nohup.out</code>, na pasta atual, e avisa:</p>
+
+<pre class="term">$ nohup ls -d D* &amp;
+[1] 41311
+nohup: ignorando entrada e anexando saída a 'nohup.out'
+$
+[1]+  Concluído                 nohup ls -d D*
+$ cat nohup.out
+Documentos
+Downloads</pre>
+
+<ul>
+  <li><strong>ignorando entrada</strong>: o comando não vai ler do teclado (a entrada vira <code>/dev/null</code>).</li>
+  <li><strong>anexando saída a 'nohup.out'</strong>: <em>anexando</em> = acrescenta no fim, como <code>&gt;&gt;</code>. Rodar vários <code>nohup</code> na mesma pasta junta tudo no mesmo arquivo.</li>
+</ul>
+
+<p>O mais organizado é você mesmo escolher o arquivo, com os <a href="redirecionamento.html">redirecionamentos</a> de sempre. Assim o <code>nohup</code> não cria <code>nohup.out</code>; o único aviso que sobra vai para dentro do seu log:</p>
+
+<pre class="term">$ nohup ls Documentos &gt; lista.log 2&gt;&amp;1 &amp;
+[1] 35022
+$ cat lista.log
+nohup: ignorando entrada           « a mensagem foi junto com o 2&gt;&amp;1
+acesso.log
+alunos.csv
+notas.txt
+projetos
+relatorio.odt</pre>
+
+<p>Para não ter nem esse aviso, dê a entrada você também: <code>nohup comando &gt; log 2&gt;&amp;1 &lt; /dev/null &amp;</code>.</p>
+
+<h3><code>disown -h</code> e <code>huponexit</code></h3>
+<ul>
+  <li><code>disown -h %1</code> (de <em>hangup</em>): o job <strong>fica</strong> na lista do <code>jobs</code> (você ainda pode usar <code>fg</code>, <code>kill %1</code>), mas não recebe o SIGHUP quando o terminal fechar.</li>
+  <li><code>disown -a</code>: deserda todos os jobs. Sem argumento, <code>disown</code> age no job atual.</li>
+  <li><code>shopt huponexit</code>: vem <code>off</code>. Ligada (<code>shopt -s huponexit</code>), faz o Bash mandar SIGHUP aos jobs também quando você sai com <code>exit</code> de um shell de <em>login</em> (como uma sessão SSH). Desligada, um job que está <strong>executando</strong> continua vivo depois do <code>exit</code>; só fechar a janela (o SIGHUP) o derruba.</li>
+</ul>
+
+<pre class="term">$ shopt huponexit
+huponexit           	off</pre>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th></tr>
+<tr><td>Continuar usando o terminal enquanto algo roda; você vai ficar com a janela aberta</td><td><code>comando &amp;</code></td></tr>
+<tr><td>Esqueceu o <code>&amp;</code></td><td><code>Ctrl+Z</code> e depois <code>bg</code></td></tr>
+<tr><td>Já está rodando e você precisa fechar a janela</td><td><code>disown %1</code> (se estiver parado, <code>bg</code> antes)</td></tr>
+<tr><td>Vai começar agora algo longo e vai fechar a janela/SSH</td><td><code>nohup comando &gt; log 2&gt;&amp;1 &amp;</code></td></tr>
+<tr><td>Quer <strong>voltar depois</strong> e ver a tela do programa, até de outro computador</td><td>Um multiplexador: <code>tmux</code> ou <code>screen</code> (programas à parte, não são do Bash)</td></tr>
+<tr><td>Tem que rodar sozinho todo dia ou ao ligar a máquina</td><td>Agendamento: <a href="agendar.html">cron e timers</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"fg: atual: trabalho não existe"</strong>
+<pre class="term">$ fg
+bash: fg: atual: trabalho não existe
+$ fg %5
+bash: fg: %5: trabalho não existe</pre>
+<p><strong>O que aconteceu:</strong> não há job nenhum (ou não há o job 5) <strong>neste</strong> terminal. Jobs não passam de um terminal para outro: o que você deixou rodando na outra janela não aparece aqui.</p>
+<p><strong>Como confirmar:</strong> <code>jobs -l</code>. Para achar o processo no sistema inteiro: <code>ps -eo pid,args | grep '[n]ome'</code> ou <code>pgrep -a nome</code>.</p>
+<p><strong>Como resolver:</strong> use o número que o <code>jobs</code> mostra. Um processo de outro terminal você encerra pelo PID (<code>kill 12345</code>), mas não dá para trazê-lo para o primeiro plano aqui.</p>
+</div>
+
+<div class="cenario">
+<strong>"fg: nenhum controle de trabalho" num script</strong>
+<pre class="term">$ bash j.sh
+[1]+  Executando                 sleep 1 &amp;
+j.sh: linha 3: fg: nenhum controle de trabalho</pre>
+<p><strong>O que aconteceu:</strong> scripts rodam sem controle de jobs. <code>fg</code>, <code>bg</code> e <code>Ctrl+Z</code> são coisas do terminal interativo.</p>
+<p><strong>Como resolver:</strong> no script, use <code>wait</code> para esperar e <code>kill "$pid"</code> para encerrar. Não tente "trazer para frente".</p>
+</div>
+
+<div class="cenario">
+<strong>"Há trabalhos parados." e o terminal não fecha</strong>
+<pre class="term">$ sleep 99
+^Z
+[1]+  Parado                     sleep 99
+$ exit
+exit
+Há trabalhos parados.</pre>
+<p><strong>O que aconteceu:</strong> o Bash está protegendo você: há um job pausado que morreria esquecido. O <code>exit</code> foi cancelado.</p>
+<p><strong>Como resolver:</strong> veja com <code>jobs</code> e decida: <code>fg</code> para terminar o trabalho, <code>kill %1</code> para descartar. Se digitar <code>exit</code> <strong>de novo</strong> logo em seguida, o Bash sai mesmo assim, e os jobs parados recebem SIGHUP.</p>
+</div>
+
+<div class="cenario">
+<strong>O job em segundo plano ficou "Parado" sozinho</strong>
+<pre class="term">$ cat &amp;
+[1] 33081
+$
+[1]+  Parado                     cat</pre>
+<p><strong>O que aconteceu:</strong> o <code>cat</code> sem arquivo quer ler do <strong>teclado</strong>. Só o job do primeiro plano pode ler do terminal; quem tenta ler em segundo plano é pausado pelo sistema (sinal <code>SIGTTIN</code>). O mesmo acontece com um script que faz <code>read</code>, ou com um programa que pergunta "Deseja continuar? [s/N]".</p>
+<p><strong>Como resolver:</strong> traga para frente com <code>fg</code> e responda; ou rode o comando dando a entrada de outro lugar (<code>&lt; arquivo</code>, <code>&lt; /dev/null</code>, ou a opção "sim para tudo" do programa, como <code>-y</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>A saída do job bagunça a tela</strong>
+<p><strong>O que aconteceu:</strong> o job em segundo plano escreve no mesmo terminal que você. As linhas aparecem no meio do que você está digitando e "colam" no prompt.</p>
+<p><strong>Como resolver:</strong> o que você está digitando não se perdeu; tecle Enter ou <code>Ctrl+L</code> para limpar a tela. E, para a próxima vez, redirecione: <code>comando &gt; saida.log 2&gt;&amp;1 &amp;</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"não é um processo filho deste shell"</strong>
+<pre class="term">$ wait 12345
+bash: wait: o pid 12345 não é um processo filho deste shell
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> o <code>wait</code> só espera processos que <strong>este</strong> shell criou com <code>&amp;</code>. Um PID de outro terminal, de outro script ou de um <a href="subshell.html">subshell</a> (por exemplo, um <code>&amp;</code> feito dentro de <code>$( )</code> ou de um pipe) não serve.</p>
+<p><strong>Como resolver:</strong> faça o <code>&amp;</code> e o <code>wait</code> no mesmo shell, e guarde o <code>$!</code> logo depois do <code>&amp;</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Fechei o terminal e o comando morreu</strong>
+<p><strong>O que aconteceu:</strong> o SIGHUP foi repassado ao job. Isso também acontece numa sessão SSH que cai.</p>
+<p><strong>Como resolver:</strong> da próxima vez, use <code>nohup … &amp;</code> desde o começo, ou <code>disown</code> antes de fechar. Para tarefas que você quer acompanhar de outro lugar, use <code>tmux</code> ou <code>screen</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>comando &amp;</code></td><td>Roda em segundo plano; mostra <code>[n] PID</code></td></tr>
+<tr><td><code>$!</code></td><td>PID do último comando mandado para o segundo plano</td></tr>
+<tr><td><code>jobs</code> / <code>jobs -l</code> / <code>jobs -p</code></td><td>Lista os jobs / com PID / só os PIDs</td></tr>
+<tr><td><code>Ctrl+Z</code></td><td>Pausa o comando do primeiro plano (vira "Parado")</td></tr>
+<tr><td><code>bg [%n]</code></td><td>Continua um job parado em segundo plano</td></tr>
+<tr><td><code>fg [%n]</code></td><td>Traz um job para o primeiro plano</td></tr>
+<tr><td><code>%n %% %+ %- %nome %?texto</code></td><td>Formas de apontar um job</td></tr>
+<tr><td><code>kill %n</code></td><td>Encerra o job n (sinal TERM); <code>kill -KILL %n</code> à força</td></tr>
+<tr><td><code>wait</code></td><td>Espera todos os jobs; <code>wait PID</code> espera um e devolve o código dele</td></tr>
+<tr><td><code>wait -n</code> <span class="versao">4.3+</span></td><td>Espera o próximo que terminar; <code>-p var</code> guarda o PID <span class="versao">5.1+</span></td></tr>
+<tr><td><code>disown [%n]</code> / <code>disown -h</code> / <code>disown -a</code></td><td>Tira o job da lista / só protege do SIGHUP / todos</td></tr>
+<tr><td><code>nohup comando &amp;</code></td><td>Roda imune ao SIGHUP; saída para <code>nohup.out</code> se ia para a tela</td></tr>
+<tr><td><code>shopt -s huponexit</code></td><td>Manda SIGHUP aos jobs também no <code>exit</code> de um shell de login</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Sem esperar</h3>
+<p>Complete para compactar a pasta <code>Documentos</code> em segundo plano:</p>
+<div class="ex-code">tar czf docs.tar.gz Documentos <input data-answer="&amp;" aria-label="operador"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Esqueci o &amp;</h3>
+<p>Você apertou <code>Ctrl+Z</code> num comando demorado. Que comando faz ele continuar rodando, mas em segundo plano?</p>
+<div class="ex-code"><input data-answer="bg|bg %1|bg %%|bg %+" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. O código da tarefa</h3>
+<p>Complete o script para esperar só a tarefa disparada e mostrar o código de saída dela:</p>
+<div class="ex-code">./backup.sh &amp;<br>pid=<input data-answer="$!" aria-label="variável do PID"><br>wait "$pid"<br>echo "código: <input data-answer="$?" aria-label="variável do código">"</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Na saída de <code>jobs</code>, o que quer dizer o <code>+</code> em <code>[2]+</code>?</p>
+<label><input type="radio" name="q4"> Que o job 2 terminou com sucesso.</label>
+<label><input type="radio" name="q4"> Que o job 2 está usando mais CPU.</label>
+<label><input type="radio" name="q4"> Que o job 2 é o atual: o que <code>fg</code> e <code>bg</code> usam quando você não diz o número.</label>
+<label><input type="radio" name="q4"> Que o job 2 foi protegido com <code>disown</code>.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. A Ana rodou <code>sleep 1000 &amp;</code> e, em seguida, fechou a janela do terminal. O que acontece com o <code>sleep</code>?</p>
+<label><input type="radio" name="q5"> Continua rodando, porque está em segundo plano.</label>
+<label><input type="radio" name="q5"> Morre: o Bash repassa o SIGHUP aos jobs ao ser fechado.</label>
+<label><input type="radio" name="q5"> Fica "Parado" até ela abrir outro terminal.</label>
+<label><input type="radio" name="q5"> Vai para o arquivo <code>nohup.out</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Num script, <code>comando &amp;</code> seguido de <code>echo $?</code> mostra <code>0</code>. Por quê?</p>
+<label><input type="radio" name="q6"> Porque o comando sempre dá certo em segundo plano.</label>
+<label><input type="radio" name="q6"> Porque o <code>&amp;</code> transforma qualquer erro em sucesso.</label>
+<label><input type="radio" name="q6"> Porque o <code>$?</code> não funciona em scripts.</label>
+<label><input type="radio" name="q6"> Porque esse 0 só diz que o job foi disparado; o código de verdade vem com <code>wait PID</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>comando &amp;</code> roda em segundo plano e mostra <code>[job] PID</code>; <code>$!</code> guarda esse PID.</li>
+  <li><code>jobs</code> lista os jobs do terminal: <code>+</code> é o atual, <code>-</code> o anterior; <code>-l</code> mostra PIDs.</li>
+  <li><code>Ctrl+Z</code> pausa; <code>bg</code> continua em segundo plano; <code>fg</code> traz para frente. Aponte jobs com <code>%1</code>, <code>%%</code>, <code>%-</code>, <code>%nome</code>.</li>
+  <li>Em scripts: <code>wait</code> espera todos, <code>wait "$pid"</code> devolve o código de uma tarefa, <code>wait -n</code> a próxima que terminar.</li>
+  <li>Fechar o terminal manda SIGHUP aos jobs. Proteja com <code>disown</code> (já rodando) ou <code>nohup … &amp;</code> (desde o começo).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
