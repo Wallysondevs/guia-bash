@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Glossário — os termos do shell explicados em português | Guia Bash</title>
+<meta name="description" content="Glossário do Guia Bash: shell, builtin, palavra reservada, expansão, subshell, descritor, stdin, código de saída, here-doc, curinga, IFS, job, sinal, shebang, POSIX e outros termos, em ordem alfabética, cada um com link para a aula.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Glossário</span></h1>
+
+<p class="intro">Os termos que aparecem no guia, em ordem alfabética, explicados em uma ou duas frases e com o link para a aula onde o assunto é ensinado. Quando o termo em inglês é muito usado, ele aparece entre parênteses, para você reconhecê-lo em documentações e fóruns.</p>
+
+<p class="indice-letras"><a href="#g-A">A</a> · <a href="#g-B">B</a> · <a href="#g-C">C</a> · <a href="#g-D">D</a> · <a href="#g-E">E</a> · <a href="#g-F">F</a> · <a href="#g-G">G</a> · <a href="#g-H">H</a> · <a href="#g-I">I</a> · <a href="#g-J">J</a> · <a href="#g-L">L</a> · <a href="#g-M">M</a> · <a href="#g-N">N</a> · <a href="#g-O">O</a> · <a href="#g-P">P</a> · <a href="#g-R">R</a> · <a href="#g-S">S</a> · <a href="#g-T">T</a> · <a href="#g-V">V</a> · <a href="#g-X">X</a></p>
+
+<h2 id="g-A">A</h2>
+<dl class="glossario">
+<dt><strong>Alias (apelido)</strong></dt>
+<dd>Um nome curto que o Bash troca por um texto maior antes de executar: <code>alias ll='ls -alF'</code>. Só vale no terminal interativo (em scripts vem desligado). Para algo com argumentos, use uma função. Veja: <a href="alias.html">alias</a>.</dd>
+<dt><strong>Argumento</strong></dt>
+<dd>Cada palavra que vem depois do nome do comando: em <code>cp -r fotos backup</code>, <code>-r</code>, <code>fotos</code> e <code>backup</code> são argumentos (o primeiro é uma opção). Num script, chegam em <code>$1</code>, <code>$2</code>… Veja: <a href="sintaxe.html">Anatomia de um Comando</a> e <a href="argumentos.html">Argumentos</a>.</dd>
+<dt><strong>Aritmética (expansão aritmética)</strong></dt>
+<dd>Contas com números inteiros dentro de <code>$(( ))</code> ou <code>(( ))</code>: <code>echo $((2 + 3))</code>. Sem casas decimais; para isso, <code>bc</code> ou <code>awk</code>. Veja: <a href="aritmetica.html">Contas</a>.</dd>
+<dt><strong>Array (vetor, lista)</strong></dt>
+<dd>Uma variável que guarda vários valores, numerados a partir de 0: <code>frutas=(banana uva)</code>, <code>${frutas[1]}</code>. Veja: <a href="arrays.html">Arrays</a>.</dd>
+<dt><strong>Array associativo (dicionário)</strong></dt>
+<dd>Um array cujos índices são textos: <code>declare -A capital=([SP]="São Paulo")</code>. Ótimo para contar "por nome". <span class="versao">bash 4.0+</span> Veja: <a href="arrays-associativos.html">Arrays Associativos</a>.</dd>
+<dt><strong>Arquivo oculto</strong></dt>
+<dd>Arquivo cujo nome começa com ponto (<code>.bashrc</code>). Não aparece no <code>ls</code> nem no curinga <code>*</code>; aparece com <code>ls -a</code>. Veja: <a href="ls.html">ls</a>.</dd>
+<dt><strong>Aspas</strong></dt>
+<dd>Dizem ao Bash o que <strong>não</strong> mexer: entre aspas simples, nada é expandido; entre aspas duplas, só <code>$</code>, <code>`</code> e <code>\</code>. Proteger variáveis com aspas duplas evita a maioria dos erros com espaços. Veja: <a href="aspas.html">Aspas e Escapes</a>.</dd>
+<dt><strong>awk</strong></dt>
+<dd>Uma pequena linguagem para processar texto por colunas (campos): <code>awk '{print $1}'</code> mostra a primeira coluna. Muito mais rápido que um laço do Bash em arquivos grandes. Veja: <a href="ferramentas-texto.html">grep, sed, awk e cia.</a></dd>
+</dl>
+
+<h2 id="g-B">B</h2>
+<dl class="glossario">
+<dt><strong>Bash</strong></dt>
+<dd><em>Bourne-Again SHell</em>, "o shell Bourne de novo" (um trocadilho com <em>born again</em>, "renascido"): o shell do projeto GNU, de 1989, sucessor do Bourne shell (<code>sh</code>). É o shell padrão da maioria das distribuições Linux. Veja: <a href="introducao.html">O que é o Bash</a>.</dd>
+<dt><strong>Bashismo</strong></dt>
+<dd>Recurso que existe no Bash mas não no <code>sh</code> do POSIX (como <code>[[ ]]</code>, arrays, <code>${x,,}</code>). Um script com bashismos deve começar com <code>#!/usr/bin/env bash</code>, não <code>#!/bin/sh</code>. Veja: <a href="portabilidade.html">POSIX sh e Bashismos</a>.</dd>
+<dt><strong>Builtin</strong></dt>
+<dd>Veja <a href="#g-C">Comando interno</a>.</dd>
+</dl>
+
+<h2 id="g-C">C</h2>
+<dl class="glossario">
+<dt><strong>Caminho absoluto / relativo</strong></dt>
+<dd>Absoluto começa na raiz <code>/</code> (<code>/home/ana/Documentos</code>) e funciona de qualquer lugar; relativo parte da pasta atual (<code>Documentos/notas.txt</code>, <code>../fotos</code>). Veja: <a href="navegar.html">Navegar</a>.</dd>
+<dt><strong>Código de saída (exit status)</strong></dt>
+<dd>O número que todo comando devolve ao terminar: 0 = deu certo; qualquer outro (1 a 255) = algum problema. Fica em <code>$?</code> e é o que o <code>if</code>, o <code>&amp;&amp;</code> e o <code>||</code> olham. 126 = sem permissão, 127 = comando não encontrado, 130 = interrompido com Ctrl+C. Veja: <a href="codigo-saida.html">Código de Saída</a>.</dd>
+<dt><strong>Comando externo</strong></dt>
+<dd>Um programa que é um arquivo em alguma pasta do <code>PATH</code> (<code>/usr/bin/ls</code>). Para rodá-lo, o Bash cria um processo novo. Veja: <a href="path.html">PATH</a>.</dd>
+<dt><strong>Comando interno (builtin)</strong></dt>
+<dd>Um comando que faz parte do próprio Bash (<code>cd</code>, <code>echo</code>, <code>read</code>, <code>export</code>): roda sem criar processo e pode mudar o shell. <code>type cd</code> responde "cd é um comando interno do shell". Veja: <a href="ref-builtins.html">Comandos Internos</a> e <a href="ajuda.html">Obtendo Ajuda</a>.</dd>
+<dt><strong>Completar (completion)</strong></dt>
+<dd>O <kbd>Tab</kbd> terminando nomes de comandos, arquivos e variáveis por você. Com <code>complete</code>, cada comando pode ter sugestões próprias. Veja: <a href="completar.html">Completar com Tab</a> e <a href="complete.html">Completar Programável</a>.</dd>
+<dt><strong>Console</strong></dt>
+<dd>Originalmente, o terminal físico ligado direto à máquina; hoje, também o terminal em modo texto do sistema (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>). Veja: <a href="terminal-shell.html">Terminal, Shell e Console</a>.</dd>
+<dt><strong>Crases</strong></dt>
+<dd>A forma antiga da substituição de comando: <code>`date`</code>. Prefira <code>$(date)</code>, que pode ser aninhada e é mais legível. Veja: <a href="substituicao-comando.html">Substituição de Comando</a>.</dd>
+<dt><strong>CRLF</strong></dt>
+<dd>A quebra de linha do Windows (<code>\r\n</code>). Um script salvo assim falha no Linux com mensagens que mencionam <code>$'\r'</code> ou <code>^M</code>. Conserte com <code>sed -i 's/\r$//' script.sh</code>. Veja: <a href="problemas.html">Erros Comuns</a>.</dd>
+<dt><strong>cron</strong></dt>
+<dd>O serviço que roda comandos em horários marcados, configurado com <code>crontab -e</code>. Veja: <a href="agendar.html">Agendar Scripts</a>.</dd>
+<dt><strong>Curinga (glob, wildcard)</strong></dt>
+<dd>Os caracteres <code>*</code>, <code>?</code> e <code>[ ]</code>, que o Bash troca pelos nomes de arquivos que casam: <code>*.txt</code>. Com <code>extglob</code> há formas extras como <code>!(*.txt)</code>. Veja: <a href="curingas.html">Curingas</a>.</dd>
+</dl>
+
+<h2 id="g-D">D</h2>
+<dl class="glossario">
+<dt><strong>dash</strong></dt>
+<dd>Um shell pequeno e rápido, compatível com o POSIX, que é o <code>/bin/sh</code> do Debian e do Ubuntu. Não entende bashismos. Veja: <a href="portabilidade.html">POSIX sh e Bashismos</a>.</dd>
+<dt><strong>Descritor de arquivo (file descriptor)</strong></dt>
+<dd>O número que um processo usa para falar com um arquivo aberto: 0 = entrada padrão, 1 = saída padrão, 2 = saída de erro. Em <code>2&gt;erros.txt</code>, o <code>2</code> é o descritor. Com <code>exec 3&gt;arq</code> você abre outros. Veja: <a href="redirecionamento.html">Redirecionamento</a> e <a href="descritores.html">Descritores</a>.</dd>
+<dt><strong>Dotfiles</strong></dt>
+<dd>Os arquivos de configuração com nome começado por ponto na pasta pessoal (<code>.bashrc</code>, <code>.inputrc</code>), e, por extensão, o costume de guardá-los num repositório. Veja: <a href="projeto-dotfiles.html">Seus Dotfiles</a>.</dd>
+</dl>
+
+<h2 id="g-E">E</h2>
+<dl class="glossario">
+<dt><strong>Entrada padrão (stdin)</strong></dt>
+<dd>De onde um programa lê: por padrão, o teclado; com <code>&lt; arquivo</code> ou um pipe, outro lugar. É o descritor 0. Veja: <a href="redirecionamento.html">Redirecionamento</a>.</dd>
+<dt><strong>Escape</strong></dt>
+<dd>A barra invertida <code>\</code> que tira o significado especial do próximo caractere (<code>\$</code>, <code>\ </code>). Também as sequências como <code>\n</code> e <code>\t</code> do <code>printf</code> e do <code>$'…'</code>. Veja: <a href="aspas.html">Aspas e Escapes</a>.</dd>
+<dt><strong>eval</strong></dt>
+<dd>Comando que monta um texto e o executa como código. Poderoso e perigoso com dados vindos de fora; quase sempre há alternativa melhor. Veja: <a href="eval-indirecao.html">eval e indireção</a>.</dd>
+<dt><strong>Expansão</strong></dt>
+<dd>Cada transformação que o Bash faz na linha antes de executar: chaves, til, variáveis, aritmética, substituição de comando, separação de palavras, curingas e remoção de aspas, nessa ordem. Veja: <a href="ordem-expansoes.html">A Ordem das Expansões</a> e <a href="ref-expansoes.html">Cola de Expansões</a>.</dd>
+<dt><strong>Expansão de chaves (brace expansion)</strong></dt>
+<dd><code>{a,b}</code> e <code>{1..10}</code> gerando listas de palavras, sem olhar se os arquivos existem. Veja: <a href="chaves.html">Chaves</a>.</dd>
+<dt><strong>Expansão de parâmetros</strong></dt>
+<dd>As formas <code>${…}</code> de usar uma variável: valor padrão (<code>${x:-p}</code>), tamanho (<code>${#x}</code>), cortes (<code>${x%.txt}</code>), trocas (<code>${x//a/b}</code>). Veja: <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</dd>
+<dt><strong>export</strong></dt>
+<dd>Marca uma variável para ser copiada para os programas que o shell iniciar, tornando-a uma variável de ambiente. Veja: <a href="variaveis.html">Variáveis, Escopo e export</a>.</dd>
+</dl>
+
+<h2 id="g-F">F</h2>
+<dl class="glossario">
+<dt><strong>Função</strong></dt>
+<dd>Um bloco de comandos com nome, chamado como se fosse um comando: <code>saudar() { echo "Olá, $1"; }</code>. Roda no próprio shell, por isso pode mudar a pasta e as variáveis. Veja: <a href="funcoes.html">Funções</a> e <a href="funcoes-retorno.html">local, return e Saída</a>.</dd>
+</dl>
+
+<h2 id="g-G">G</h2>
+<dl class="glossario">
+<dt><strong>getopts</strong></dt>
+<dd>Comando interno que lê opções de uma letra (<code>-v</code>, <code>-o arquivo</code>) num laço. Veja: <a href="getopts.html">Opções com getopts</a>.</dd>
+<dt><strong>Glob, globbing</strong></dt>
+<dd>Veja <a href="#g-C">Curinga</a>.</dd>
+<dt><strong>GNU</strong></dt>
+<dd>O projeto de software livre que criou o Bash e as ferramentas básicas do Linux (<code>ls</code>, <code>cp</code>, <code>grep</code>, <code>sed</code>…, os "coreutils"). No macOS, essas ferramentas são as do BSD, com opções um pouco diferentes. Veja: <a href="onde-tem-bash.html">Bash em Cada Sistema</a>.</dd>
+</dl>
+
+<h2 id="g-H">H</h2>
+<dl class="glossario">
+<dt><strong>Here-doc (documento aqui)</strong></dt>
+<dd>Um bloco de texto de várias linhas que vira a entrada de um comando, terminando numa palavra marcadora: <code>cat &lt;&lt;FIM</code> … <code>FIM</code>. Veja: <a href="heredoc.html">Here-docs e Here-strings</a>.</dd>
+<dt><strong>Here-string</strong></dt>
+<dd>Uma linha de texto como entrada de um comando: <code>read a b &lt;&lt;&lt; "x y"</code>. Veja: <a href="heredoc.html">Here-docs e Here-strings</a>.</dd>
+<dt><strong>Histórico</strong></dt>
+<dd>A lista dos comandos que você digitou, guardada em <code>~/.bash_history</code>; navegue com <kbd>↑</kbd> e busque com <kbd>Ctrl</kbd>+<kbd>R</kbd>. Veja: <a href="historico.html">Histórico</a>.</dd>
+<dt><strong>HOME</strong></dt>
+<dd>A sua pasta pessoal (<code>/home/ana</code>), guardada na variável <code>$HOME</code> e abreviada como <code>~</code>. Veja: <a href="navegar.html">Navegar</a>.</dd>
+</dl>
+
+<h2 id="g-I">I</h2>
+<dl class="glossario">
+<dt><strong>Idempotente</strong></dt>
+<dd>Diz-se de um script que pode rodar várias vezes seguidas sem estragar nada: a segunda execução não muda o que a primeira já fez. Veja: <a href="projeto-organizador.html">Organizar Downloads</a> e <a href="boas-praticas.html">Boas Práticas</a>.</dd>
+<dt><strong>IFS</strong></dt>
+<dd><em>Internal Field Separator</em>, "separador interno de campos": os caracteres onde o Bash corta o resultado de uma expansão sem aspas e onde o <code>read</code> divide a linha. Padrão: espaço, TAB e quebra de linha. Veja: <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a> e <a href="aspas.html">Aspas</a>.</dd>
+<dt><strong>Indireção</strong></dt>
+<dd>Usar o valor de uma variável como <strong>nome</strong> de outra: <code>${!nome}</code>, ou um nameref com <code>declare -n</code>. Veja: <a href="eval-indirecao.html">eval, Indireção e nameref</a>.</dd>
+<dt><strong>Interativo (shell interativo)</strong></dt>
+<dd>O shell em que você digita, com prompt; lê o <code>~/.bashrc</code>. Um script roda num shell não interativo. <code>$-</code> contém <code>i</code> no interativo. Veja: <a href="inicializacao.html">Arquivos de Inicialização</a>.</dd>
+</dl>
+
+<h2 id="g-J">J</h2>
+<dl class="glossario">
+<dt><strong>Job (trabalho)</strong></dt>
+<dd>Um comando (ou pipeline) iniciado pelo shell, que pode estar em primeiro plano, em segundo plano (<code>&amp;</code>) ou parado (<kbd>Ctrl</kbd>+<kbd>Z</kbd>). Listados com <code>jobs</code>, referidos como <code>%1</code>, <code>%2</code>. Veja: <a href="jobs.html">Jobs</a>.</dd>
+</dl>
+
+<h2 id="g-L">L</h2>
+<dl class="glossario">
+<dt><strong>Laço (loop)</strong></dt>
+<dd>Um bloco que se repete: <code>for</code> (para cada item), <code>while</code> (enquanto), <code>until</code> (até que). Veja: <a href="for.html">for</a> e <a href="while.html">while e until</a>.</dd>
+<dt><strong>Link simbólico (symlink, atalho)</strong></dt>
+<dd>Um arquivo que aponta para outro caminho, criado com <code>ln -s destino nome</code>. No <code>ls -l</code>, aparece com <code>l</code> e uma seta. Veja: <a href="criar-copiar.html">Criar, Copiar e Mover</a>.</dd>
+<dt><strong>local</strong></dt>
+<dd>Declara uma variável que só existe dentro da função. Veja: <a href="funcoes-retorno.html">local, return e Saída</a>.</dd>
+<dt><strong>Login (shell de login)</strong></dt>
+<dd>O primeiro shell de uma sessão (ao entrar por SSH ou no console), que lê o <code>~/.profile</code> ou o <code>~/.bash_profile</code>. Veja: <a href="inicializacao.html">Arquivos de Inicialização</a>.</dd>
+</dl>
+
+<h2 id="g-M">M</h2>
+<dl class="glossario">
+<dt><strong>mapfile / readarray</strong></dt>
+<dd>Comando interno que lê um arquivo (ou a saída de um comando) para um array, uma linha por item. Veja: <a href="mapfile.html">mapfile e readarray</a>.</dd>
+<dt><strong>Modo estrito</strong></dt>
+<dd>O apelido de <code>set -euo pipefail</code> no começo de um script: para no primeiro erro, trata variável inexistente como erro e não esconde falhas dentro de pipes. Veja: <a href="modo-estrito.html">set -euo pipefail</a>.</dd>
+</dl>
+
+<h2 id="g-N">N</h2>
+<dl class="glossario">
+<dt><strong>Nameref</strong></dt>
+<dd>Uma variável que é um apelido de outra: <code>declare -n ref=contador</code>; mexer em <code>ref</code> mexe em <code>contador</code>. Útil para passar arrays para funções. <span class="versao">bash 4.3+</span> Veja: <a href="eval-indirecao.html">eval, Indireção e nameref</a>.</dd>
+</dl>
+
+<h2 id="g-O">O</h2>
+<dl class="glossario">
+<dt><strong>Opção (flag)</strong></dt>
+<dd>Um argumento que muda o comportamento do comando, normalmente começando com <code>-</code> (<code>-l</code>) ou <code>--</code> (<code>--all</code>). Veja: <a href="sintaxe.html">Anatomia de um Comando</a>.</dd>
+<dt><strong>Opções do shell</strong></dt>
+<dd>Interruptores que mudam o comportamento do próprio Bash: os do <code>set</code> (<code>-e</code>, <code>-x</code>, <code>-o noclobber</code>) e os do <code>shopt</code> (<code>nullglob</code>, <code>globstar</code>). Veja: <a href="shopt.html">Opções do Shell</a>.</dd>
+<dt><strong>Operador de controle</strong></dt>
+<dd>Os símbolos que separam e encadeiam comandos: <code>;</code> (um depois do outro), <code>&amp;&amp;</code> (só se o anterior deu certo), <code>||</code> (só se falhou), <code>|</code> (pipe), <code>&amp;</code> (em segundo plano). Veja: <a href="operadores.html">; &amp;&amp; ||</a>.</dd>
+</dl>
+
+<h2 id="g-P">P</h2>
+<dl class="glossario">
+<dt><strong>Palavra reservada (keyword)</strong></dt>
+<dd>Palavra com significado na gramática do Bash, como <code>if</code>, <code>then</code>, <code>for</code>, <code>do</code>, <code>done</code>, <code>case</code>, <code>[[</code>. Não é um comando: <code>type if</code> responde "if é uma palavra-chave do shell". Veja: <a href="ref-builtins.html">Comandos Internos</a>.</dd>
+<dt><strong>Parâmetro posicional</strong></dt>
+<dd>Os argumentos de um script ou função: <code>$1</code>, <code>$2</code>…, contados em <code>$#</code> e todos juntos em <code>"$@"</code>. Veja: <a href="argumentos.html">Argumentos</a>.</dd>
+<dt><strong>PATH</strong></dt>
+<dd>A variável com a lista de pastas, separadas por <code>:</code>, onde o Bash procura os comandos que você digita. Se um programa não está numa delas, aparece "comando não encontrado". Veja: <a href="path.html">PATH</a>.</dd>
+<dt><strong>PID</strong></dt>
+<dd><em>Process ID</em>: o número que identifica um processo. O do shell está em <code>$$</code>; o do último comando em segundo plano, em <code>$!</code>. Veja: <a href="jobs.html">Jobs</a>.</dd>
+<dt><strong>Pipe e pipeline</strong></dt>
+<dd>O <code>|</code> liga a saída de um comando à entrada do próximo: <code>sort nomes.txt | uniq</code>. A sequência inteira é um pipeline. Veja: <a href="pipes.html">Pipes</a>.</dd>
+<dt><strong>POSIX</strong></dt>
+<dd>A norma que define o que um shell <code>sh</code> e as ferramentas básicas de um sistema tipo Unix devem fazer. Um script só com recursos POSIX roda no <code>dash</code>, no <code>bash</code>, no <code>zsh</code>… Veja: <a href="portabilidade.html">POSIX sh e Bashismos</a>.</dd>
+<dt><strong>Primeiro plano / segundo plano (foreground / background)</strong></dt>
+<dd>Em primeiro plano, o comando ocupa o terminal até terminar; em segundo plano (com <code>&amp;</code> no fim), ele roda enquanto você continua usando o prompt. Veja: <a href="jobs.html">Jobs</a>.</dd>
+<dt><strong>Processo</strong></dt>
+<dd>Um programa em execução, com memória e PID próprios. Cada comando externo roda num processo novo, filho do shell. Veja: <a href="subshell.html">Subshells e Grupos</a>.</dd>
+<dt><strong>Prompt</strong></dt>
+<dd>O texto que o shell mostra quando espera um comando (<code>ana@notebook:~$</code>), definido pela variável <code>PS1</code>. Veja: <a href="prompt.html">Lendo o Prompt</a> e <a href="ps1.html">Personalizar o Prompt</a>.</dd>
+</dl>
+
+<h2 id="g-R">R</h2>
+<dl class="glossario">
+<dt><strong>readline</strong></dt>
+<dd>A biblioteca que cuida da edição da linha no Bash: setas, <kbd>Ctrl</kbd>+<kbd>A</kbd>, <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Tab</kbd>. Configurada no <code>~/.inputrc</code>. Veja: <a href="editar-linha.html">Editar a Linha</a> e <a href="ref-atalhos.html">Atalhos do Teclado</a>.</dd>
+<dt><strong>Redirecionamento</strong></dt>
+<dd>Mudar de onde um comando lê ou para onde escreve: <code>&gt;</code> (grava), <code>&gt;&gt;</code> (acrescenta), <code>&lt;</code> (lê de arquivo), <code>2&gt;</code> (erros), <code>2&gt;&amp;1</code> (erros junto com a saída). Veja: <a href="redirecionamento.html">Redirecionamento</a>.</dd>
+<dt><strong>Regex (expressão regular)</strong></dt>
+<dd>Uma linguagem de padrões de texto (<code>^[0-9]+$</code> = "só dígitos"), usada no <code>[[ =~ ]]</code>, no <code>grep</code>, no <code>sed</code>. Diferente dos curingas. Veja: <a href="regex.html">Regex com [[ =~ ]]</a>.</dd>
+<dt><strong>root</strong></dt>
+<dd>O administrador do sistema (usuário número 0), que pode tudo. Comandos de administração são rodados como root com <code>sudo</code>; o prompt dele termina em <code>#</code>. Veja: <a href="prompt.html">Lendo o Prompt</a>.</dd>
+</dl>
+
+<h2 id="g-S">S</h2>
+<dl class="glossario">
+<dt><strong>Saída de erro (stderr)</strong></dt>
+<dd>O canal separado (descritor 2) onde os programas escrevem as mensagens de erro, para elas não se misturarem com o resultado. Num script: <code>echo "erro" &gt;&amp;2</code>. Veja: <a href="redirecionamento.html">Redirecionamento</a> e <a href="erros.html">Tratar Erros</a>.</dd>
+<dt><strong>Saída padrão (stdout)</strong></dt>
+<dd>Para onde um programa escreve o resultado: por padrão, a tela. É o descritor 1, o que vai para um <code>&gt; arquivo</code> ou um pipe. Veja: <a href="redirecionamento.html">Redirecionamento</a>.</dd>
+<dt><strong>Script</strong></dt>
+<dd>Um arquivo de texto com comandos que o shell executa em sequência. Veja: <a href="script-primeiro.html">Seu Primeiro Script</a>.</dd>
+<dt><strong>sed</strong></dt>
+<dd>O "editor de fluxo": transforma texto linha a linha, sem abrir editor (<code>sed 's/velho/novo/g'</code>). Veja: <a href="ferramentas-texto.html">grep, sed, awk e cia.</a></dd>
+<dt><strong>Separação de palavras (word splitting)</strong></dt>
+<dd>A etapa em que o Bash corta o resultado de uma expansão <strong>sem aspas</strong> nos caracteres do <code>IFS</code>. É por isso que <code>$arquivo</code> com espaço no nome vira dois argumentos, e <code>"$arquivo"</code> não. Veja: <a href="aspas.html">Aspas</a> e <a href="ordem-expansoes.html">A Ordem das Expansões</a>.</dd>
+<dt><strong>Shebang</strong></dt>
+<dd>A primeira linha de um script, começando com <code>#!</code> (<em>hash-bang</em>), que diz qual programa deve executá-lo: <code>#!/usr/bin/env bash</code>. Veja: <a href="script-primeiro.html">Seu Primeiro Script</a>.</dd>
+<dt><strong>Shell</strong></dt>
+<dd>O programa que lê os comandos que você digita (ou de um script) e os executa: a "casca" em volta do sistema. Bash, zsh, dash e fish são shells. Veja: <a href="terminal-shell.html">Terminal, Shell e Console</a>.</dd>
+<dt><strong>ShellCheck</strong></dt>
+<dd>Um programa que lê scripts e aponta erros e más práticas, cada um com um código (<code>SC2086</code>) e uma explicação. Veja: <a href="shellcheck.html">ShellCheck</a>.</dd>
+<dt><strong>Sinal (signal)</strong></dt>
+<dd>Um aviso que o sistema manda a um processo: SIGINT (<kbd>Ctrl</kbd>+<kbd>C</kbd>), SIGTERM (o <code>kill</code> padrão), SIGKILL (<code>kill -9</code>, não pode ser ignorado), SIGHUP (terminal fechado). Um script reage a eles com <code>trap</code>. Veja: <a href="trap.html">trap e Sinais</a>.</dd>
+<dt><strong>source (ou <code>.</code>)</strong></dt>
+<dd>Executa um arquivo dentro do shell atual, em vez de num processo novo: as variáveis e funções dele ficam valendo. É assim que o <code>.bashrc</code> é lido. Veja: <a href="executar.html">Formas de Executar</a>.</dd>
+<dt><strong>Subshell</strong></dt>
+<dd>Uma cópia do shell, criada por <code>( … )</code>, <code>$( … )</code>, pipes e <code>&amp;</code>. O que muda lá dentro (variáveis, <code>cd</code>) não volta para o shell original. Veja: <a href="subshell.html">Subshells e Grupos</a>.</dd>
+<dt><strong>Substituição de comando</strong></dt>
+<dd><code>$(comando)</code>: roda o comando e põe a saída dele no lugar. <code>hoje=$(date +%F)</code>. Veja: <a href="substituicao-comando.html">Substituição de Comando</a>.</dd>
+<dt><strong>Substituição de processo</strong></dt>
+<dd><code>&lt;(comando)</code>: põe no lugar um nome de arquivo de onde se lê a saída do comando, para programas que só aceitam arquivos: <code>diff &lt;(ls a) &lt;(ls b)</code>. Veja: <a href="substituicao-processo.html">Substituição de Processo</a>.</dd>
+</dl>
+
+<h2 id="g-T">T</h2>
+<dl class="glossario">
+<dt><strong>Terminal (emulador de terminal)</strong></dt>
+<dd>A janela onde você digita (GNOME Terminal, Konsole, Windows Terminal). Ele só mostra texto e repassa o teclado; quem interpreta os comandos é o shell. Veja: <a href="terminal-shell.html">Terminal, Shell e Console</a>.</dd>
+<dt><strong>Teste</strong></dt>
+<dd>Um comando que só responde "verdade" (código 0) ou "falso": <code>[ -f arq ]</code>, <code>[[ $x == a* ]]</code>, <code>test 5 -gt 3</code>. Veja: <a href="testes.html">Testes</a>.</dd>
+<dt><strong>Til (<code>~</code>)</strong></dt>
+<dd>Abreviação da sua pasta pessoal; <code>~ana</code> é a da Ana. Só é trocado fora de aspas. Veja: <a href="navegar.html">Navegar</a>.</dd>
+<dt><strong>trap</strong></dt>
+<dd>Comando que define o que fazer quando chega um sinal ou o script termina (<code>trap limpar EXIT</code>). Veja: <a href="trap.html">trap e Sinais</a>.</dd>
+</dl>
+
+<h2 id="g-V">V</h2>
+<dl class="glossario">
+<dt><strong>Variável</strong></dt>
+<dd>Um nome que guarda um valor (sempre texto, para o Bash): <code>nome=Ana</code> cria (sem espaços em volta do <code>=</code>); <code>$nome</code> usa. Veja: <a href="variaveis-intro.html">Variáveis: o Básico</a>.</dd>
+<dt><strong>Variável de ambiente</strong></dt>
+<dd>Uma variável exportada, que os programas iniciados pelo shell recebem (<code>HOME</code>, <code>PATH</code>, <code>LANG</code>). <code>env</code> lista todas. Veja: <a href="variaveis.html">Variáveis, Escopo e export</a> e <a href="ref-variaveis.html">Variáveis Especiais</a>.</dd>
+<dt><strong>Variável especial</strong></dt>
+<dd>Variável que o Bash preenche sozinho: <code>$?</code>, <code>$#</code>, <code>$$</code>, <code>RANDOM</code>, <code>LINENO</code>… Veja: <a href="ref-variaveis.html">Variáveis Especiais</a>.</dd>
+</dl>
+
+<h2 id="g-X">X</h2>
+<dl class="glossario">
+<dt><strong>xargs</strong></dt>
+<dd>Transforma linhas da entrada em argumentos de um comando: <code>find . -name '*.tmp' -print0 | xargs -0 rm</code>. Com <code>-P</code>, roda vários ao mesmo tempo. Veja: <a href="pipes.html">Pipes</a> e <a href="paralelo.html">Rodar em Paralelo</a>.</dd>
+</dl>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
