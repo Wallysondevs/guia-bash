@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Rodar em Paralelo — &amp; + wait, wait -n e xargs -P | Guia Bash</title>
+<meta name="description" content="Rode várias tarefas ao mesmo tempo no Bash: vários &amp; com wait, limitar a N tarefas com wait -n ou xargs -P, organizar a saída embaralhada, pegar o código de cada tarefa e medir com time.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Rodar em Paralelo</span></h1>
+
+<p class="intro">Quando um script repete a mesma tarefa para vários itens (compactar arquivos, converter fotos, conferir sites), cada item espera o anterior acabar. Se as tarefas não dependem umas das outras, dá para rodar <strong>várias ao mesmo tempo</strong> e terminar bem antes. Nesta aula você aprende a fazer isso com <code>&amp;</code> e <code>wait</code>, a limitar quantas rodam juntas e a não se perder na saída nem nos erros.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Disparar várias tarefas com <code>&amp;</code> e esperar todas com <code>wait</code>.</li>
+  <li>Medir o ganho com <code>time</code> e entender <code>real</code>, <code>user</code> e <code>sys</code>.</li>
+  <li>Limitar a N tarefas ao mesmo tempo, com <code>wait -n</code> e com <code>xargs -P</code>.</li>
+  <li>Arrumar a saída embaralhada (um arquivo por tarefa) e conferir o código de saída de cada uma.</li>
+  <li>Quando o paralelo <strong>não</strong> ajuda: CPU e disco têm limite.</li>
+</ul>
+</div>
+
+<p>Esta aula usa o <code>&amp;</code>, o <code>$!</code> e o <code>wait</code> da aula <a href="jobs.html">Jobs</a>. Se esses nomes forem novidade, comece por lá.</p>
+
+<hr>
+
+<h2>Em fila × ao mesmo tempo</h2>
+<p>Pense em quatro máquinas de lavar roupa numa lavanderia. Se você usa uma só e coloca uma carga depois da outra, leva 4 ciclos. Se usa as quatro ao mesmo tempo, leva 1 ciclo. O trabalho é o mesmo; o que muda é <strong>quanto tempo você espera</strong>.</p>
+
+<p>Para enxergar isso sem gastar o computador, vamos usar um script de mentirinha, <code>tarefa.sh</code>, que "trabalha" 1 segundo:</p>
+
+<pre class="file" data-file="tarefa.sh">#!/usr/bin/env bash
+# tarefa.sh NOME — finge um trabalho de 1 segundo
+echo "começou $1"
+sleep 1
+echo "terminou $1"
+</pre>
+
+<p>Primeiro, a forma de sempre: um <a href="for.html"><code>for</code></a> que chama a tarefa para cada item, um depois do outro.</p>
+
+<pre class="file" data-file="em-fila.sh">#!/usr/bin/env bash
+for f in a b c d; do
+  ./tarefa.sh "$f"
+done
+</pre>
+
+<p>Agora a versão paralela. Só mudam duas coisas: o <code>&amp;</code> no fim da linha da tarefa e o <code>wait</code> depois do laço.</p>
+
+<pre class="file" data-file="juntos.sh">#!/usr/bin/env bash
+for f in a b c d; do
+  ./tarefa.sh "$f" &amp;
+done
+wait
+echo "todas terminaram"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>./tarefa.sh "$f" &amp;</code></td><td>Dispara a tarefa em segundo plano e volta <strong>na hora</strong> para o laço. Em menos de um instante, as quatro estão rodando.</td></tr>
+<tr><td><code>wait</code></td><td>Para o script até <strong>todas</strong> as tarefas em segundo plano terminarem.</td></tr>
+<tr><td><code>echo "todas terminaram"</code></td><td>Só roda depois do <code>wait</code>: aqui é seguro usar o resultado das tarefas.</td></tr>
+</table>
+</div>
+
+<h3>Medindo: <code>time</code></h3>
+<p>A palavra <code>time</code> ("tempo") na frente de um comando mede quanto ele demorou. No Bash ela é uma <strong>palavra-chave do shell</strong>, e não um programa:</p>
+
+<pre class="term">$ type time
+time é uma palavra-chave do shell
+$ time bash em-fila.sh
+começou a
+terminou a
+começou b
+terminou b
+começou c
+terminou c
+começou d
+terminou d
+
+real	0m4,026s                   « 4 segundos: uma tarefa depois da outra
+user	0m0,003s
+sys	0m0,023s
+$ time bash juntos.sh
+começou c
+começou d
+começou a
+começou b
+terminou a
+terminou c
+terminou d
+terminou b
+todas terminaram
+
+real	0m1,010s                   « 1 segundo: as quatro juntas
+user	0m0,005s
+sys	0m0,022s</pre>
+
+<p>O relatório do <code>time</code> sai depois da saída do comando, com uma linha em branco antes:</p>
+
+<dl class="anatomy">
+  <dt>real</dt><dd>O tempo de relógio, do começo ao fim: o que você esperou. É o número que interessa aqui.</dd>
+  <dt>user</dt><dd>Quanto tempo de CPU o programa gastou fazendo a parte "dele" (modo usuário).</dd>
+  <dt>sys</dt><dd>Quanto tempo de CPU o sistema (o kernel) gastou trabalhando para ele: abrir arquivos, criar processos…</dd>
+  <dt>0m4,026s</dt><dd>0 minutos e 4,026 segundos. Em português o Bash usa <strong>vírgula</strong> decimal (em inglês sairia <code>0m4.026s</code>).</dd>
+</dl>
+
+<p>O <code>user</code> e o <code>sys</code> quase zero mostram que o <code>sleep</code> não usa CPU: ele só espera. Numa tarefa de verdade (compactar, converter), o <code>user</code> cresce. Quando várias tarefas rodam em núcleos diferentes, <code>user + sys</code> pode até passar do <code>real</code>: é tempo de CPU somado de todos os núcleos.</p>
+
+<p>Para um relatório mais curto, a variável <code>TIMEFORMAT</code> muda o formato (<code>%R</code> = o tempo real):</p>
+
+<pre class="term">$ TIMEFORMAT="levou %R segundos"
+$ time bash juntos.sh &gt; /dev/null
+levou 1,009 segundos</pre>
+
+<h3>Repare na ordem</h3>
+<p>Na versão em fila, as linhas saem sempre na mesma ordem. Na paralela, saiu <code>c d a b</code> no "começou" e <code>a c d b</code> no "terminou". Rode de novo e a ordem muda. Quem chega primeiro na tela depende de quem o sistema deixa rodar primeiro. Isso não é um erro, mas exige cuidado (veja "Saída embaralhada", abaixo).</p>
+
+<div class="tryscript" data-file="lavanderia.sh" data-goal="src:&amp;\s*\n,src:\bwait\b,out:todas terminaram">
+<p class="try-task"><strong>Missão:</strong> este script lava três cargas de roupa, uma depois da outra. Faça as três lavarem <strong>ao mesmo tempo</strong> e garanta que "todas terminaram" só apareça no final.</p>
+<pre class="script">#!/usr/bin/env bash
+lavar() {
+  sleep 1
+  echo "carga $1 lavada"
+}
+for carga in brancas coloridas toalhas; do
+  lavar "$carga"
+done
+echo "todas terminaram"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+lavar() {
+  sleep 1
+  echo "carga $1 lavada"
+}
+for carga in brancas coloridas toalhas; do
+  lavar "$carga" &amp;
+done
+wait
+echo "todas terminaram"
+</pre>
+</div>
+
+<hr>
+
+<h2>Limitar a N tarefas ao mesmo tempo</h2>
+<p>Disparar tudo de uma vez funciona com 4 tarefas. Com 400, o computador engasga: 400 processos disputando CPU, memória e disco ficam <strong>mais lentos</strong> do que poucos de cada vez. O certo é ter um <strong>limite</strong>: "no máximo 2 (ou 4) rodando juntas; quando uma terminar, entra a próxima". É como a lavanderia com só duas máquinas e uma fila de cargas.</p>
+
+<h3>Forma 1: <code>wait -n</code> e um contador <span class="versao">bash 4.3+</span></h3>
+<p>O <code>wait -n</code> espera <strong>a próxima</strong> tarefa que terminar, seja ela qual for. Com um contador de quantas estão rodando, ele abre a vaga:</p>
+
+<pre class="file" data-file="limite.sh">#!/usr/bin/env bash
+max=2            # no máximo 2 ao mesmo tempo
+rodando=0
+for f in a b c d e; do
+  if (( rodando &gt;= max )); then
+    wait -n                # espera uma vaga
+    (( rodando-- ))
+  fi
+  ./tarefa.sh "$f" &amp;
+  (( rodando++ ))
+done
+wait
+echo "todas terminaram"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>max=2</code></td><td>O limite. Mude aqui para 3, 4…</td></tr>
+<tr><td><code>rodando=0</code></td><td>Quantas tarefas estão em andamento agora.</td></tr>
+<tr><td><code>if (( rodando &gt;= max ))</code></td><td>Se já está no limite… (<a href="aritmetica.html"><code>(( ))</code></a> é a conta do Bash; dentro dela, <code>&gt;=</code> é "maior ou igual")</td></tr>
+<tr><td><code>wait -n</code></td><td>…espera <strong>uma</strong> terminar…</td></tr>
+<tr><td><code>(( rodando-- ))</code></td><td>…e desconta uma do contador.</td></tr>
+<tr><td><code>./tarefa.sh "$f" &amp;</code> / <code>(( rodando++ ))</code></td><td>Dispara a próxima e soma uma no contador.</td></tr>
+<tr><td><code>wait</code></td><td>No fim, espera as que sobraram.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ time bash limite.sh
+começou b
+começou a
+terminou b
+terminou a
+começou d
+começou c
+terminou d
+terminou c
+começou e
+terminou e
+todas terminaram
+
+real	0m3,021s                   « 5 tarefas, 2 por vez: 1 s + 1 s + 1 s</pre>
+
+<p>Cinco tarefas de 1 segundo, duas de cada vez: três "rodadas", 3 segundos. Em fila seriam 5; todas juntas, 1 (mas sem limite nenhum).</p>
+
+<h3>Forma 2: <code>xargs -P</code></h3>
+<p>O <code>xargs</code> lê uma lista (da entrada) e transforma cada item em <strong>argumento</strong> de um comando. A opção <code>-P</code> (de <em>processes</em>) diz quantos comandos ele pode rodar ao mesmo tempo. Ele cuida da fila sozinho: é o jeito mais curto de "N de cada vez".</p>
+
+<dl class="anatomy">
+  <dt>printf "%s\n" a b c d e</dt><dd>Produz a lista, um item por linha.</dd>
+  <dt>|</dt><dd>Entrega a lista para o <code>xargs</code> (<a href="pipes.html">pipe</a>).</dd>
+  <dt>xargs</dt><dd>Monta e roda comandos com os itens que recebe.</dd>
+  <dt>-P 2</dt><dd>No máximo 2 comandos rodando ao mesmo tempo.</dd>
+  <dt>-n 1</dt><dd>Um item por comando (sem isso, o <code>xargs</code> põe todos os itens num comando só).</dd>
+  <dt>./tarefa.sh</dt><dd>O comando que recebe cada item como <code>$1</code>.</dd>
+</dl>
+
+<pre class="term">$ time printf "%s\n" a b c d e | xargs -P 2 -n 1 ./tarefa.sh
+começou a
+começou b
+terminou a
+terminou b
+começou c
+começou d
+terminou c
+terminou d
+começou e
+terminou e
+
+real	0m3,019s
+user	0m0,008s
+sys	0m0,023s
+$ echo $?
+0</pre>
+
+<p>Por que o <code>-n 1</code> importa? Compare:</p>
+
+<pre class="term">$ printf "%s\n" a b c | xargs -n 1 echo tarefa
+tarefa a
+tarefa b
+tarefa c
+$ printf "%s\n" a b c | xargs echo tarefa
+tarefa a b c                       « um comando só, com os três itens</pre>
+
+<p>Um exemplo de verdade: compactar, duas de cada vez, cópias dos arquivos de texto da Ana (numa pasta <code>copia</code>, para não mexer nos originais):</p>
+
+<pre class="term">$ mkdir -p copia &amp;&amp; cp Documentos/*.txt Documentos/*.csv Documentos/*.log copia/
+$ ls copia
+acesso.log  alunos.csv  notas.txt
+$ ls copia/* | xargs -P 2 -n 1 gzip
+$ ls copia
+acesso.log.gz  alunos.csv.gz  notas.txt.gz</pre>
+
+<h4>Nomes com espaço: <code>-0</code> ou <code>-d '\n'</code></h4>
+<p>O <code>xargs</code> separa os itens em <strong>qualquer espaço</strong>, não só na quebra de linha. Um arquivo chamado <code>lista de compras.txt</code> vira três itens:</p>
+
+<pre class="term">$ printf "%s\n" Documentos/*.txt | xargs -P 2 -n 1 wc -l
+wc: Documentos/lista: Arquivo ou diretório inexistente
+wc: de: Arquivo ou diretório inexistente
+wc: compras.txt: Arquivo ou diretório inexistente
+4 Documentos/notas.txt
+$ echo $?
+123                                « algum comando falhou</pre>
+
+<p>A solução é separar os itens por um caractere que não aparece em nomes de arquivo. O mais seguro é o caractere nulo (<code>\0</code>), com <code>-0</code>; outra saída é dizer que o separador é a quebra de linha, com <code>-d '\n'</code>:</p>
+
+<pre class="term">$ printf "%s\0" Documentos/*.txt | xargs -0 -P 2 -n 1 wc -l
+0 Documentos/lista de compras.txt
+4 Documentos/notas.txt</pre>
+
+<p>Com o <code>find</code>, o par é <code>find … -print0 | xargs -0 …</code>.</p>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Vantagem</th><th>Quando</th></tr>
+<tr><td>Vários <code>&amp;</code> + <code>wait</code></td><td>Simples, tudo no Bash</td><td>Poucas tarefas (até umas 4–8), conhecidas de antemão</td></tr>
+<tr><td><code>wait -n</code> + contador</td><td>Limite de N; a tarefa pode ser uma <a href="funcoes.html">função</a> do script; dá para tratar o código de cada uma</td><td>Muitas tarefas dentro de um script Bash 4.3+</td></tr>
+<tr><td><code>xargs -P N -n 1</code></td><td>Uma linha só; a fila é automática</td><td>A tarefa é um comando/script externo e a lista vem de outro comando</td></tr>
+<tr><td>GNU <code>parallel</code></td><td>Ordem da saída, barra de progresso, várias máquinas</td><td>Uso pesado e frequente (precisa instalar)</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="file:~/a.txt,file:~/b.txt,file:~/c.txt,ran:xargs .*-P" data-solucao="printf '%s\n' a b c | xargs -P 2 -I {} touch {}.txt">
+<p class="try-task"><strong>Missão:</strong> crie os arquivos <code>a.txt</code>, <code>b.txt</code> e <code>c.txt</code> usando <strong>um</strong> <code>xargs</code> com <code>-P 2</code>. Dica: <code>printf '%s\n' a b c</code> gera a lista; com <code>-I {}</code> o <code>xargs</code> troca <code>{}</code> pelo item, então <code>touch {}.txt</code> vira <code>touch a.txt</code>…</p>
+</div>
+
+<hr>
+
+<h2>Saída embaralhada: um arquivo por tarefa</h2>
+<p>Quando várias tarefas escrevem na tela ao mesmo tempo, as linhas se misturam, como você viu em <code>juntos.sh</code>. Com tarefas que escrevem muito, fica impossível saber que linha é de quem. Pior: se duas escrevem no <strong>mesmo arquivo</strong> ao mesmo tempo, linhas podem sair cortadas ou fora de ordem.</p>
+
+<p>A regra prática: <strong>cada tarefa escreve no seu próprio arquivo</strong>. Depois que todas terminam (<code>wait</code>), você junta na ordem que quiser.</p>
+
+<pre class="file" data-file="separado.sh">#!/usr/bin/env bash
+mkdir -p saidas
+for f in a b c; do
+  ./tarefa.sh "$f" &gt; "saidas/$f.log" 2&gt;&amp;1 &amp;
+done
+wait
+cat saidas/a.log saidas/b.log saidas/c.log
+</pre>
+
+<pre class="term">$ bash separado.sh
+começou a
+terminou a
+começou b
+terminou b
+começou c
+terminou c                         « organizado, apesar de terem rodado juntas
+$ ls saidas
+a.log  b.log  c.log</pre>
+
+<ul>
+  <li><code>&gt; "saidas/$f.log" 2&gt;&amp;1</code>: a saída e os erros de cada tarefa vão para um arquivo com o nome dela (<a href="redirecionamento.html">redirecionamento</a>).</li>
+  <li>O <code>&amp;</code> fica <strong>depois</strong> dos redirecionamentos: ele vale para o comando inteiro.</li>
+  <li>O <code>cat</code> só roda depois do <code>wait</code>, quando os arquivos estão completos.</li>
+</ul>
+
+<p>Com <code>xargs</code>, o redirecionamento por item precisa de um shell para cada tarefa, porque o <code>&gt;</code> tem que ser montado com o nome do item:</p>
+
+<pre class="term">$ printf "%s\n" a b | xargs -P 2 -I {} sh -c "./tarefa.sh {} &gt; saidas/{}.out"
+$ cat saidas/a.out
+começou a
+terminou a</pre>
+
+<p>Cuidado: o <code>{}</code> dentro do <code>sh -c</code> funciona bem com nomes simples, como aqui. Com nomes de arquivo que têm espaço ou aspas, prefira <code>sh -c '… "$1" …' _ {}</code>, que passa o item como argumento.</p>
+
+<hr>
+
+<h2>O código de saída de cada tarefa</h2>
+<p>O <code>wait</code> sem argumentos devolve 0 mesmo que alguma tarefa tenha falhado. Para saber <strong>quem</strong> falhou, guarde o PID de cada uma (<code>$!</code>) e espere uma por uma com <code>wait PID</code>, que devolve o código daquela tarefa. Para testar, use um script que termina com o código que você pedir:</p>
+
+<pre class="file" data-file="falha.sh">#!/usr/bin/env bash
+# falha.sh NOME CODIGO
+sleep 1
+echo "$1 saiu com $2"
+exit "$2"
+</pre>
+
+<pre class="file" data-file="codigos.sh">#!/usr/bin/env bash
+nomes=(a b c)
+codigos=(0 3 0)          # o código que cada tarefa vai devolver
+pids=()
+for i in "${!nomes[@]}"; do
+  ./falha.sh "${nomes[i]}" "${codigos[i]}" &gt; /dev/null &amp;
+  pids[i]=$!
+done
+erros=0
+for i in "${!nomes[@]}"; do
+  if wait "${pids[i]}"; then
+    echo "${nomes[i]}: ok"
+  else
+    echo "${nomes[i]}: FALHOU (código $?)"
+    (( erros++ ))
+  fi
+done
+echo "$erros tarefa(s) com erro"
+(( erros == 0 ))
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>nomes=(a b c)</code></td><td>Um <a href="arrays.html">array</a> com o nome de cada tarefa.</td></tr>
+<tr><td><code>pids[i]=$!</code></td><td>Guarda o PID da tarefa na mesma posição do nome dela.</td></tr>
+<tr><td><code>"${!nomes[@]}"</code></td><td>As posições do array: 0, 1, 2.</td></tr>
+<tr><td><code>if wait "${pids[i]}"</code></td><td>Espera aquela tarefa; o <code>if</code> olha o código dela (0 = ok).</td></tr>
+<tr><td><code>código $?</code></td><td>Dentro do <code>else</code>, o <code>$?</code> ainda é o código que o <code>wait</code> devolveu.</td></tr>
+<tr><td><code>(( erros == 0 ))</code></td><td>Última linha: o script termina com 0 se não houve erro, 1 se houve. Assim, quem chama o script também fica sabendo.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ time bash codigos.sh
+a: ok
+b: FALHOU (código 3)
+c: ok
+1 tarefa(s) com erro
+
+real	0m1,009s                   « as três rodaram juntas
+user	0m0,007s
+sys	0m0,012s
+$ echo $?
+1</pre>
+
+<p>E o <code>xargs</code>? Ele não diz qual falhou, mas avisa no próprio código de saída: <strong>123</strong> quer dizer "algum comando terminou com código de 1 a 125".</p>
+
+<pre class="term">$ printf "%s\n" "a 0" "b 3" "c 0" | xargs -P 2 -L 1 ./falha.sh
+a saiu com 0
+b saiu com 3
+c saiu com 0
+$ echo $?
+123</pre>
+
+<p>(O <code>-L 1</code> passa <strong>uma linha</strong> inteira por comando: <code>./falha.sh b 3</code>, com dois argumentos.)</p>
+
+<div class="tryscript" data-file="conferir.sh" data-goal="out:nada.txt: código 1,src:wait">
+<p class="try-task"><strong>Missão:</strong> o script confere, em paralelo, se dois arquivos existem. Complete o final para esperar a <strong>segunda</strong> tarefa e mostrar <code>nada.txt: código N</code>, com o código dela.</p>
+<pre class="script">#!/usr/bin/env bash
+conferir() {
+  sleep 1
+  [[ -f $1 ]]
+}
+conferir frutas.txt &amp;
+p1=$!
+conferir nada.txt &amp;
+p2=$!
+wait "$p1"
+echo "frutas.txt: código $?"
+# espere a segunda tarefa e mostre o código dela
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+conferir() {
+  sleep 1
+  [[ -f $1 ]]
+}
+conferir frutas.txt &amp;
+p1=$!
+conferir nada.txt &amp;
+p2=$!
+wait "$p1"
+echo "frutas.txt: código $?"
+wait "$p2"
+echo "nada.txt: código $?"
+</pre>
+</div>
+
+<hr>
+
+<h2>GNU parallel <span class="versao">programa à parte</span></h2>
+<p>O <strong>GNU parallel</strong> é um programa feito só para isso. Ele não vem instalado (no Debian/Ubuntu: pacote <code>parallel</code>), por isso aqui fica só a ideia, sem saída. O <code>:::</code> separa o comando da lista de itens:</p>
+
+<pre class="file" data-file="exemplo (ilustrativo)">parallel -j 2 ./tarefa.sh ::: a b c d e        # 2 por vez, como xargs -P 2 -n 1
+parallel -j 2 --keep-order ./tarefa.sh ::: a b c   # a saída sai na ordem a, b, c
+</pre>
+
+<p>As vantagens sobre o <code>xargs -P</code>: guarda a saída de cada tarefa e mostra inteira (não embaralha), tem <code>--keep-order</code>, barra de progresso (<code>--bar</code>) e log de quem falhou (<code>--joblog</code>). Para scripts que vão rodar em qualquer máquina, porém, o <code>xargs</code> e o <code>wait -n</code> já estão lá.</p>
+
+<hr>
+
+<h2>Quanto paralelo? CPU e disco</h2>
+<p>Mais tarefas ao mesmo tempo não é sempre mais rápido. Depende do que segura cada tarefa:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>A tarefa espera por…</th><th>Exemplos</th><th>Quantas juntas</th></tr>
+<tr><td><strong>CPU</strong> (faz contas)</td><td>Compactar (<code>gzip</code>, <code>xz</code>), converter imagem/vídeo, calcular checksum</td><td>No máximo o número de núcleos (<code>nproc</code>); passar disso só divide o mesmo processador</td></tr>
+<tr><td><strong>Disco</strong> (lê/grava muito)</td><td>Copiar arquivos grandes, <code>tar</code> de pastas inteiras</td><td>Poucas (1–2). Num HD comum, várias leituras ao mesmo tempo fazem a agulha pular de um lado para o outro: fica <strong>mais lento</strong> e a máquina toda trava</td></tr>
+<tr><td><strong>Rede</strong> ou outro serviço</td><td>Baixar arquivos, consultar uma API</td><td>Algumas (4–8), sem abusar do servidor do outro lado</td></tr>
+</table>
+</div>
+
+<pre class="term">$ nproc
+20                                 « núcleos disponíveis; na sua máquina será outro número</pre>
+
+<p>Um bom ponto de partida para tarefas de CPU é <code>xargs -P "$(nproc)"</code>. Evite <code>-P 0</code>: ele quer dizer "quantos der", sem limite nenhum.</p>
+
+<div class="warning">
+<strong>Paralelo não conserta tarefas que dependem umas das outras</strong>
+<p>Só rode em paralelo o que é <strong>independente</strong>: cada tarefa com sua entrada e sua saída. "Baixar o arquivo e depois descompactar" são duas etapas em fila; o que pode ser paralelo é baixar vários arquivos, ou descompactar vários arquivos.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O script terminou antes das tarefas (falta o <code>wait</code>)</strong>
+<pre class="term">$ bash lavanderia.sh
+todas terminaram
+$                                  « o script acabou e o prompt voltou…
+carga brancas lavada               « …mas as tarefas ainda escreveram depois
+carga toalhas lavada
+carga coloridas lavada</pre>
+<p>(No terminal, a primeira dessas linhas sai colada no prompt: <code>ana@notebook:~$ carga brancas lavada</code>.)</p>
+<p><strong>O que aconteceu:</strong> sem <code>wait</code>, o script disparou as tarefas, escreveu "todas terminaram" e acabou. As tarefas continuaram sozinhas e escreveram na tela por cima do prompt.</p>
+<p><strong>Como resolver:</strong> <code>wait</code> antes de qualquer linha que use o resultado das tarefas.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>wait</code> não espera nada (o <code>&amp;</code> estava num pipe ou subshell)</strong>
+<p><strong>O que aconteceu:</strong> o <code>wait</code> só conhece tarefas criadas pelo <strong>próprio</strong> shell. Se o laço com <code>&amp;</code> está do lado direito de um pipe (<code>ls | while read f; do tarefa "$f" &amp; done; wait</code>), quem criou as tarefas foi um <a href="subshell.html">subshell</a>, e o <code>wait</code> lá fora volta na hora.</p>
+<p><strong>Como resolver:</strong> coloque o <code>wait</code> dentro do mesmo trecho (<code>ls | { while …; done; wait; }</code>) ou leia a lista com <code>done &lt; &lt;(ls)</code> (<a href="substituicao-processo.html">substituição de processo</a>).</p>
+</div>
+
+<div class="cenario">
+<strong><code>xargs</code> separou o nome do arquivo em pedaços</strong>
+<pre class="term">$ printf "%s\n" Documentos/*.txt | xargs -P 2 -n 1 wc -l
+wc: Documentos/lista: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o <code>xargs</code> separa em espaços. <strong>Como resolver:</strong> <code>printf '%s\0' … | xargs -0</code>, <code>find … -print0 | xargs -0</code> ou <code>xargs -d '\n'</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"terminado pelo sinal 13" com <code>head</code></strong>
+<pre class="term">$ printf "%s\n" a b c d e | xargs -P 0 -n 1 ./tarefa.sh | head -3
+começou a
+começou b
+começou c
+xargs: ./tarefa.sh: terminado pelo sinal 13
+xargs: ./tarefa.sh: terminado pelo sinal 13
+…                                  « encurtado: a mesma linha, uma por tarefa</pre>
+<p><strong>O que aconteceu:</strong> o <code>head -3</code> leu 3 linhas e foi embora. As tarefas que ainda tentavam escrever no pipe receberam o sinal 13 (<code>SIGPIPE</code>, "o cano não tem mais ninguém do outro lado") e morreram. Com <code>-P 0</code>, todas estavam rodando e todas foram derrubadas.</p>
+<p><strong>Como resolver:</strong> se precisa do trabalho completo, não corte a saída com <code>head</code>; grave em arquivos e olhe depois.</p>
+</div>
+
+<div class="cenario">
+<strong>A máquina ficou lenta (ou travou)</strong>
+<p><strong>O que aconteceu:</strong> tarefas demais ao mesmo tempo, ou tarefas de disco em paralelo. O <code>real</code> do <code>time</code> sobe em vez de cair.</p>
+<p><strong>Como resolver:</strong> diminua o <code>-P</code>/<code>max</code>; para tarefas de disco, use 1 ou 2. Meça com <code>time</code> antes e depois: o número certo é o que dá o menor <code>real</code> na sua máquina.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>cmd1 &amp; cmd2 &amp; wait</code></td><td>Roda os dois juntos e espera os dois</td></tr>
+<tr><td><code>wait -n</code> <span class="versao">4.3+</span></td><td>Espera a próxima tarefa que terminar (abre uma vaga)</td></tr>
+<tr><td><code>wait "$pid"</code></td><td>Espera uma tarefa e devolve o código dela</td></tr>
+<tr><td><code>xargs -P N -n 1 cmd</code></td><td>Roda <code>cmd item</code> para cada item, N de cada vez</td></tr>
+<tr><td><code>xargs -I {} cmd {}.txt</code></td><td>Troca <code>{}</code> pelo item (um item por comando)</td></tr>
+<tr><td><code>xargs -L 1</code></td><td>Uma linha inteira por comando</td></tr>
+<tr><td><code>xargs -0</code> / <code>-d '\n'</code></td><td>Itens separados por <code>\0</code> / por quebra de linha</td></tr>
+<tr><td><code>xargs</code> devolve 123</td><td>Algum comando falhou (código 1–125)</td></tr>
+<tr><td><code>time cmd</code></td><td>Mede <code>real</code>, <code>user</code> e <code>sys</code>; formato em <code>TIMEFORMAT</code></td></tr>
+<tr><td><code>nproc</code></td><td>Quantos núcleos de CPU estão disponíveis</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Duas de cada vez</h3>
+<p>Complete para converter cada arquivo da lista com <code>./converter.sh</code>, no máximo 2 ao mesmo tempo e um arquivo por comando:</p>
+<div class="ex-code">cat lista.txt | xargs <input data-answer="-P 2 -n 1|-n 1 -P 2|-P2 -n1|-n1 -P2" aria-label="opções"> ./converter.sh</div>
+</div>
+
+<div class="exercise">
+<h3>2. Abrir uma vaga</h3>
+<p>No script com contador, que comando espera <strong>uma</strong> tarefa qualquer terminar?</p>
+<div class="ex-code"><input data-answer="wait -n" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. O tempo de relógio</h3>
+<p>Na saída do <code>time</code>, qual das três linhas mostra quanto tempo você realmente esperou?</p>
+<div class="ex-code"><input data-answer="real" aria-label="linha"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Quatro tarefas de 1 segundo, cada uma com <code>&amp;</code>, seguidas de <code>wait</code>. Quanto tempo leva, aproximadamente?</p>
+<label><input type="radio" name="q4"> 4 segundos.</label>
+<label><input type="radio" name="q4"> 1 segundo.</label>
+<label><input type="radio" name="q4"> 0 segundos, porque o <code>&amp;</code> não espera.</label>
+<label><input type="radio" name="q4"> 2 segundos.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Três tarefas paralelas escrevem muitas linhas na tela e a saída ficou misturada. Qual a melhor correção?</p>
+<label><input type="radio" name="q5"> Rodar de novo até sair na ordem.</label>
+<label><input type="radio" name="q5"> Colocar <code>sleep</code> entre as tarefas.</label>
+<label><input type="radio" name="q5"> Mandar a saída de cada tarefa para um arquivo próprio e juntar depois do <code>wait</code>.</label>
+<label><input type="radio" name="q5"> Usar <code>xargs -P 0</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Um script copia 10 arquivos grandes de um HD para outro. Rodar as 10 cópias juntas…</p>
+<label><input type="radio" name="q6"> …provavelmente fica mais lento: o disco é o gargalo, e não a CPU.</label>
+<label><input type="radio" name="q6"> …fica 10 vezes mais rápido.</label>
+<label><input type="radio" name="q6"> …só funciona com GNU parallel.</label>
+<label><input type="radio" name="q6"> …é sempre a melhor escolha.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Tarefas independentes podem rodar juntas: <code>&amp;</code> em cada uma e <code>wait</code> no fim.</li>
+  <li><code>time</code> mede; olhe o <code>real</code>. Em pt_BR ele usa vírgula: <code>0m1,010s</code>.</li>
+  <li>Limite a N: <code>wait -n</code> com contador, ou <code>xargs -P N -n 1</code> (com <code>-0</code> para nomes com espaço).</li>
+  <li>A ordem da saída muda a cada vez: um arquivo por tarefa resolve.</li>
+  <li><code>wait "$pid"</code> dá o código de cada tarefa; <code>xargs</code> devolve 123 se alguma falhou.</li>
+  <li>CPU: até <code>nproc</code> tarefas. Disco: poucas.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
