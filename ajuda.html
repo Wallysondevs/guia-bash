@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Ajuda — help, man, info, --help, type e apropos | Guia Bash</title>
+<meta name="description" content="Como obter ajuda no Bash: help para comandos internos, man, info e --help para programas, type para descobrir o que é cada nome, apropos e whatis para achar comandos. Como ler a sinopse (colchetes, reticências, barra) e buscar dentro do man bash.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Obtendo Ajuda</span></h1>
+
+<p class="intro">Ninguém decora todas as opções de todos os comandos. O que os veteranos sabem é <strong>onde procurar</strong>. O Bash e o sistema trazem manuais embutidos, que funcionam sem internet. Nesta aula você vai aprender qual ajuda usar para cada tipo de comando e como ler o que ela mostra.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A descobrir o que é um comando com <code>type</code>, antes de procurar a ajuda.</li>
+  <li><code>help</code> para os comandos internos do Bash; <code>--help</code>, <code>man</code> e <code>info</code> para os programas.</li>
+  <li>A ler uma sinopse: <code>[ ]</code>, <code>...</code>, <code>|</code> e palavras a substituir.</li>
+  <li>A navegar e buscar dentro do <code>man bash</code>.</li>
+  <li>A achar um comando quando você não sabe o nome (<code>apropos</code>, <code>whatis</code>).</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Primeiro: o que é esse comando?</h2>
+<p>A aula <a href="sintaxe.html">Anatomia de um Comando</a> mostrou que um nome pode ser um <strong>comando interno</strong> do Bash ou um <strong>programa</strong> separado. Isso decide onde está a ajuda, como numa biblioteca: livros do Bash numa estante, livros dos programas em outra. O <code>type</code> diz em qual estante procurar.</p>
+
+<dl class="anatomy">
+  <dt>type</dt><dd>Comando interno que diz o que um nome é.</dd>
+  <dt>cd wc ll</dt><dd>Os nomes que você quer investigar (quantos quiser).</dd>
+</dl>
+
+<pre class="term">$ type cd wc ll
+cd é um comando interno do shell              « ajuda com help
+wc é /usr/bin/wc                              « um programa: ajuda com --help e man
+ll está apelidada para `ls -alF'              « um apelido: a ajuda é a do ls</pre>
+
+<h3><code>type -t</code>: uma palavra só</h3>
+<p>Com <code>-t</code> (<em>type</em>, "tipo"), a resposta é uma palavra, boa para scripts:</p>
+<pre class="term">$ type -t cd ls wc ll if
+builtin                            « comando interno
+alias                              « apelido (na Ana, ls é um apelido de ls --color=auto)
+file                               « arquivo: programa no disco
+alias
+keyword                            « palavra-chave da linguagem (if, for, while…)</pre>
+
+<h3><code>type -a</code>: todos os lugares</h3>
+<p>Um mesmo nome pode existir em vários lugares. Com <code>-a</code> (<em>all</em>, "todos"), o <code>type</code> lista todos, na ordem em que o Bash procura. O primeiro é o que vale:</p>
+
+<pre class="term">$ type -a echo
+echo é um comando interno do shell            « este é o que roda quando você digita echo
+echo é /usr/bin/echo                          « existe também um programa echo…
+echo é /bin/echo                              « …visto por dois caminhos (/bin aponta para /usr/bin)</pre>
+
+<p>Por isso <code>man echo</code> pode mostrar opções diferentes das do <code>echo</code> que você usa: o manual é do programa <code>/usr/bin/echo</code>, mas quem roda é o comando interno. Para o interno, a ajuda certa é <code>help echo</code>.</p>
+
+<div class="try" data-goal="out:ls -alF" data-solucao="type ll">
+<p class="try-task"><strong>Missão:</strong> a Ana usa um comando <code>ll</code>. Descubra com <code>type</code> o que ele é de verdade. Aproveite para testar <code>type cd</code>, <code>type wc</code> e <code>type -a echo</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>help</code>: a ajuda dos comandos internos</h2>
+<p>O <code>help</code> é o manual embutido no próprio Bash. Sozinho, ele lista todos os comandos internos e palavras-chave, cada um com a sua sinopse (a forma de usar):</p>
+
+<pre class="term">$ help
+GNU bash, versão 5.3.9(1)-release (x86_64-pc-linux-gnu)
+Esses comandos shell são definidos internamente. Digite `help' para ver essa
+lista. Digite `help NOME' para descobrir mais sobre a função `NOME'.
+Use `info bash' para descobrir mais sobre o shell em geral.
+Use `man -k' ou `info' para descobrir mais sobre comandos que não estão nesta
+lista.
+
+Um asterisco (*) próximo ao nome significa que o comando está desabilitado.
+
+ ! PIPELINE                              history [-c] [-d posição] [n] ou his&gt;
+ espec_job [&amp;]                           if COMANDOS; then COMANDOS; [ elif C&gt;
+ (( expressão ))                         jobs [-lnprs] [espec_job ...] ou job&gt;
+…                                        « encurtado: são mais de 70 itens em duas colunas</pre>
+
+<p>O <code>&gt;</code> no fim de algumas linhas indica que a sinopse foi cortada para caber na coluna. Para ver um comando inteiro, peça-o pelo nome:</p>
+
+<pre class="term">$ help cd
+cd: cd [-L|[-P [-e]]] [-@] [dir]                       « a sinopse
+    Altera o diretório de trabalho do shell.            « o que faz, em uma linha
+
+    Altera o diretório atual para DIR, sendo o padrão de DIR o mesmo valor
+    da variável HOME. Se DIR é "-", é convertido para $OLDPWD.
+…                                                       « encurtado
+    Opções:
+      -L	força links simbólicos a serem seguidos: resolver links simbólicos
+      		em DIR após processar instâncias de `..'
+      -P	usa a estrutura do diretório físico sem seguir links
+    		simbólicos: resolve links simbólicos em DIR antes de processar
+    		instâncias de `..'
+…
+    Status de saída:                                    « o código de saída, explicado
+    Retorna 0, se o diretório tiver sido alterado e se $PWD está definida com
+    sucesso quando a opção -P for usada; do contrário, retorna não-zero.</pre>
+
+<p>Toda página do <code>help</code> tem a mesma estrutura: sinopse, resumo, descrição, <strong>Opções</strong>, às vezes <strong>Argumentos</strong>, e <strong>Status de saída</strong>. Essa última parte responde "o que o comando devolve", e quase ninguém lê.</p>
+
+<h3>As opções do help</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Mostra</th></tr>
+<tr><td><code>help NOME</code></td><td>A ajuda completa</td></tr>
+<tr><td><code>help -d NOME</code></td><td>Só uma linha de descrição (<em>description</em>)</td></tr>
+<tr><td><code>help -s NOME</code></td><td>Só a sinopse (<em>synopsis</em>)</td></tr>
+<tr><td><code>help -m NOME</code></td><td>No formato de página de manual (<em>man</em>)</td></tr>
+<tr><td><code>help 'h*'</code></td><td>Todos os comandos que casam com o padrão</td></tr>
+</table>
+</div>
+
+<pre class="term">$ help -s cd
+cd: cd [-L|[-P [-e]]] [-@] [dir]
+$ help -d cd pwd echo type help history
+cd - Change the shell working directory.
+pwd - Print the name of the current working directory.
+echo - Write arguments to the standard output.
+type - Display information about command type.
+help - Display information about builtin commands.
+history - Display or manipulate the history list.</pre>
+
+<p>Repare: o <code>help -d</code> responde em inglês, mesmo com o sistema em português. As descrições curtas não foram traduzidas na versão 5.3; a ajuda completa (<code>help cd</code>) foi. É um bom exercício de inglês técnico: <em>change</em> = mudar, <em>print</em> = mostrar, <em>write</em> = escrever.</p>
+
+<div class="tip">
+<strong>Atalho: <code>--help</code> também funciona nos internos</strong>
+<p>No Bash atual, <code>cd --help</code> mostra o mesmo que <code>help cd</code>. Assim você pode usar <code>--help</code> em quase tudo, sem pensar se é interno ou programa.</p>
+</div>
+
+<div class="try" data-goal="ran:^\s*help\b" data-solucao="help -d cd pwd;;help -s echo">
+<p class="try-task"><strong>Missão:</strong> use o <code>help</code> para descobrir, em uma linha, o que fazem <code>cd</code> e <code>pwd</code> (dica: <code>-d</code>). Depois veja só a sinopse do <code>echo</code>.</p>
+</div>
+
+<hr>
+
+<h2>Como ler uma sinopse</h2>
+<p>A sinopse é a "receita" do comando escrita de forma compacta. Os mesmos símbolos aparecem no <code>help</code>, no <code>man</code> e no <code>--help</code>. Veja a do <code>cd</code>:</p>
+
+<pre class="syntax">cd [-L|[-P [-e]]] [-@] [dir]</pre>
+
+<dl class="anatomy">
+  <dt>cd</dt><dd>O nome do comando: digite exatamente assim.</dd>
+  <dt>[-L|[-P [-e]]]</dt><dd>Colchetes = opcional. Dentro, <code>|</code> = "ou": use <code>-L</code> <strong>ou</strong> <code>-P</code>. O <code>[-e]</code> dentro do <code>-P</code> quer dizer que <code>-e</code> só faz sentido junto com <code>-P</code>.</dd>
+  <dt>[-@]</dt><dd>Outra opção opcional, independente.</dd>
+  <dt>[dir]</dt><dd>Um argumento opcional. Palavras que não são opções (<code>dir</code>, <code>DIR</code>, <code>arquivo</code>) são para você <strong>substituir</strong> por um valor seu.</dd>
+</dl>
+
+<p>Agora a do <code>echo</code> e a do <code>type</code>:</p>
+<pre class="syntax">echo [-neE] [arg ...]
+type [-afptP] nome [nome ...]</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Símbolo</th><th>Significa</th><th>Exemplo</th></tr>
+<tr><td><code>[ ]</code></td><td>Opcional: pode deixar de fora</td><td><code>[dir]</code>: <code>cd</code> sozinho funciona</td></tr>
+<tr><td>sem colchetes</td><td>Obrigatório</td><td><code>nome</code> no <code>type</code>: precisa de pelo menos um</td></tr>
+<tr><td><code>...</code></td><td>Pode repetir</td><td><code>[nome ...]</code>: quantos nomes quiser</td></tr>
+<tr><td><code>|</code></td><td>Escolha um ou outro</td><td><code>-L|-P</code></td></tr>
+<tr><td><code>[-neE]</code></td><td>Qualquer combinação dessas letras</td><td><code>echo -n</code>, <code>echo -ne</code></td></tr>
+<tr><td><code>MAIÚSCULAS</code>, <code>&lt;nome&gt;</code>, <em>itálico</em></td><td>Troque pelo seu valor</td><td><code>[ARQUIVO]...</code> → <code>frutas.txt</code></td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Não digite os colchetes</strong>
+<p><code>cd [dir]</code> quer dizer <code>cd Documentos</code>, e não <code>cd [Documentos]</code>. Os símbolos da sinopse são da explicação, não do comando.</p>
+</div>
+
+<hr>
+
+<h2><code>--help</code>: a ajuda rápida dos programas</h2>
+<p>Quase todo programa aceita a opção <code>--help</code>, que mostra um resumo das opções direto na tela. É o jeito mais rápido de lembrar uma opção:</p>
+
+<pre class="term">$ wc --help
+Uso: wc [OPÇÃO]... [ARQUIVO]...
+ ou: wc [OPÇÃO]... --files0-from=A
+Imprime totais de novas linhas, palavras e bytes para cada FICHEIRO, e uma linha
+de totais se mais de um FICHEIRO for especificado. Uma palavra é uma sequência
+não-vazia de espaços não-brancos delimitada por espaços ou pelo início ou fim da entrada.
+
+Se ARQUIVO não for especificado ou for -, lê a entrada padrão.
+…                                                   « encurtado: depois vem a lista de opções</pre>
+
+<p>Leia a sinopse <code>wc [OPÇÃO]... [ARQUIVO]...</code>: opções são opcionais e podem ser várias; arquivos também. "FICHEIRO" é a palavra de Portugal para "arquivo": a tradução mistura as duas. Quando a ajuda é longa, use <code>wc --help | less</code> para rolar com calma (o <code>|</code> é explicado em <a href="pipes.html">Pipes</a>).</p>
+
+<hr>
+
+<h2><code>man</code>: o manual completo</h2>
+<p><code>man</code> vem de <em>manual</em>. Cada programa instalado traz uma <strong>página de manual</strong> com tudo: descrição, todas as opções, exemplos, arquivos relacionados. As páginas costumam estar em inglês.</p>
+
+<p>Os exemplos de <code>man</code> nesta seção são <strong>ilustrativos</strong>: o terminal simulado e o laboratório do guia não abrem o <code>man</code>, porque ele é um programa de tela cheia.</p>
+
+<pre class="term">$ man wc
+WC(1)                          User Commands                          WC(1)
+
+NAME
+       wc - print newline, word, and byte counts for each file
+
+SYNOPSIS
+       wc [OPTION]... [FILE]...
+       wc [OPTION]... --files0-from=F
+
+DESCRIPTION
+       Print newline, word, and byte counts for each FILE, and a total line
+       if more than one FILE is specified.
+…</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Seção da página</th><th>O que tem</th></tr>
+<tr><td><code>WC(1)</code></td><td>O nome e a <strong>seção</strong> do manual: 1 = comandos do usuário (veja abaixo).</td></tr>
+<tr><td>NAME</td><td>Nome e descrição de uma linha.</td></tr>
+<tr><td>SYNOPSIS</td><td>A sinopse, com os mesmos símbolos que você já aprendeu.</td></tr>
+<tr><td>DESCRIPTION / OPTIONS</td><td>A explicação e cada opção.</td></tr>
+<tr><td>EXIT STATUS</td><td>Os códigos de saída (nem todos os manuais têm).</td></tr>
+<tr><td>EXAMPLES, SEE ALSO</td><td>Exemplos e comandos relacionados.</td></tr>
+</table>
+</div>
+
+<h3>Navegar dentro do man</h3>
+<p>O <code>man</code> abre a página num leitor de tela cheia (o <code>less</code>). Estas teclas resolvem quase tudo:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>Faz</th></tr>
+<tr><td><kbd>Espaço</kbd> / <kbd>b</kbd></td><td>Desce / sobe uma tela (<em>back</em>)</td></tr>
+<tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Sobe / desce uma linha</td></tr>
+<tr><td><kbd>/</kbd>texto <kbd>Enter</kbd></td><td>Procura "texto" para baixo</td></tr>
+<tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Próxima / anterior ocorrência da busca (<em>next</em>)</td></tr>
+<tr><td><kbd>g</kbd> / <kbd>G</kbd></td><td>Vai para o começo / o fim</td></tr>
+<tr><td><kbd>h</kbd></td><td>Ajuda do leitor</td></tr>
+<tr><td><kbd>q</kbd></td><td>Sai (<em>quit</em>) e volta ao prompt</td></tr>
+</table>
+</div>
+
+<h3>O <code>man bash</code> e como buscar nele</h3>
+<p>O manual do próprio Bash é um livro: são mais de 7 mil linhas, em inglês. Ninguém lê de ponta a ponta; você <strong>busca</strong>. O começo dele (ilustrativo):</p>
+
+<pre class="term">$ man bash
+BASH(1)                     General Commands Manual                    BASH(1)
+
+NAME
+       bash - GNU Bourne-Again SHell
+
+SYNOPSIS
+       bash [options] [command_string | file]
+
+COPYRIGHT
+       Bash is Copyright (C) 1989-2025 by the Free Software Foundation, Inc.
+…</pre>
+
+<p>Digite <code>/HISTCONTROL</code> e <kbd>Enter</kbd> para pular até a variável <code>HISTCONTROL</code>; <kbd>n</kbd> vai para a próxima vez que ela aparece. Um truque: as definições ficam recuadas, então buscar com espaços no começo acha a definição em vez das menções. Digite <code>/^ +HISTCONTROL</code> (o <code>^</code> quer dizer "começo da linha" e <code> +</code>, "um ou mais espaços").</p>
+
+<div class="tip">
+<strong>Ajuda do Bash em formato de manual, só dos internos</strong>
+<p>No Debian e no Ubuntu, <code>man bash-builtins</code> abre só a parte dos comandos internos do manual do Bash, bem menor que o <code>man bash</code> inteiro.</p>
+</div>
+
+<h3>As seções do manual</h3>
+<p>Algumas palavras são, ao mesmo tempo, um comando e um arquivo. <code>passwd</code> é o comando que troca a senha <strong>e</strong> o arquivo <code>/etc/passwd</code>. Por isso o manual é dividido em seções numeradas:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Seção</th><th>Conteúdo</th><th>Exemplo</th></tr>
+<tr><td>1</td><td>Comandos do usuário</td><td><code>man 1 passwd</code> (o comando)</td></tr>
+<tr><td>5</td><td>Formatos de arquivos de configuração</td><td><code>man 5 passwd</code> (o arquivo <code>/etc/passwd</code>)</td></tr>
+<tr><td>7</td><td>Assuntos diversos</td><td><code>man 7 bash-builtins</code></td></tr>
+<tr><td>8</td><td>Comandos do administrador</td><td><code>man 8 useradd</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2><code>info</code>: o manual em capítulos</h2>
+<p>O projeto GNU escreve a documentação mais completa no formato <strong>info</strong>, com capítulos e links, como um livro. Para o Bash e as ferramentas GNU, às vezes o <code>info</code> tem exemplos que o <code>man</code> não tem. Exemplo ilustrativo:</p>
+
+<pre class="term">$ info bash                        « o manual do Bash em capítulos
+$ info coreutils 'wc invocation'   « direto no capítulo do wc</pre>
+
+<p>Dentro do <code>info</code>: <kbd>Espaço</kbd> rola, <kbd>Tab</kbd> pula para o próximo link, <kbd>Enter</kbd> segue o link, <kbd>l</kbd> volta (<em>last</em>), <kbd>q</kbd> sai. Se o <code>info</code> não estiver instalado, ele mostra a página do <code>man</code>. O mesmo conteúdo está publicado em gnu.org/software/bash/manual.</p>
+
+<hr>
+
+<h2><code>apropos</code> e <code>whatis</code>: quando você não sabe o nome</h2>
+<p>E quando você nem sabe qual comando procurar? O <code>apropos</code> ("a propósito") procura uma palavra nas descrições de todas as páginas de manual. O <code>whatis</code> ("o que é") mostra a descrição de uma linha de um comando que você já conhece. Saídas <strong>ilustrativas</strong>:</p>
+
+<pre class="term">$ whatis bash ls wc
+bash (1)             - GNU Bourne-Again SHell
+ls (1)               - list directory contents
+wc (1)               - print newline, word, and byte counts for each file
+$ apropos "word count"
+word count: nada apropriado.       « a frase exata não aparece em nenhuma descrição
+$ apropos -s 1 password            « só na seção 1, com a palavra "password"
+chage (1)            - change user password expiry information
+expiry (1)           - check and enforce password expiration policy
+…                                  « encurtado: a lista depende do que está instalado
+passwd (1)           - change user password
+…</pre>
+
+<p>Como as descrições estão em inglês, procure em inglês: <code>apropos copy</code>, <code>apropos compress</code>, <code>apropos user</code>. <code>man -k palavra</code> é o mesmo que <code>apropos palavra</code>, e <code>man -f nome</code>, o mesmo que <code>whatis nome</code>.</p>
+
+<hr>
+
+<h2>Qual ajuda usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th><th>Por quê</th></tr>
+<tr><td>Não sei se é interno ou programa</td><td><code>type nome</code></td><td>Diz em qual "estante" procurar.</td></tr>
+<tr><td>Comando interno (<code>cd</code>, <code>echo</code>, <code>read</code>, <code>if</code>…)</td><td><code>help nome</code></td><td>É o manual do Bash; o <code>man</code> não tem.</td></tr>
+<tr><td>Lembrar uma opção de um programa</td><td><code>nome --help</code></td><td>Rápido, em português, cabe na tela.</td></tr>
+<tr><td>Entender um programa a fundo</td><td><code>man nome</code></td><td>Completo, com todas as opções e exemplos.</td></tr>
+<tr><td>Ferramenta GNU, com exemplos e capítulos</td><td><code>info nome</code></td><td>Às vezes mais detalhado que o man.</td></tr>
+<tr><td>Um recurso do Bash (variável, expansão)</td><td><code>man bash</code> + <kbd>/</kbd></td><td>Está tudo lá; busque pela palavra.</td></tr>
+<tr><td>Não sei o nome do comando</td><td><code>apropos palavra</code></td><td>Procura nas descrições.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Nenhuma entrada de manual para cd"</strong>
+<p>Saída ilustrativa (o laboratório não roda o <code>man</code>):</p>
+<pre class="term">$ man cd
+Nenhuma entrada de manual para cd</pre>
+<p><strong>O que aconteceu:</strong> <code>cd</code> é um comando interno do Bash. Comandos internos não têm página de manual própria: a ajuda deles está no <code>help</code> (e dentro do <code>man bash</code>).</p>
+<p><strong>Como confirmar:</strong> <code>type cd</code> responde "comando interno do shell".</p>
+<p><strong>Como resolver:</strong> <code>help cd</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"nenhum tópico de ajuda corresponde"</strong>
+<pre class="term">$ help ls
+bash: help: nenhum tópico de ajuda corresponde a `ls'.  Tente `help help' ou `man -k ls' ou `info ls'.
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o caso contrário: <code>ls</code> é um programa, não um comando interno, e o <code>help</code> só conhece os internos. A própria mensagem sugere o caminho.</p>
+<p><strong>Como resolver:</strong> <code>ls --help</code> ou <code>man ls</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>man echo</code> mostra opções que não funcionam</strong>
+<p><strong>O que aconteceu:</strong> o manual é do programa <code>/usr/bin/echo</code>, mas quando você digita <code>echo</code>, roda o comando interno, que é outro (veja <code>type -a echo</code>). Os dois são parecidos, mas não idênticos; o mesmo vale para <code>printf</code>, <code>kill</code>, <code>test</code> e <code>pwd</code>.</p>
+<p><strong>Como resolver:</strong> para o que você digita no Bash, confie no <code>help echo</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"não encontrado" no type</strong>
+<pre class="term">$ type xyz
+bash: type: xyz: não encontrado
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> não há comando interno, apelido, função nem programa com esse nome. Pode ser erro de digitação, ou o programa não está instalado.</p>
+<p><strong>Como resolver:</strong> confira a grafia; se o programa não existe, instale-o pelo gerenciador de pacotes do sistema, ou procure um parecido com <code>apropos</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Fiquei preso dentro do man (ou de uma ajuda longa)</strong>
+<p><strong>O que aconteceu:</strong> o leitor de tela cheia espera teclas, não comandos.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>q</kbd>. Se não funcionar, <kbd>Esc</kbd> e depois <kbd>q</kbd>, ou <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>type nome</code></td><td>Diz se é interno, apelido, função, palavra-chave ou programa</td></tr>
+<tr><td><code>type -t nome</code></td><td>Responde com uma palavra: <code>builtin</code>, <code>alias</code>, <code>function</code>, <code>keyword</code>, <code>file</code></td></tr>
+<tr><td><code>type -a nome</code></td><td>Lista todos os lugares onde o nome existe</td></tr>
+<tr><td><code>help</code> / <code>help nome</code></td><td>Lista os comandos internos / ajuda de um deles</td></tr>
+<tr><td><code>help -d</code>, <code>-s</code>, <code>-m</code></td><td>Descrição curta, sinopse, formato de manual</td></tr>
+<tr><td><code>nome --help</code></td><td>Resumo das opções (programas e, no Bash atual, internos)</td></tr>
+<tr><td><code>man nome</code>, <code>man 5 nome</code></td><td>Página de manual (da seção indicada)</td></tr>
+<tr><td><code>man bash-builtins</code></td><td>Só os comandos internos, em formato de manual (Debian/Ubuntu)</td></tr>
+<tr><td><code>info nome</code></td><td>Documentação GNU em capítulos</td></tr>
+<tr><td><code>whatis nome</code> (<code>man -f</code>)</td><td>Descrição de uma linha</td></tr>
+<tr><td><code>apropos palavra</code> (<code>man -k</code>)</td><td>Procura comandos pela descrição</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ajuda de um interno</h3>
+<p>Complete para ver a ajuda do comando interno <code>read</code>:</p>
+<div class="ex-code"><input data-answer="help" aria-label="comando"> read</div>
+</div>
+
+<div class="exercise">
+<h3>2. Todos os lugares</h3>
+<p>Complete para listar todos os lugares onde existe um <code>printf</code>:</p>
+<div class="ex-code">type <input data-answer="-a" aria-label="opção"> printf</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Na sinopse <code>type [-afptP] nome [nome ...]</code>, o que é obrigatório?</p>
+<label><input type="radio" name="q3"> Pelo menos uma opção.</label>
+<label><input type="radio" name="q3"> Pelo menos um nome.</label>
+<label><input type="radio" name="q3"> Pelo menos dois nomes.</label>
+<label><input type="radio" name="q3"> Nada: tudo é opcional.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. <code>man cd</code> respondeu "Nenhuma entrada de manual para cd". Por quê?</p>
+<label><input type="radio" name="q4"> O <code>cd</code> não está instalado.</label>
+<label><input type="radio" name="q4"> O manual está em inglês.</label>
+<label><input type="radio" name="q4"> Faltou o número da seção.</label>
+<label><input type="radio" name="q4"> <code>cd</code> é um comando interno; a ajuda dele está no <code>help cd</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Dentro do <code>man bash</code>, como você pula para a palavra <code>PS1</code>?</p>
+<label><input type="radio" name="q5"> Digita <code>/PS1</code> e aperta <kbd>Enter</kbd>.</label>
+<label><input type="radio" name="q5"> Digita <code>q</code>.</label>
+<label><input type="radio" name="q5"> Aperta <kbd>Ctrl</kbd>+<kbd>F</kbd>.</label>
+<label><input type="radio" name="q5"> Digita <code>help PS1</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Comece com <code>type</code>: ele diz se o nome é interno, programa, apelido ou palavra-chave.</li>
+  <li>Internos: <code>help nome</code>. Programas: <code>nome --help</code> (rápido), <code>man nome</code> (completo), <code>info nome</code> (GNU, em capítulos).</li>
+  <li>Sinopse: <code>[ ]</code> opcional, <code>...</code> repete, <code>|</code> escolha um, palavras em maiúsculas = substitua.</li>
+  <li>No <code>man</code>: <kbd>/</kbd> busca, <kbd>n</kbd> próxima, <kbd>q</kbd> sai. O <code>man bash</code> é para buscar, não para ler inteiro.</li>
+  <li><code>apropos</code> acha comandos pela descrição, quando você não sabe o nome.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
