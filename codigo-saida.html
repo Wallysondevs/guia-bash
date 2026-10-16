@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Código de Saída — $?, 0, 1, 2, 126, 127 e 130 | Guia Bash</title>
+<meta name="description" content="Aprenda o código de saída do Bash: o que é o $?, o que significam 0, 1, 2, 126, 127 e 130, true, false, o ! que inverte, exit N em scripts e PIPESTATUS, com saídas reais explicadas e terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Código de Saída ($?)</span></h1>
+
+<p class="intro">Todo comando, quando termina, devolve um <strong>número</strong> ao shell: o <strong>código de saída</strong>. Ele não aparece na tela, mas diz se o comando deu certo (<code>0</code>) ou errado (qualquer outro número). É com esse número que o Bash decide o que fazer depois, nos operadores <code>&amp;&amp;</code> e <code>||</code>, no <code>if</code> e nos seus scripts.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como ver o código de saída com <code>$?</code>, e por que ele muda a cada comando.</li>
+  <li>O que significam os códigos 0, 1, 2, 126, 127 e 128+N (como o 130 do Ctrl+C).</li>
+  <li>Como usar comandos "silenciosos" (<code>grep -q</code>, <code>test</code>, <code>pgrep</code>) que respondem só pelo código.</li>
+  <li><code>true</code>, <code>false</code>, o <code>!</code> que inverte o resultado e o <code>exit N</code> dos scripts.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: "não apareceu nada… deu certo?"</h2>
+<p>Muitos comandos não mostram nada quando dão certo. Veja a Ana procurando a palavra <code>banana</code> na lista dela com o <code>grep -q</code> (o <code>-q</code> manda o grep ficar quieto):</p>
+
+<pre class="term">$ grep -q banana frutas.txt
+$ grep -q kiwi frutas.txt</pre>
+
+<p>Os dois comandos ficaram em silêncio. Mas um achou a palavra e o outro não. Como saber? Pelo código de saída. Pense nele como o <strong>bilhete</strong> que todo comando deixa na mesa do shell ao terminar: "deu certo" (0) ou "deu errado, motivo número tal" (1, 2, 127…).</p>
+
+<hr>
+
+<h2>Vendo o código: <code>echo $?</code></h2>
+<p>O Bash guarda o código do <strong>último comando</strong> numa variável especial chamada <code>?</code>. Para ver o valor dela, use <code>echo $?</code> logo em seguida.</p>
+
+<dl class="anatomy">
+  <dt>echo</dt><dd>Mostra um texto na tela.</dd>
+  <dt>$?</dt><dd>O valor da variável especial <code>?</code>: o código de saída do comando que acabou de rodar. Leia como "e aí, deu certo?".</dd>
+</dl>
+
+<pre class="term">$ grep -q banana frutas.txt
+$ echo $?
+0                     « 0 = sucesso: "banana" está na lista
+$ grep -q kiwi frutas.txt
+$ echo $?
+1                     « 1 = "não achei": kiwi não está na lista</pre>
+
+<p>Agora o silêncio tem significado. O <code>grep</code> devolve <code>0</code> quando acha o texto e <code>1</code> quando não acha. Nenhum dos dois é um "erro" no sentido de algo quebrado: <code>1</code> é só a resposta "não".</p>
+
+<div class="tip">
+<strong>Por que zero é sucesso?</strong>
+<p>Parece ao contrário da matemática, mas faz sentido: só existe <strong>um</strong> jeito de dar certo e <strong>muitos</strong> jeitos de dar errado. O zero fica para o sucesso, e os outros números (1 a 255) servem para dizer <em>qual</em> foi o problema.</p>
+</div>
+
+<h3>O <code>$?</code> muda a cada comando</h3>
+<p>Esta é a pegadinha mais comum. O <code>$?</code> é sempre o código do <strong>último</strong> comando, e o próprio <code>echo $?</code> é um comando. Veja:</p>
+
+<pre class="term">$ ls nada
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+$ echo $?
+2                     « o código do ls
+$ echo $?
+0                     « agora é o código do echo anterior, que deu certo</pre>
+
+<p>O segundo <code>echo $?</code> mostrou o código do <strong>primeiro</strong> <code>echo $?</code>, que funcionou (0). O código do <code>ls</code> se perdeu. Se você vai precisar dele mais tarde, guarde-o numa <a href="variaveis-intro.html">variável</a> logo na linha seguinte:</p>
+
+<dl class="anatomy">
+  <dt>codigo</dt><dd>O nome da variável (você escolhe).</dd>
+  <dt>=</dt><dd>Atribuição, sem espaço dos lados.</dd>
+  <dt>$?</dt><dd>O código do comando anterior, copiado antes que se perca.</dd>
+</dl>
+
+<pre class="term">$ grep -q banana frutas.txt
+$ codigo=$?
+$ echo "O grep devolveu $codigo"
+O grep devolveu 0     « o valor ficou guardado</pre>
+
+<hr>
+
+<h2>O que cada número significa</h2>
+<p>O código é um número de <strong>0 a 255</strong>. Alguns valores têm significado fixo, dado pelo próprio Bash; os outros cada programa define do seu jeito (está no manual dele, na seção <em>EXIT STATUS</em>).</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Significado</th><th>Quem define</th></tr>
+<tr><td><code>0</code></td><td>Sucesso.</td><td>Todos</td></tr>
+<tr><td><code>1</code></td><td>Falha geral, ou a resposta "não" (grep não achou, teste falso).</td><td>Cada programa</td></tr>
+<tr><td><code>2</code></td><td>Uso errado (opção que não existe) ou problema sério (no <code>ls</code> e no <code>grep</code>: arquivo inexistente).</td><td>Cada programa</td></tr>
+<tr><td><code>126</code></td><td>O comando existe, mas <strong>não pode ser executado</strong> (sem permissão, ou é uma pasta).</td><td>Bash</td></tr>
+<tr><td><code>127</code></td><td>Comando <strong>não encontrado</strong>.</td><td>Bash</td></tr>
+<tr><td><code>128+N</code></td><td>O programa foi morto pelo <strong>sinal</strong> número N.</td><td>Bash</td></tr>
+<tr><td><code>130</code></td><td>128 + 2: interrompido com <kbd>Ctrl</kbd>+<kbd>C</kbd> (sinal INT).</td><td>Bash</td></tr>
+<tr><td><code>137</code></td><td>128 + 9: morto com <code>kill -9</code> (sinal KILL).</td><td>Bash</td></tr>
+<tr><td><code>143</code></td><td>128 + 15: encerrado com <code>kill</code> (sinal TERM).</td><td>Bash</td></tr>
+</table>
+</div>
+
+<p>Vamos provocar cada um deles.</p>
+
+<h3>1 e 2: falha e uso errado</h3>
+<pre class="term">$ cat /etc/shadow
+cat: /etc/shadow: Permissão negada
+$ echo $?
+1                     « falha geral: o cat não conseguiu ler
+$ ls --xpto
+ls: opção não reconhecida “--xpto”
+Tente "ls --help" para mais informações.
+$ echo $?
+2                     « uso errado: a opção não existe
+$ grep kiwi nada.txt
+grep: nada.txt: Arquivo ou diretório inexistente
+$ echo $?
+2                     « para o grep, 2 = erro de verdade (1 seria só "não achei")</pre>
+
+<p>Repare na diferença no <code>grep</code>: <code>1</code> quer dizer "procurei e não achei"; <code>2</code> quer dizer "nem consegui procurar". Num script, isso permite separar "a palavra não está lá" de "o arquivo sumiu".</p>
+
+<h3>126: não pode executar</h3>
+<p>A Ana criou um arquivo com um comando dentro, mas esqueceu de dar permissão de execução. O shell achou o arquivo e se recusou a rodá-lo:</p>
+
+<pre class="term">$ echo "echo oi" &gt; oi.sh
+$ ./oi.sh
+bash: ./oi.sh: Permissão negada
+$ echo $?
+126
+$ ./Documentos
+bash: ./Documentos: É um diretório
+$ echo $?
+126                   « também 126: pasta não é programa</pre>
+
+<p>Como dar a permissão (<code>chmod +x</code>) é assunto de <a href="script-primeiro.html">Seu Primeiro Script</a>.</p>
+
+<h3>127: comando não encontrado</h3>
+<pre class="term">$ Ls
+bash: Ls: comando não encontrado
+$ echo $?
+127                   « o Bash procurou "Ls" e não achou (L maiúsculo)</pre>
+
+<p>O 127 quase sempre é um erro de digitação, um programa que não está instalado ou uma pasta que não está no <a href="path.html">PATH</a>.</p>
+
+<h3>128+N: morto por um sinal</h3>
+<p>Quando você aperta <kbd>Ctrl</kbd>+<kbd>C</kbd>, o terminal manda o <strong>sinal</strong> INT (de <em>interrupt</em>, número 2) ao programa. Ele morre, e o Bash registra <code>128 + 2 = 130</code>:</p>
+
+<pre class="term">$ sleep 30
+^C                    « Ana apertou Ctrl+C antes dos 30 segundos
+$ echo $?
+130
+$ kill -l 2 9 15
+INT
+KILL
+TERM                  « os nomes dos sinais 2, 9 e 15</pre>
+
+<p>Com <code>kill -9</code> o código seria 137 (128 + 9) e o Bash avisa <code>Morto</code>; com <code>kill</code> sem número, 143 (128 + 15). Sinais são estudados em <a href="trap.html">trap e Sinais</a>.</p>
+
+<hr>
+
+<h2>Comandos que respondem só com o código</h2>
+<p>Alguns comandos foram feitos para <strong>perguntar</strong> algo. A resposta é o código de saída, não um texto. São perfeitos para scripts.</p>
+
+<h3><code>grep -q</code>: "esse texto está no arquivo?"</h3>
+<dl class="anatomy">
+  <dt>grep</dt><dd>Procura um texto em arquivos.</dd>
+  <dt>-q</dt><dd><em>quiet</em>, "quieto": não mostra as linhas encontradas, só devolve o código.</dd>
+  <dt>"Estudar Bash"</dt><dd>O texto procurado (com aspas, por causa do espaço).</dd>
+  <dt>Documentos/notas.txt</dt><dd>Onde procurar.</dd>
+</dl>
+
+<pre class="term">$ grep -q "Estudar Bash" Documentos/notas.txt
+$ echo $?
+0                     « está nas notas da Ana</pre>
+
+<h3><code>test</code> e <code>[ ]</code>: "isso é verdade?"</h3>
+<p>O <code>test</code> confere uma condição e devolve 0 (verdadeiro) ou 1 (falso). O <code>[ ]</code> é o mesmo comando com outra cara. Os detalhes estão em <a href="testes.html">Testes</a>.</p>
+
+<pre class="term">$ test -f frutas.txt
+$ echo $?
+0                     « -f: existe e é um arquivo comum
+$ test -d frutas.txt
+$ echo $?
+1                     « -d: é uma pasta? não
+$ [ 5 -gt 3 ]
+$ echo $?
+0                     « 5 é maior (greater than) que 3</pre>
+
+<h3><code>pgrep</code>: "esse programa está rodando?"</h3>
+<p>O <code>pgrep</code> procura processos pelo nome. Ele mostra o número (PID) de cada um que achar, mas o que importa num script é o código:</p>
+
+<pre class="term">$ pgrep firefox
+2210                  « o Firefox da Ana está aberto (no seu computador o número será outro)
+$ echo $?
+0
+$ pgrep -x xyzprocesso
+$ echo $?
+1                     « nenhum processo com esse nome</pre>
+
+<hr>
+
+<h2><code>true</code> e <code>false</code></h2>
+<p>São os dois comandos mais simples do mundo: não fazem nada, só devolvem um código. <code>true</code> sempre devolve 0 e <code>false</code> sempre devolve 1. Eles parecem inúteis, mas servem para testar operadores e para laços infinitos (<code>while true</code>, em <a href="while.html">while</a>).</p>
+
+<pre class="term">$ true; echo $?
+0
+$ false; echo $?
+1
+$ type true false
+true é um comando interno do shell
+false é um comando interno do shell</pre>
+
+<p>O <code>;</code> separa dois comandos na mesma linha (você verá em <a href="operadores.html">; &amp;&amp; ||</a>). O <code>:</code> (dois-pontos) é um apelido antigo de <code>true</code>.</p>
+
+<h2>Inverter o resultado: <code>!</code></h2>
+<p>Um <code>!</code> seguido de espaço, antes do comando, troca o resultado: sucesso vira 1 e qualquer falha vira 0. Leia como "não".</p>
+
+<dl class="anatomy">
+  <dt>!</dt><dd>"Não": inverte o código de saída. Precisa de um espaço depois.</dd>
+  <dt>grep -q kiwi frutas.txt</dt><dd>O comando normal, que devolveria 1 (não achou).</dd>
+</dl>
+
+<pre class="term">$ ! true; echo $?
+1
+$ ! grep -q kiwi frutas.txt; echo $?
+0                     « "é verdade que kiwi NÃO está na lista"</pre>
+
+<hr>
+
+<h2>Seu script também devolve um código: <code>exit N</code></h2>
+<p>Um script é um comando como outro qualquer, e também devolve um código. Por padrão, é o código do <strong>último comando</strong> que ele rodou. Para escolher o número, use <code>exit</code>:</p>
+
+<pre class="file" data-file="sai.sh">echo "vou sair com 3"
+exit 3
+echo "nunca aparece"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>echo "vou sair com 3"</code></td><td>Mostra o aviso.</td></tr>
+<tr><td><code>exit 3</code></td><td>Termina o script <strong>na hora</strong>, devolvendo 3.</td></tr>
+<tr><td><code>echo "nunca aparece"</code></td><td>Nunca roda: o script já acabou.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash sai.sh
+vou sair com 3
+$ echo $?
+3</pre>
+
+<p>Regras do <code>exit</code>:</p>
+<ul>
+  <li><code>exit</code> sem número devolve o código do último comando.</li>
+  <li>O número vai de 0 a 255. Acima disso, o Bash pega o resto da divisão por 256: <code>exit 300</code> vira 44 e <code>exit 256</code> vira 0 (sucesso, sem querer!).</li>
+  <li>Use 0 para sucesso, 1 para falha geral e 2 para uso errado (faltou argumento), como os programas do sistema. Veja em <a href="argumentos.html">Argumentos</a>.</li>
+  <li>Não digite <code>exit</code> no seu terminal para testar: ele fecha o terminal! Teste com <code>bash -c 'exit 7'</code>, que roda um Bash separado.</li>
+</ul>
+
+<pre class="term">$ bash -c 'exit 7'
+$ echo $?
+7
+$ bash -c 'exit 300'
+$ echo $?
+44                    « 300 - 256 = 44</pre>
+
+<hr>
+
+<h2>Experimente</h2>
+
+<div class="try" data-goal="ran:^\s*echo \$\?,out:127" data-solucao="xyz;;echo $?">
+<p class="try-task"><strong>Missão 1:</strong> digite um comando que não existe (por exemplo, <code>xyz</code>) e, logo depois, mostre o código de saída dele. O número deve ser 127.</p>
+</div>
+
+<div class="try" data-goal="ran:^\s*!\s+grep,exit:0" data-solucao="! grep -q kiwi frutas.txt">
+<p class="try-task"><strong>Missão 2:</strong> use o <code>!</code> com <code>grep -q</code> para perguntar "é verdade que <code>kiwi</code> <strong>não</strong> está em <code>frutas.txt</code>?". O código final deve ser 0. Confira com <code>echo $?</code> (e lembre: depois disso o <code>$?</code> já é o do <code>echo</code>).</p>
+</div>
+
+<div class="tryscript" data-file="procura.sh" data-args="kiwi" data-goal="exit:1,out:O grep devolveu 1">
+<p class="try-task"><strong>Missão 3:</strong> rode o script com o argumento <code>kiwi</code>. Ele diz o que o grep devolveu, mas o script em si termina com 0 (porque o último comando, o <code>echo</code>, deu certo). Mude o script para que ele <strong>termine com o mesmo código do grep</strong>: guarde o <code>$?</code> numa variável logo depois do grep, use-a no <code>echo</code> e termine com <code>exit</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+echo "Procurando $1 na lista..."
+grep -q "$1" frutas.txt
+echo "O grep devolveu $?"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+echo "Procurando $1 na lista..."
+grep -q "$1" frutas.txt
+codigo=$?
+echo "O grep devolveu $codigo"
+exit $codigo
+</pre>
+</div>
+
+<p>Com a solução, a saída real é:</p>
+<pre class="term">$ bash procura.sh kiwi
+Procurando kiwi na lista...
+O grep devolveu 1
+$ echo $?
+1                     « agora o script inteiro "responde" como o grep
+$ bash procura.sh uva
+Procurando uva na lista...
+O grep devolveu 0
+$ echo $?
+0</pre>
+
+<hr>
+
+<h2>Formas de usar o código de saída</h2>
+<p>Ver o número com <code>echo $?</code> é ótimo para aprender e investigar. Nos scripts, quase sempre você usa o código <strong>sem olhar para ele</strong>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Qual usar?</th></tr>
+<tr><td><code>echo $?</code></td><td><code>ls nada; echo $?</code></td><td>Para investigar no terminal: "que número saiu?"</td></tr>
+<tr><td>Guardar em variável</td><td><code>codigo=$?</code></td><td>Quando você precisa do número depois (para mostrar ou repassar com <code>exit</code>).</td></tr>
+<tr><td><code>&amp;&amp;</code> e <code>||</code></td><td><code>grep -q kiwi frutas.txt || echo "falta kiwi"</code></td><td>Uma ação curta que depende de sucesso ou falha. Veja <a href="operadores.html">; &amp;&amp; ||</a>.</td></tr>
+<tr><td><code>if comando</code></td><td><code>if grep -q kiwi frutas.txt; then …</code></td><td>Decisões com mais de uma linha. Veja <a href="if.html">if</a>. É o jeito mais claro.</td></tr>
+<tr><td><code>if [ $? -eq 0 ]</code></td><td><code>grep …; if [ $? -eq 0 ]; then</code></td><td>Evite: funciona, mas é mais longo e quebra se alguém colocar um comando no meio.</td></tr>
+</table>
+</div>
+
+<h3>E num pipe? <code>PIPESTATUS</code></h3>
+<p>Quando você liga comandos com <code>|</code> (um <a href="pipes.html">pipe</a>), o <code>$?</code> é o código do <strong>último</strong> comando da fila. Os códigos de todos ficam no array <code>PIPESTATUS</code>:</p>
+
+<pre class="term">$ grep kiwi frutas.txt | sort | wc -l
+0
+$ echo "${PIPESTATUS[@]}"
+1 0 0                 « grep falhou (1), sort e wc deram certo</pre>
+
+<p>Por enquanto, só saiba que ele existe. Você vai usá-lo (junto com <code>set -o pipefail</code>) em <a href="pipes.html">Pipes</a> e <a href="modo-estrito.html">set -euo pipefail</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O <code>$?</code> sempre dá 0</strong>
+<pre class="term">$ ls nada
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+$ echo "Testando..."
+Testando...
+$ echo $?
+0</pre>
+<p><strong>O que aconteceu:</strong> o <code>$?</code> mostrou o código do <code>echo "Testando..."</code>, não do <code>ls</code>. Qualquer comando no meio, até um <code>echo</code>, apaga o código anterior.</p>
+<p><strong>Como resolver:</strong> olhe o <code>$?</code> <strong>imediatamente</strong> depois do comando, ou guarde-o: <code>ls nada; codigo=$?</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"comando não encontrado" (127)</strong>
+<pre class="term">$ Documentos
+bash: Documentos: comando não encontrado
+$ echo $?
+127</pre>
+<p><strong>O que aconteceu:</strong> o Bash entendeu a primeira palavra como o nome de um programa e não achou nenhum com esse nome. Causas: erro de digitação (maiúscula/minúscula conta), programa não instalado, ou você quis entrar na pasta e esqueceu o <code>cd</code>.</p>
+<p><strong>Como confirmar:</strong> <code>type nome</code> diz se o Bash conhece o comando (veja <a href="ajuda.html">Obtendo Ajuda</a>).</p>
+<p><strong>Como resolver:</strong> corrija o nome, instale o programa, ou use <code>cd Documentos</code>. Para um script seu, rode com <code>./</code> na frente (<a href="executar.html">Formas de Executar</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada" ao rodar (126)</strong>
+<pre class="term">$ ./oi.sh
+bash: ./oi.sh: Permissão negada
+$ echo $?
+126</pre>
+<p><strong>O que aconteceu:</strong> o arquivo existe, mas não tem permissão de execução.</p>
+<p><strong>Como resolver:</strong> <code>chmod +x oi.sh</code>, ou rode com <code>bash oi.sh</code>. Detalhes em <a href="script-primeiro.html">Seu Primeiro Script</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O script falhou, mas devolveu 0</strong>
+<p><strong>O que aconteceu:</strong> o código do script é o do <strong>último</strong> comando. Se um comando no meio falhou e o último foi um <code>echo "fim"</code>, o script devolve 0. Foi o que aconteceu na Missão 3 antes da correção.</p>
+<p><strong>Como resolver:</strong> termine com <code>exit $codigo</code> (como na missão), ou pare na hora do erro com <code>comando || exit 1</code> (veja <a href="operadores.html">; &amp;&amp; ||</a>). Para scripts maiores, veja <a href="erros.html">Tratar Erros</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Usei <code>exit 256</code> (ou <code>exit -1</code>) e veio outro número</strong>
+<p><strong>O que aconteceu:</strong> o código só tem espaço para 0 a 255. O Bash usa o resto da divisão por 256: <code>256</code> vira 0 e <code>-1</code> vira 255.</p>
+<p><strong>Como resolver:</strong> use sempre números de 0 a 125. Evite 126 a 255, que o Bash usa para "não executável", "não encontrado" e sinais.</p>
+</div>
+
+<div class="cenario">
+<strong>Esperava 1 e veio 2 (ou o contrário)</strong>
+<p><strong>O que aconteceu:</strong> fora 0, cada programa escolhe seus números. O <code>ls</code> devolve 2 para arquivo inexistente; o <code>cat</code> devolve 1 para o mesmo problema.</p>
+<p><strong>Como resolver:</strong> nos scripts, teste "é zero ou não é" (que é o que <code>&amp;&amp;</code>, <code>||</code> e <code>if</code> fazem). Quando o número exato importar, procure a seção <em>EXIT STATUS</em> no <code>man</code> do programa.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>$?</code></td><td>Código do último comando</td><td><code>echo $?</code></td></tr>
+<tr><td><code>var=$?</code></td><td>Guarda o código antes que mude</td><td><code>codigo=$?</code></td></tr>
+<tr><td><code>true</code> / <code>:</code></td><td>Não faz nada, devolve 0</td><td><code>true; echo $?</code></td></tr>
+<tr><td><code>false</code></td><td>Não faz nada, devolve 1</td><td><code>false; echo $?</code></td></tr>
+<tr><td><code>! comando</code></td><td>Inverte: 0 vira 1, não zero vira 0</td><td><code>! grep -q x arq</code></td></tr>
+<tr><td><code>exit N</code></td><td>Termina o script (ou shell) devolvendo N</td><td><code>exit 2</code></td></tr>
+<tr><td><code>exit</code></td><td>Termina devolvendo o código do último comando</td><td><code>exit</code></td></tr>
+<tr><td><code>grep -q</code></td><td>Só responde pelo código: 0 achou, 1 não achou, 2 erro</td><td><code>grep -q Ana alunos.csv</code></td></tr>
+<tr><td><code>test</code> / <code>[ ]</code></td><td>0 se a condição é verdadeira, 1 se falsa</td><td><code>[ -f frutas.txt ]</code></td></tr>
+<tr><td><code>pgrep</code></td><td>0 se há processo com o nome, 1 se não</td><td><code>pgrep firefox</code></td></tr>
+<tr><td><code>${PIPESTATUS[@]}</code></td><td>Códigos de cada comando do último pipe</td><td><code>echo "${PIPESTATUS[@]}"</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ver o código</h3>
+<p>Complete para mostrar o código de saída do comando anterior:</p>
+<div class="ex-code">echo <input data-answer="$?|&quot;$?&quot;" aria-label="variável do código"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Guardar antes que se perca</h3>
+<p>Complete para guardar o código do <code>grep</code> na variável <code>resultado</code>:</p>
+<div class="ex-code">grep -q uva frutas.txt<br><input data-answer="resultado=$?" aria-label="atribuição"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Inverter</h3>
+<p>Complete para que o código seja 0 quando o arquivo <code>backup.zip</code> <strong>não</strong> existir:</p>
+<div class="ex-code"><input data-answer="!" aria-label="operador"> test -f backup.zip</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. A Ana digitou <code>pyhton3</code> (com as letras trocadas). Qual código de saída o Bash vai registrar?</p>
+<label><input type="radio" name="q4"> 1</label>
+<label><input type="radio" name="q4"> 126</label>
+<label><input type="radio" name="q4"> 127</label>
+<label><input type="radio" name="q4"> 130</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Ela rodou <code>ls nada</code>, depois <code>echo $?</code> (que mostrou 2) e depois <code>echo $?</code> de novo. O que o segundo mostra?</p>
+<label><input type="radio" name="q5"> 2, porque o código do <code>ls</code> fica guardado.</label>
+<label><input type="radio" name="q5"> 0, porque agora é o código do primeiro <code>echo $?</code>.</label>
+<label><input type="radio" name="q5"> 1, porque houve um erro antes.</label>
+<label><input type="radio" name="q5"> Nada, o <code>$?</code> só pode ser lido uma vez.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Um script foi interrompido com <kbd>Ctrl</kbd>+<kbd>C</kbd>. Que código ele devolve?</p>
+<label><input type="radio" name="q6"> 0</label>
+<label><input type="radio" name="q6"> 1</label>
+<label><input type="radio" name="q6"> 2</label>
+<label><input type="radio" name="q6"> 130</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">7. O que <code>grep -q Recife Documentos/alunos.csv</code> mostra na tela, se a Ana for de Recife?</p>
+<label><input type="radio" name="q7"> Nada. A resposta está no código de saída (0).</label>
+<label><input type="radio" name="q7"> A linha <code>Ana,29,Recife,9.5</code>.</label>
+<label><input type="radio" name="q7"> O número 1.</label>
+<label><input type="radio" name="q7"> A palavra <code>true</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Todo comando devolve um código de 0 a 255: <strong>0 é sucesso</strong>, o resto é falha (ou "não").</li>
+  <li><code>$?</code> é o código do <strong>último</strong> comando e muda a cada comando, até com <code>echo</code>. Guarde em variável se precisar.</li>
+  <li>126 = não pode executar; 127 = não encontrado; 128+N = morto pelo sinal N (130 = Ctrl+C).</li>
+  <li><code>grep -q</code>, <code>test</code> e <code>pgrep</code> respondem só pelo código. <code>true</code> devolve 0, <code>false</code> devolve 1, <code>!</code> inverte.</li>
+  <li>Um script devolve o código do último comando, ou o número do <code>exit N</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
