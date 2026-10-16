@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Arrays Associativos — chave → valor com declare -A | Guia Bash</title>
+<meta name="description" content="Aprenda arrays associativos no Bash: declare -A, chave e valor, listar chaves, testar se uma chave existe, contar frequência de palavras e agrupar dados de um CSV, com saídas reais explicadas.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Arrays Associativos</span> <span class="versao">bash 4.0+</span></h1>
+
+<p class="intro">No <a href="arrays.html">array comum</a>, cada item mora num número: 0, 1, 2… No <strong>array associativo</strong>, cada item mora num <strong>nome</strong> que você escolhe, a <strong>chave</strong>. É como uma agenda: você procura por "Recife" e encontra "PE", sem precisar saber em que posição está. Ele é perfeito para contar, agrupar e traduzir valores.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Por que <code>declare -A</code> é obrigatório, e o que acontece sem ele.</li>
+  <li>Como gravar, ler, listar chaves e valores, contar e remover.</li>
+  <li>Como testar se uma chave existe com <code>[[ -v m[chave] ]]</code>.</li>
+  <li>Duas receitas clássicas: contar a frequência das frutas e agrupar os alunos por cidade.</li>
+  <li>Que a ordem das chaves não é garantida, e como copiar um array associativo.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Chave → valor</h2>
+<p>Em muitas linguagens isso se chama dicionário, mapa ou <em>hash</em>. A ideia é sempre a mesma: um "nome" leva a um "conteúdo".</p>
+
+<pre class="syntax">  chave   →  valor
+  ─────────────────────
+  PE      →  Recife
+  BA      →  Salvador
+  AM      →  Manaus</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Array indexado</th><th>Array associativo</th></tr>
+<tr><td>Endereço do item</td><td>Um número: <code>a[0]</code>, <code>a[1]</code></td><td>Um texto: <code>m[PE]</code>, <code>m["Porto Alegre"]</code></td></tr>
+<tr><td>Precisa declarar?</td><td>Não</td><td><strong>Sim</strong>: <code>declare -A</code></td></tr>
+<tr><td>Ordem dos itens</td><td>Pelo índice</td><td>Nenhuma garantida</td></tr>
+<tr><td>Bom para</td><td>Listas: arquivos, linhas, argumentos</td><td>Consultas: "qual a capital de…", contagens, agrupamentos</td></tr>
+<tr><td>Versão</td><td>Qualquer Bash</td><td>bash 4.0 ou mais novo</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>O <code>declare -A</code> é obrigatório</h2>
+<p>Comece pelo erro mais comum. A Ana quer guardar a idade dos alunos e escreve direto, sem declarar:</p>
+
+<pre class="term">$ idade[ana]=29
+$ idade[bruno]=34
+$ echo ${idade[ana]}
+34                       « a idade da Ana virou a do Bruno?!
+$ declare -p idade
+declare -a idade=([0]="34")</pre>
+
+<p>Nenhuma mensagem de erro, e o resultado está errado. O <code>declare -p</code> mostra o que aconteceu: <code>-a</code>, um array <strong>indexado</strong>. Sem a declaração, o Bash achou que <code>ana</code> e <code>bruno</code> eram contas (o índice de um array comum é sempre um número) e calculou o valor de uma variável <code>ana</code>, que não existe, ou seja, <strong>0</strong>. As duas idades foram gravadas no índice 0, e a segunda apagou a primeira.</p>
+
+<p>Agora do jeito certo:</p>
+
+<dl class="anatomy">
+  <dt>declare</dt><dd>Comando interno que cria variáveis com atributos especiais.</dd>
+  <dt>-A</dt><dd>"Associativo" (<em>Associative</em>). A maiúscula importa: <code>-a</code> minúsculo é o array indexado.</dd>
+  <dt>idade</dt><dd>O nome do array.</dd>
+</dl>
+
+<pre class="term">$ unset idade
+$ declare -A idade
+$ idade[ana]=29
+$ idade[bruno]=34
+$ idade[carla]=22
+$ echo ${idade[bruno]}
+34
+$ declare -p idade
+declare -A idade=([ana]="29" [bruno]="34" [carla]="22" )</pre>
+
+<p>O <code>declare -p</code> agora mostra <code>-A</code> e as chaves com nome. O espaço antes do <code>)</code> no final é só o jeito do Bash imprimir associativos.</p>
+
+<div class="warning">
+<strong>Não dá para "converter" depois</strong>
+<pre class="term">$ idade[ana]=29
+$ declare -A idade
+bash: declare: idade: impossível converter array indexado para associativo</pre>
+<p>Se o nome já foi usado como array comum, apague antes com <code>unset idade</code>. Em scripts, faça o <code>declare -A</code> logo no começo, antes de qualquer uso.</p>
+</div>
+
+<h3>Criar já com os valores</h3>
+<p>Você pode declarar e preencher numa linha. Cada item é <code>[chave]=valor</code>:</p>
+
+<pre class="term">$ declare -A capital=([PE]=Recife [BA]=Salvador [AM]=Manaus)
+$ echo "${capital[BA]}"
+Salvador</pre>
+
+<p>Chaves com espaço precisam de aspas, tanto para gravar quanto para ler. Com uma variável como chave, use <code>$</code>:</p>
+
+<pre class="term">$ declare -A m=(["Porto Alegre"]=RS [Recife]=PE)
+$ echo "${m[Porto Alegre]}"
+RS
+$ k="Porto Alegre"; echo "${m[$k]}"
+RS</pre>
+
+<hr>
+
+<h2>Ler, alterar, acrescentar e remover</h2>
+
+<pre class="term">$ declare -A capital=([PE]=Recife [BA]=Salvador [AM]=Manaus)
+$ capital[PE]=Olinda              « chave que já existe: troca o valor
+$ echo ${capital[PE]}
+Olinda
+$ capital[SP]="São Paulo"         « chave nova: acrescenta
+$ capital+=([RJ]="Rio de Janeiro")    « += também funciona, com [chave]=valor
+$ unset 'capital[SP]'             « remove a chave SP (com aspas, como nos arrays)
+$ declare -p capital
+declare -A capital=([RJ]="Rio de Janeiro" [BA]="Salvador" [AM]="Manaus" [PE]="Olinda" )</pre>
+
+<p>Os comandos de gravar e remover não mostram nada; todos devolvem código 0. Para ler uma chave que não existe, o resultado é vazio, sem erro:</p>
+
+<pre class="term">$ echo "[${capital[SP]}]"
+[]</pre>
+
+<h3>A pegadinha do <code>$</code> na chave</h3>
+<p>No array comum, <code>${a[i]}</code> funciona sem <code>$</code> porque o índice é uma conta. No associativo, a chave é <strong>texto</strong>: sem <code>$</code>, você está pedindo a chave chamada literalmente "uf".</p>
+
+<pre class="term">$ declare -A capital=([PE]=Recife [BA]=Salvador)
+$ uf=PE
+$ echo "[${capital[uf]}]"
+[]                       « procurou a chave "uf"
+$ echo "[${capital[$uf]}]"
+[Recife]                 « procurou a chave "PE"</pre>
+
+<hr>
+
+<h2>Todas as chaves, todos os valores, quantos</h2>
+<p>As mesmas formas dos arrays comuns, com uma mudança de sentido: <code>${!m[@]}</code> agora devolve as <strong>chaves</strong>.</p>
+
+<pre class="term">$ declare -A capital=([PE]=Recife [BA]=Salvador [AM]=Manaus)
+$ echo "${!capital[@]}"
+BA AM PE                 « as chaves (repare na ordem)
+$ echo "${capital[@]}"
+Salvador Manaus Recife   « os valores, na mesma ordem das chaves
+$ echo ${#capital[@]}
+3                        « quantas chaves</pre>
+
+<h3>Percorrer: pelas chaves</h3>
+<p>O laço clássico percorre as chaves e, com cada uma, busca o valor:</p>
+
+<pre class="term">$ for uf in "${!capital[@]}"; do echo "$uf: ${capital[$uf]}"; done
+BA: Salvador
+AM: Manaus
+PE: Recife</pre>
+
+<dl class="anatomy">
+  <dt>for uf in</dt><dd>Para cada palavra da lista, guarde em <code>uf</code>…</dd>
+  <dt>"${!capital[@]}"</dt><dd>…sendo a lista as chaves, cada uma inteira (com aspas, "Porto Alegre" não se parte).</dd>
+  <dt>${capital[$uf]}</dt><dd>O valor daquela chave.</dd>
+</dl>
+
+<h3>A ordem não é garantida</h3>
+<p>Você criou PE, BA, AM, e o Bash devolveu BA, AM, PE. O array associativo guarda as chaves numa tabela de busca rápida (uma <em>tabela hash</em>), que não lembra a ordem de entrada. A ordem pode mudar quando você acrescenta chaves, e pode ser diferente em outra versão do Bash. <strong>Nunca conte com ela.</strong></p>
+<p>Quando a ordem importa, ordene as chaves com <code>sort</code>:</p>
+
+<pre class="term">$ for uf in $(printf '%s\n' "${!capital[@]}" | sort); do echo "$uf: ${capital[$uf]}"; done
+AM: Manaus
+BA: Salvador
+PE: Recife</pre>
+
+<p>Esse <code>$( )</code> sem aspas só é seguro porque as chaves são siglas, sem espaço. Com chaves que podem ter espaço, ordene a <strong>saída</strong> do laço inteiro, como nas receitas abaixo (<code>done | sort</code>).</p>
+
+<div class="try" data-goal="ran:declare -A,out:Salvador" data-solucao="declare -A capital=([PE]=Recife [BA]=Salvador);;echo &quot;${capital[BA]}&quot;">
+<p class="try-task"><strong>Missão:</strong> crie o array associativo <code>capital</code> com <code>PE</code> → <code>Recife</code> e <code>BA</code> → <code>Salvador</code>. Depois mostre a capital da <code>BA</code> com <code>echo</code>. Confira o resultado com <code>declare -p capital</code>.</p>
+</div>
+
+<hr>
+
+<h2>Testar se uma chave existe: <code>[[ -v m[chave] ]]</code></h2>
+<p>Ler uma chave inexistente dá vazio. Mas uma chave pode existir <strong>com valor vazio</strong>. Para saber se ela está lá, use o teste <code>-v</code> (de <em>variable</em>, "está definida?") do <a href="testes.html"><code>[[ ]]</code></a>:</p>
+
+<pre class="term">$ declare -A capital=([PE]=Recife [BA]=Salvador [AM]=Manaus)
+$ [[ -v capital[PE] ]] &amp;&amp; echo tem || echo "não tem"
+tem
+$ [[ -v capital[SP] ]] &amp;&amp; echo tem || echo "não tem"
+não tem
+$ capital[SP]=""
+$ [[ -v capital[SP] ]] &amp;&amp; echo tem || echo "não tem"
+tem                      « existe, mesmo vazia
+$ [[ -n ${capital[SP]} ]] &amp;&amp; echo tem || echo "vazio"
+vazio                    « -n olha o valor, não a existência</pre>
+
+<dl class="anatomy">
+  <dt>[[</dt><dd>Abre o teste do Bash.</dd>
+  <dt>-v</dt><dd>"Esta variável (ou este item) está definida?"</dd>
+  <dt>capital[PE]</dt><dd>O item, <strong>sem</strong> <code>$</code> e sem chaves: você passa o <em>nome</em>, não o valor.</dd>
+  <dt>]]</dt><dd>Fecha. O teste devolve 0 (sim) ou 1 (não), sem mostrar nada.</dd>
+</dl>
+
+<p>Se você só quer um valor padrão para chaves ausentes, a expansão <code>:-</code> resolve sem <code>if</code>:</p>
+
+<pre class="term">$ echo "${capital[RJ]:-desconhecida}"
+desconhecida</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Teste</th></tr>
+<tr><td>A chave existe?</td><td><code>[[ -v m[$k] ]]</code></td></tr>
+<tr><td>A chave tem um valor não vazio?</td><td><code>[[ -n ${m[$k]} ]]</code></td></tr>
+<tr><td>Quero o valor ou um padrão</td><td><code>"${m[$k]:-padrão}"</code></td></tr>
+</table>
+</div>
+
+<div class="tryscript" data-file="ddd.sh" data-args="11" data-goal="out:DDD 11: desconhecido,src:-v cidade">
+<p class="try-task"><strong>Missão:</strong> com o argumento <code>11</code>, o script mostra <code>DDD 11: </code> e mais nada. Use um <code>if [[ -v cidade[$ddd] ]]</code> para mostrar <code>DDD 11: desconhecido</code> quando a chave não existir. Teste também com <code>81</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+declare -A cidade=([81]=Recife [71]=Salvador [92]=Manaus)
+ddd=$1
+echo "DDD $ddd: ${cidade[$ddd]}"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+declare -A cidade=([81]=Recife [71]=Salvador [92]=Manaus)
+ddd=$1
+if [[ -v cidade[$ddd] ]]; then
+  echo "DDD $ddd: ${cidade[$ddd]}"
+else
+  echo "DDD $ddd: desconhecido"
+fi
+</pre>
+</div>
+
+<hr>
+
+<h2>Receita 1: contar a frequência das frutas</h2>
+<p>O <code>frutas.txt</code> da Ana tem uma fruta por linha, com repetições. Quantas vezes aparece cada uma? A ideia: a fruta é a <strong>chave</strong>, e o valor é um <strong>contador</strong> que sobe a cada aparição.</p>
+
+<pre class="file" data-file="frequencia.sh">#!/usr/bin/env bash
+declare -A contagem
+
+while read -r fruta; do
+  (( contagem[$fruta]++ ))
+done &lt; frutas.txt
+
+for f in "${!contagem[@]}"; do
+  echo "${contagem[$f]} $f"
+done | sort -rn
+</pre>
+
+<pre class="term">$ bash frequencia.sh
+3 banana
+2 maçã
+1 uva
+1 laranja
+$ echo $?
+0</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>declare -A contagem</code></td><td>Cria o array associativo vazio. Sem ela, todas as frutas iriam para o índice 0.</td></tr>
+<tr><td><code>while read -r fruta; do … done &lt; frutas.txt</code></td><td>Lê o arquivo <a href="ler-linhas.html">linha a linha</a>; cada linha vai para <code>fruta</code>.</td></tr>
+<tr><td><code>(( contagem[$fruta]++ ))</code></td><td>Soma 1 ao contador daquela fruta. Uma chave que ainda não existe vale 0 na conta, então a primeira aparição vira 1.</td></tr>
+<tr><td><code>for f in "${!contagem[@]}"</code></td><td>Percorre as frutas encontradas (as chaves).</td></tr>
+<tr><td><code>echo "${contagem[$f]} $f"</code></td><td>Mostra "quantidade fruta", com o número na frente para facilitar a ordenação.</td></tr>
+<tr><td><code>done | sort -rn</code></td><td>Ordena a saída do laço inteiro por número (<code>-n</code>), do maior para o menor (<code>-r</code>). Sem isso, a ordem seria a da tabela interna.</td></tr>
+</table>
+</div>
+
+<p>É a mesma resposta de <code>sort frutas.txt | uniq -c | sort -rn</code>, que você viu em <a href="pipes.html">pipes</a>. A diferença: com o array, os números ficam <strong>dentro do script</strong>, prontos para outras contas (por exemplo, "avise se alguma fruta passar de 2").</p>
+
+<div class="warning">
+<strong><code>(( x++ ))</code> com <code>set -e</code></strong>
+<p>Uma conta <code>(( ))</code> que resulta em 0 devolve código 1. O <code>contagem[banana]++</code> da primeira vez vale 0 (o valor <em>antes</em> de somar), e um script com <a href="modo-estrito.html"><code>set -e</code></a> pararia ali. Nesses scripts, use <code>(( ++contagem[$fruta] ))</code> (soma antes, vale 1) ou <code>contagem[$fruta]=$(( ${contagem[$fruta]:-0} + 1 ))</code>.</p>
+</div>
+
+<div class="tryscript" data-file="contar.sh" data-goal="out:banana: 3,out:maçã: 2,src:\(\(">
+<p class="try-task"><strong>Missão:</strong> complete o laço com a linha que soma 1 ao contador da fruta, para a saída mostrar <code>banana: 3</code>, <code>laranja: 1</code>, <code>maçã: 2</code> e <code>uva: 1</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+declare -A contagem
+while read -r fruta; do
+  # some 1 ao contador desta fruta aqui
+  :
+done &lt; frutas.txt
+
+for f in "${!contagem[@]}"; do
+  echo "$f: ${contagem[$f]}"
+done | sort
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+declare -A contagem
+while read -r fruta; do
+  (( contagem[$fruta]++ ))
+done &lt; frutas.txt
+
+for f in "${!contagem[@]}"; do
+  echo "$f: ${contagem[$f]}"
+done | sort
+</pre>
+</div>
+
+<hr>
+
+<h2>Receita 2: agrupar os alunos por cidade</h2>
+<p>O <code>Documentos/alunos.csv</code> tem uma linha por aluno: <code>nome,idade,cidade,nota</code>. Para o exemplo ficar interessante, a Ana acrescenta dois alunos de cidades que já estão na lista:</p>
+
+<pre class="term">$ printf '%s\n' "Fábio,31,Recife,8.0" "Gabi,25,Salvador,9.0" &gt;&gt; Documentos/alunos.csv
+$ cat Documentos/alunos.csv
+nome,idade,cidade,nota
+Ana,29,Recife,9.5
+Bruno,34,Curitiba,7.0
+Carla,22,Salvador,8.5
+Diego,41,Manaus,6.0
+Elisa,27,Porto Alegre,10.0
+Fábio,31,Recife,8.0
+Gabi,25,Salvador,9.0</pre>
+
+<p>Agora, dois arrays associativos com a <strong>cidade</strong> como chave: um junta os nomes, o outro conta quantos alunos há em cada uma.</p>
+
+<pre class="file" data-file="cidades.sh">#!/usr/bin/env bash
+declare -A alunos quantos
+
+while IFS=, read -r nome idade cidade nota; do
+  [[ $nome == nome ]] &amp;&amp; continue        # pula o cabeçalho
+  alunos[$cidade]+="$nome ($nota) "
+  (( quantos[$cidade]++ ))
+done &lt; Documentos/alunos.csv
+
+for c in "${!alunos[@]}"; do
+  echo "$c [${quantos[$c]}]: ${alunos[$c]}"
+done | sort
+</pre>
+
+<pre class="term">$ bash cidades.sh
+Curitiba [1]: Bruno (7.0)
+Manaus [1]: Diego (6.0)
+Porto Alegre [1]: Elisa (10.0)
+Recife [2]: Ana (9.5) Fábio (8.0)
+Salvador [2]: Carla (8.5) Gabi (9.0)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>declare -A alunos quantos</code></td><td>Declara os dois arrays de uma vez.</td></tr>
+<tr><td><code>while IFS=, read -r nome idade cidade nota</code></td><td>Lê cada linha cortando nas vírgulas: cada coluna vai para uma variável (veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>).</td></tr>
+<tr><td><code>[[ $nome == nome ]] &amp;&amp; continue</code></td><td>A primeira linha é o cabeçalho; <a href="break-continue.html">continue</a> pula para a próxima.</td></tr>
+<tr><td><code>alunos[$cidade]+="$nome ($nota) "</code></td><td>O <code>+=</code> num item <strong>cola texto</strong> no fim do valor que já estava naquela cidade.</td></tr>
+<tr><td><code>(( quantos[$cidade]++ ))</code></td><td>Mais um aluno naquela cidade.</td></tr>
+<tr><td><code>"${!alunos[@]}"</code></td><td>As cidades. "Porto Alegre" chega inteira graças às aspas.</td></tr>
+<tr><td><code>done | sort</code></td><td>Ordem alfabética das cidades.</td></tr>
+</table>
+</div>
+
+<p>Somar as notas por cidade exigiria contas com vírgula, que o Bash não faz: aí entra o <code>awk</code> ou o <code>bc</code> (veja <a href="aritmetica.html">Contas</a>). Um bom critério: o array associativo é ótimo para <strong>organizar</strong>; para cálculos pesados em colunas, o <a href="ferramentas-texto.html">awk</a> costuma ser mais simples.</p>
+
+<hr>
+
+<h2>Copiar e inspecionar</h2>
+<p>Não existe "copiar com <code>=</code>" para arrays associativos. O jeito mais claro é percorrer as chaves:</p>
+
+<pre class="term">$ declare -A capital=([PE]=Recife [BA]=Salvador [AM]=Manaus)
+$ declare -A copia
+$ for k in "${!capital[@]}"; do copia[$k]=${capital[$k]}; done
+$ declare -p copia
+declare -A copia=([BA]="Salvador" [AM]="Manaus" [PE]="Recife" )</pre>
+
+<p>O <code>declare -p</code> é seu melhor amigo para ver o conteúdo inteiro, com chaves e valores. Rodar <code>declare -A</code> sem nome lista todos os arrays associativos da sessão (inclusive dois do próprio Bash: <code>BASH_ALIASES</code> e <code>BASH_CMDS</code>).</p>
+
+<div class="tip">
+<strong>Atalho <span class="versao">bash 5.1+</span></strong>
+<p>A transformação <code>${m[@]@K}</code> devolve os pares já no formato <code>chave "valor"</code>. Com <code>eval</code>, ela copia numa linha: <code>declare -A copia; eval "copia=(${capital[@]@K})"</code>. Funciona, mas o <code>eval</code> exige cuidado (veja <a href="eval-indirecao.html">eval e indireção</a>); o laço acima é mais fácil de ler.</p>
+</div>
+
+<hr>
+
+<h2>Arrays associativos em funções</h2>
+<p>Um <code>declare -A</code> dentro de uma função cria uma variável <strong>local</strong>, que some quando a função termina:</p>
+
+<pre class="term">$ f() { declare -A tmp=([x]=1); }
+$ f; declare -p tmp
+bash: declare: tmp: não encontrado
+$ g() { declare -gA glob=([x]=1); }
+$ g; declare -p glob
+declare -A glob=([x]="1" )</pre>
+
+<p>O <code>-g</code> (<em>global</em>) cria a variável fora da função. Para uma função <strong>receber</strong> um array associativo, passe o nome e use <code>local -n</code>, como na aula de <a href="arrays.html">arrays</a>.</p>
+
+<hr>
+
+<h2>E no macOS?</h2>
+<p>O <code>/bin/bash</code> do macOS é a versão <strong>3.2</strong>, de 2007, que não tem arrays associativos. Lá, o <code>declare -A</code> falha (saída <strong>ilustrativa</strong>, do Bash 3.2 em inglês):</p>
+
+<pre class="term" data-title="Terminal do macOS — bash 3.2">$ declare -A capital
+bash: declare: -A: invalid option
+declare: usage: declare [-afFirtx] [-p] [name[=value] ...]</pre>
+
+<p><strong>Como resolver:</strong> instale um Bash novo (por exemplo, pelo Homebrew) e use <code>#!/usr/bin/env bash</code> no script, para que ele ache o Bash novo no <a href="path.html">PATH</a>. Num script que precisa rodar em qualquer lugar, confira a versão no começo:</p>
+
+<pre class="file" data-file="trecho de script">if (( BASH_VERSINFO[0] &lt; 4 )); then
+  echo "Este script precisa do bash 4 ou mais novo." &gt;&amp;2
+  exit 1
+fi</pre>
+
+<p>Linux (Ubuntu, Debian, Fedora, Arch), WSL e Git Bash já vêm com Bash 5. Veja <a href="onde-tem-bash.html">Bash em Cada Sistema</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Todas as chaves dão o mesmo valor</strong>
+<pre class="term">$ idade[ana]=29
+$ idade[bruno]=34
+$ echo ${idade[ana]}
+34</pre>
+<p><strong>O que aconteceu:</strong> faltou o <code>declare -A</code>. O array virou indexado e todas as chaves de texto valem 0.</p>
+<p><strong>Como confirmar:</strong> <code>declare -p idade</code> mostra <code>declare -a</code> (minúsculo) e só <code>[0]</code>.</p>
+<p><strong>Como resolver:</strong> <code>unset idade; declare -A idade</code> e grave de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"impossível converter array indexado para associativo"</strong>
+<p><strong>O que aconteceu:</strong> o nome já era um array comum quando você rodou <code>declare -A</code>.</p>
+<p><strong>Como resolver:</strong> <code>unset nome</code> antes do <code>declare -A</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada (a chave "existe" mas veio vazia)</strong>
+<p><strong>O que aconteceu:</strong> provavelmente faltou o <code>$</code> na chave: <code>${capital[uf]}</code> procura a chave "uf". Ou a chave tem diferença de maiúsculas, espaço sobrando no fim (comum ao ler arquivos do Windows, com <code>\r</code>).</p>
+<p><strong>Como confirmar:</strong> <code>declare -p capital</code> mostra as chaves exatas; compare com <code>printf '[%s]\n' "$uf"</code>.</p>
+<p><strong>Como resolver:</strong> <code>${capital[$uf]}</code>, e limpe a chave antes de usar.</p>
+</div>
+
+<div class="cenario">
+<strong>"subscrito de array incorreto" com chave vazia</strong>
+<pre class="term">$ declare -A m
+$ k=""; m[$k]=x
+bash: m[$k]: subscrito de array incorreto</pre>
+<p><strong>O que aconteceu:</strong> a chave não pode ser vazia. Geralmente é uma linha em branco no arquivo ou uma coluna faltando.</p>
+<p><strong>Como resolver:</strong> pule as linhas vazias: <code>[[ -z $k ]] &amp;&amp; continue</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"comando não encontrado" com o nome do item</strong>
+<pre class="term">$ capital[BA]
+bash: capital[BA]: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> sozinho na linha, o nome é tratado como comando. Para ver o valor, use <code>echo "${capital[BA]}"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>declare -A m</code></td><td>Cria um array associativo vazio (obrigatório)</td></tr>
+<tr><td><code>declare -A m=([k1]=v1 [k2]=v2)</code></td><td>Cria já com valores</td></tr>
+<tr><td><code>m[chave]=valor</code></td><td>Grava (cria ou troca)</td></tr>
+<tr><td><code>m+=([k3]=v3)</code></td><td>Acrescenta pares</td></tr>
+<tr><td><code>m[k]+=texto</code></td><td>Cola texto no fim do valor</td></tr>
+<tr><td><code>(( m[k]++ ))</code></td><td>Soma 1 ao valor (contador)</td></tr>
+<tr><td><code>"${m[$k]}"</code></td><td>Valor da chave guardada em <code>k</code></td></tr>
+<tr><td><code>"${m[$k]:-padrão}"</code></td><td>Valor ou um padrão</td></tr>
+<tr><td><code>"${!m[@]}"</code></td><td>Todas as chaves</td></tr>
+<tr><td><code>"${m[@]}"</code></td><td>Todos os valores</td></tr>
+<tr><td><code>${#m[@]}</code></td><td>Quantidade de chaves</td></tr>
+<tr><td><code>[[ -v m[$k] ]]</code></td><td>A chave existe?</td></tr>
+<tr><td><code>unset 'm[k]'</code></td><td>Remove uma chave</td></tr>
+<tr><td><code>unset m</code></td><td>Apaga o array</td></tr>
+<tr><td><code>declare -p m</code></td><td>Mostra tudo</td></tr>
+<tr><td><code>declare -gA m</code></td><td>Cria global, de dentro de uma função</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Declarar</h3>
+<p>Complete para criar o array associativo <code>preco</code>:</p>
+<div class="ex-code">declare <input data-answer="-A" aria-label="opção"> preco</div>
+</div>
+
+<div class="exercise">
+<h3>2. Listar as chaves</h3>
+<p>Complete o laço para percorrer as <strong>chaves</strong> de <code>preco</code>:</p>
+<div class="ex-code">for item in "<input data-answer="${!preco[@]}" aria-label="chaves">"; do echo "$item"; done</div>
+</div>
+
+<div class="exercise">
+<h3>3. A chave existe?</h3>
+<p>Complete para testar se existe a chave guardada em <code>$p</code>:</p>
+<div class="ex-code">if [[ <input data-answer="-v preco[$p]|-v preco[&quot;$p&quot;]" aria-label="teste"> ]]; then echo "tem"; fi</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Sem <code>declare -A</code>, a Ana rodou <code>cor[ceu]=azul; cor[mar]=verde</code>. O que <code>echo ${cor[ceu]}</code> mostra?</p>
+<label><input type="radio" name="q4"> <code>azul</code></label>
+<label><input type="radio" name="q4"> <code>verde</code></label>
+<label><input type="radio" name="q4"> Nada, e uma mensagem de erro.</label>
+<label><input type="radio" name="q4"> <code>azul verde</code></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Você criou as chaves na ordem <code>a</code>, <code>b</code>, <code>c</code>. Em que ordem <code>"${!m[@]}"</code> as devolve?</p>
+<label><input type="radio" name="q5"> Sempre <code>a b c</code>.</label>
+<label><input type="radio" name="q5"> Sempre em ordem alfabética.</label>
+<label><input type="radio" name="q5"> Numa ordem que não é garantida; ordene com <code>sort</code> se precisar.</label>
+<label><input type="radio" name="q5"> Sempre <code>c b a</code>, a mais nova primeiro.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Com <code>declare -A m=([x]="")</code>, qual teste dá verdadeiro?</p>
+<label><input type="radio" name="q6"> <code>[[ -v m[x] ]]</code></label>
+<label><input type="radio" name="q6"> <code>[[ -n ${m[x]} ]]</code></label>
+<label><input type="radio" name="q6"> Os dois.</label>
+<label><input type="radio" name="q6"> Nenhum.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Array associativo = chave (texto) → valor. Exige <code>declare -A</code> antes do primeiro uso; sem ele, as chaves viram 0 sem nenhum aviso.</li>
+  <li>Leia com <code>"${m[$k]}"</code> (com <code>$</code> na chave em variável); <code>"${!m[@]}"</code> são as chaves, <code>${#m[@]}</code> a quantidade.</li>
+  <li>A ordem das chaves não é garantida: ordene a saída com <code>sort</code>.</li>
+  <li><code>[[ -v m[$k] ]]</code> testa se a chave existe; <code>"${m[$k]:-padrão}"</code> dá um valor padrão.</li>
+  <li>Contar: <code>(( m[$k]++ ))</code>. Agrupar: <code>m[$k]+="texto "</code>. Exige bash 4.0+ (o bash 3.2 do macOS não tem).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
