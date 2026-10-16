@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Substituição de Comando — $(comando) e crases | Guia Bash</title>
+<meta name="description" content="Substituição de comando no Bash: guardar a saída de um comando numa variável com $( ), por que preferir $( ) às crases, aspas em volta, quebras de linha finais, código de saída, aninhamento, $(&lt; arquivo) e o custo do subshell, com saídas reais e missões.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Substituição de Comando $( )</span></h1>
+
+<p class="intro">Você já sabe que <code>date +%F</code> mostra a data de hoje. Mas e se você quiser <strong>usar</strong> essa data no nome de um arquivo, ou guardar numa variável? A <strong>substituição de comando</strong> roda um comando e coloca a saída dele no meio de outro comando, como se você tivesse digitado o resultado.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Usar <code>$(comando)</code> para guardar a saída de um comando numa variável ou usar dentro de outro comando.</li>
+  <li>Por que preferir <code>$( )</code> às crases <code>` `</code>.</li>
+  <li>Por que pôr aspas em volta (<code>"$(…)"</code>) e o que acontece com as quebras de linha.</li>
+  <li>Qual é o código de saída de <code>var=$(cmd)</code>, e o atalho <code>$(&lt; arquivo)</code>.</li>
+  <li>O custo de cada <code>$( )</code> e quando ele importa.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: a saída vai para a tela, e eu queria guardar</h2>
+<pre class="term">$ date +%F
+2026-10-15
+$ hoje=date +%F
+bash: +%F: comando não encontrado</pre>
+
+<p>A segunda linha não funcionou: <code>hoje=date</code> virou uma <a href="variaveis.html">atribuição temporária</a> e o Bash tentou rodar <code>+%F</code> como comando. O que você quer é "rode <code>date +%F</code> e guarde o que ele <strong>mostraria</strong>". É exatamente isso que <code>$( )</code> faz.</p>
+
+<h2>A forma básica: <code>$(comando)</code></h2>
+<dl class="anatomy">
+  <dt>hoje=</dt><dd>Atribuição: a variável vai receber o que vem depois.</dd>
+  <dt>$(</dt><dd>"Rode o comando que está aqui dentro…"</dd>
+  <dt>date +%F</dt><dd>…este comando. Ele roda primeiro, numa cópia do shell.</dd>
+  <dt>)</dt><dd>"…e coloque aqui o que ele imprimiu."</dd>
+</dl>
+
+<pre class="term">$ hoje=$(date +%F)
+$ echo "Hoje é $hoje"
+Hoje é 2026-10-15</pre>
+
+<p>O <code>date</code> não mostrou nada na tela: a saída dele foi <strong>capturada</strong> e virou o valor de <code>hoje</code>. Você não precisa de variável: o <code>$( )</code> pode ir direto no meio do texto.</p>
+
+<pre class="term">$ echo "Você está em $(pwd)"
+Você está em /home/ana
+$ echo "Há $(ls Downloads | wc -l) arquivos em Downloads"
+Há 5 arquivos em Downloads</pre>
+
+<p>No segundo exemplo, dentro do <code>$( )</code> há um <a href="pipes.html">pipe</a> inteiro: <code>ls Downloads</code> lista os arquivos (um por linha, porque a saída não é a tela) e <code>wc -l</code> conta as linhas. O resultado, <code>5</code>, entra no lugar.</p>
+
+<h3>A ordem das coisas</h3>
+<pre class="syntax">  echo "Há $(ls Downloads | wc -l) arquivos"
+            └──────────┬─────────┘
+  1º  o Bash roda  ls Downloads | wc -l   →  imprime "5"
+  2º  troca o $( ) pelo texto             →  echo "Há 5 arquivos"
+  3º  roda o echo                         →  Há 5 arquivos</pre>
+
+<div class="try" data-goal="var:qtd=7,ran:\$\(" data-solucao="qtd=$(wc -l &lt; frutas.txt)">
+<p class="try-task"><strong>Missão:</strong> guarde na variável <code>qtd</code> quantas linhas tem o arquivo <code>frutas.txt</code>, usando <code>$( )</code>. Dica: <code>wc -l &lt; frutas.txt</code> mostra só o número. Confira com <code>echo "$qtd"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Crases: a forma antiga</h2>
+<p>Antes do <code>$( )</code>, a substituição de comando era feita com <strong>crases</strong> (o acento grave, <code>`</code>). Ela ainda funciona e aparece em muitos scripts e tutoriais antigos:</p>
+<pre class="term">$ echo "Usuário: `whoami`"
+Usuário: ana</pre>
+
+<p>O resultado é o mesmo. Então por que todo mundo recomenda <code>$( )</code>? Veja o que acontece quando um comando precisa de outro dentro dele (<strong>aninhar</strong>). Vamos mostrar só o nome da pasta atual: <code>pwd</code> dá o caminho, e <code>basename</code> pega a última parte.</p>
+
+<pre class="term">$ echo "Pasta: $(basename "$(pwd)")"
+Pasta: ana
+$ echo "Pasta: `basename \`pwd\``"
+Pasta: ana                       « funciona, mas as crases de dentro precisam de \
+$ echo `echo `echo quebrou``
+echo quebrou                     « sem as barras, o Bash fechou na crase errada</pre>
+
+<p>Com crases, o Bash não sabe se uma crase <strong>abre</strong> ou <strong>fecha</strong>: ele sempre fecha na próxima. No último exemplo, ele entendeu <code>`echo `</code> (vazio) + <code>echo quebrou</code> + <code>``</code> (vazio). Com <code>$( )</code>, abrir e fechar são símbolos diferentes, então você pode aninhar quantos níveis quiser:</p>
+<pre class="term">$ echo "$(echo "$(echo "três níveis")")"
+três níveis</pre>
+
+<p>Repare também nas aspas: dentro de <code>$( )</code> você pode usar aspas normalmente, mesmo que o <code>$( )</code> esteja dentro de outras aspas. Cada <code>$( )</code> começa um "mundo novo" de aspas.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>$(comando)</code></th><th><code>`comando`</code></th></tr>
+<tr><td>Aninhar</td><td>Direto: <code>$(a $(b))</code></td><td>Precisa escapar: <code>`a \`b\``</code></td></tr>
+<tr><td>Legibilidade</td><td>Fácil de ver onde começa e termina</td><td>A crase se confunde com aspas simples <code>'</code></td></tr>
+<tr><td>Barra invertida dentro</td><td>Funciona como fora</td><td>Tem regras especiais (<code>\$</code>, <code>\\</code>, <code>\`</code>)</td></tr>
+<tr><td>Onde funciona</td><td>Bash, zsh, dash, qualquer <code>sh</code> POSIX</td><td>Em todos, inclusive shells muito antigos</td></tr>
+<tr><td><strong>Qual usar?</strong></td><td><strong>Sempre, em código novo</strong></td><td>Só para entender scripts antigos</td></tr>
+</table>
+</div>
+
+<p>O <a href="shellcheck.html">ShellCheck</a> avisa quando encontra crases (aviso SC2006) e sugere trocar por <code>$( )</code>.</p>
+
+<hr>
+
+<h2>Aspas em volta: <code>"$(…)"</code></h2>
+<p>O resultado de <code>$( )</code> passa pelas mesmas etapas que <code>$variavel</code>: se estiver <strong>sem aspas</strong>, ele é quebrado em palavras nos espaços e quebras de linha, e os <a href="curingas.html">curingas</a> são expandidos. Veja com a lista de frutas, uma por linha:</p>
+
+<pre class="term">$ lista=$(cat frutas.txt)
+$ echo $lista
+banana maçã laranja banana uva maçã banana      « sem aspas: as linhas viraram palavras
+$ echo "$lista"
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana                                          « com aspas: as quebras de linha ficam</pre>
+
+<p>A variável <code>lista</code> guardou as quebras de linha direitinho. Quem as "perdeu" foi o <code>echo $lista</code> sem aspas: o Bash separou o valor em 7 palavras e o <code>echo</code> as imprimiu separadas por espaço.</p>
+
+<p>O problema fica sério com nomes que têm espaço:</p>
+<pre class="term">$ p=$(echo "Área de trabalho")
+$ ls -d $p
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente
+$ ls -d "$p"
+Área de trabalho</pre>
+
+<p><strong>Regra:</strong> use aspas em volta de <code>$( )</code> e da variável que guarda o resultado, sempre que for usá-los como argumento. Na atribuição (<code>var=$(cmd)</code>), as aspas são opcionais, porque o Bash não separa palavras ali. Mais sobre isso em <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<hr>
+
+<h2>As quebras de linha do final somem</h2>
+<p>Quase todo comando termina a saída com uma quebra de linha. O <code>$( )</code> <strong>remove todas as quebras de linha do final</strong> (só do final). É por isso que <code>hoje=$(date +%F)</code> não guarda um "enter" junto com a data.</p>
+
+<pre class="term">$ x=$(printf 'a\nb\n\n\n')
+$ echo "[$x]"
+[a
+b]                       « a quebra do meio ficou; as três do fim sumiram</pre>
+
+<p>Na maioria das vezes, isso é exatamente o que você quer. Só preste atenção se precisar guardar um arquivo byte a byte (aí, use outras técnicas, vistas em <a href="mapfile.html">mapfile</a>).</p>
+
+<hr>
+
+<h2>O código de saída de <code>var=$(cmd)</code></h2>
+<p>Uma atribuição com <code>$( )</code> devolve o <a href="codigo-saida.html">código de saída</a> <strong>do comando de dentro</strong>. Assim você captura a saída e ainda sabe se deu certo:</p>
+
+<pre class="term">$ saida=$(ls nada)
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente   « o erro não foi capturado!
+$ echo "código: $?"
+código: 2                « o código do ls chegou até aqui
+$ echo "[$saida]"
+[]                       « a variável ficou vazia</pre>
+
+<p>Duas coisas para notar:</p>
+<ol>
+  <li><code>$( )</code> captura só a <strong>saída padrão</strong> (canal 1). A mensagem de erro (canal 2) continua indo para a tela. Para capturar as duas, junte com <code>2&gt;&amp;1</code> (veja <a href="redirecionamento.html">Redirecionamento</a>):
+<pre class="term">$ saida=$(ls nada 2&gt;&amp;1)
+$ echo "[$saida]"
+[ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente]</pre></li>
+  <li>Como a atribuição devolve o código do comando, ela pode ir direto num <code>if</code> (assunto de <a href="if.html">if, elif, else</a>):
+<pre class="term">$ if total=$(grep -c Ana Documentos/alunos.csv); then echo "achei $total"; fi
+achei 1</pre></li>
+</ol>
+
+<div class="warning">
+<strong>A exceção: <code>local</code>, <code>export</code> e <code>declare</code></strong>
+<p>Em <code>export x=$(cmd)</code> ou <code>local x=$(cmd)</code>, o código de saída é o do <code>export</code>/<code>local</code> (que quase sempre dá certo), não o do <code>cmd</code>. Se o código importa, separe em duas linhas: <code>local x</code> e depois <code>x=$(cmd)</code>. Isso volta em <a href="funcoes-retorno.html">local, return e Saída</a>.</p>
+</div>
+
+<hr>
+
+<h2>Ler um arquivo inteiro: <code>$(&lt; arquivo)</code></h2>
+<p><code>$(cat arquivo)</code> é tão comum que o Bash tem um atalho: <code>$(&lt; arquivo)</code>. Ele faz o mesmo, mas <strong>sem chamar o programa <code>cat</code></strong>, então é mais rápido.</p>
+<pre class="term">$ conteudo=$(&lt; Documentos/notas.txt)
+$ echo "$conteudo"
+Comprar café
+Ligar para o João
+Estudar Bash
+Fazer backup das fotos</pre>
+
+<p>Se o arquivo não existir, a mensagem é do próprio Bash e o código é <code>1</code>:</p>
+<pre class="term">$ arquivo=$(&lt; naoexiste.txt)
+bash: naoexiste.txt: Arquivo ou diretório inexistente
+$ echo $?
+1</pre>
+
+<p>Não confunda com <code>$(wc -l &lt; frutas.txt)</code>: ali o <code>&lt;</code> é um redirecionamento comum para o <code>wc</code>. O atalho é só quando o <code>&lt; arquivo</code> está sozinho dentro dos parênteses.</p>
+
+<hr>
+
+<h2>Exemplos do dia a dia</h2>
+
+<h3>Data no nome do backup</h3>
+<pre class="term">$ cp Documentos/notas.txt "notas-$(date +%F).txt"
+$ ls notas-*
+notas-2026-10-15.txt
+$ tar czf "backup-$(date +%Y%m%d).tar.gz" Documentos
+$ ls backup-*
+backup-20261015.tar.gz</pre>
+<p>O formato <code>%F</code> (ano-mês-dia) é ótimo para nomes de arquivo, porque a ordem alfabética coincide com a ordem das datas. Os formatos do <code>date</code> estão em <code>man date</code>.</p>
+
+<div class="try" data-goal="file:~/notas-2026-10-15.txt,ran:\$\(date" data-solucao="cp Documentos/notas.txt &quot;notas-$(date +%F).txt&quot;">
+<p class="try-task"><strong>Missão:</strong> faça uma cópia de <code>Documentos/notas.txt</code> na sua pasta pessoal com a data de hoje no nome, no formato <code>notas-ANO-MÊS-DIA.txt</code>, usando <code>$(date +%F)</code>. Confira com <code>ls</code>.</p>
+</div>
+
+<h3>Contar arquivos</h3>
+<pre class="term">$ qtd=$(ls Documentos | wc -l)
+$ echo "Documentos tem $qtd itens"
+Documentos tem 5 itens</pre>
+
+<h3>Nome do script e da pasta</h3>
+<p>Em scripts, é comum mostrar só o nome do script nas mensagens: <code>echo "Uso: $(basename "$0") ARQUIVO"</code>. Lembre que o mesmo resultado sai sem processo extra com <code>${0##*/}</code> (veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>).</p>
+
+<div class="tryscript" data-file="contar.sh" data-args="Downloads" data-goal="out:Downloads tem 5 arquivos,src:\$\(">
+<p class="try-task"><strong>Missão:</strong> o script recebe o nome de uma pasta. Troque o <code>???</code> para que ele mostre quantos itens há nela, usando <code>$( )</code> com <code>ls</code> e <code>wc -l</code>. Com <code>Downloads</code>, a saída deve ser <code>Downloads tem 5 arquivos</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+pasta=${1:-.}
+echo "$pasta tem ??? arquivos"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+pasta=${1:-.}
+qtd=$(ls "$pasta" | wc -l)
+echo "$pasta tem $qtd arquivos"
+</pre>
+</div>
+
+<hr>
+
+<h2>O custo: cada <code>$( )</code> é um subshell</h2>
+<p>Para rodar o comando de dentro, o Bash cria uma <strong>cópia de si mesmo</strong> (um <a href="subshell.html">subshell</a>). Duas consequências:</p>
+
+<p><strong>1. O que acontece lá dentro fica lá dentro.</strong> Um <code>cd</code> ou uma variável alterada dentro do <code>$( )</code> não afeta o seu shell, como o script filho de <a href="variaveis.html">Variáveis</a>:</p>
+<pre class="term">$ pasta=$(cd Documentos; pwd)
+$ echo "$pasta"
+/home/ana/Documentos
+$ pwd
+/home/ana                « o cd aconteceu só na cópia
+$ n=1
+$ x=$(n=99; echo "dentro: $n")
+$ echo "$x / fora: $n"
+dentro: 99 / fora: 1</pre>
+
+<p><strong>2. Criar uma cópia leva tempo.</strong> Uma vez não faz diferença; dentro de um laço que roda milhares de vezes, sim. Compare 500 voltas (o comando <code>time</code> mede quanto demorou; o <a href="for.html">for</a> é a próxima unidade):</p>
+<pre class="term">$ time for i in {1..500}; do x=$(echo oi); done
+
+real	0m0,304s
+user	0m0,170s
+sys	0m0,166s
+$ time for i in {1..500}; do x=oi; done
+
+real	0m0,001s
+user	0m0,001s
+sys	0m0,000s</pre>
+<p>Os números variam de máquina para máquina, mas a proporção é parecida: centenas de vezes mais lento. Por isso, quando existe uma forma sem <code>$( )</code>, prefira-a dentro de laços: <code>${arq##*/}</code> em vez de <code>$(basename "$arq")</code>, <code>$((a + b))</code> em vez de <code>$(expr $a + $b)</code>, <code>$(&lt; arq)</code> em vez de <code>$(cat arq)</code>.</p>
+
+<div class="tip">
+<strong>Novidade do Bash 5.3: <code>${ comando; }</code></strong>
+<p>O Bash 5.3 trouxe uma substituição de comando que roda <strong>no shell atual</strong>, sem criar a cópia: <code>${ comando; }</code> (com espaço depois da chave e <code>;</code> antes de fechar). Ela é mais rápida e as variáveis alteradas dentro dela continuam alteradas depois. Como só existe no 5.3+, ela é explicada em <a href="novidades.html">Novidades do Bash 5</a>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"comando não encontrado" com o nome da variável</strong>
+<pre class="term">$ nome=Ana
+$ echo $(nome)
+bash: nome: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> parênteses são para <strong>comandos</strong>. O Bash tentou rodar um programa chamado <code>nome</code>.</p>
+<p><strong>Como resolver:</strong> para variáveis, use chaves: <code>${nome}</code> ou <code>$nome</code>. Para contas, parênteses duplos: <code>$((…))</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O comando de dentro não existe</strong>
+<pre class="term">$ v=$(dataa)
+bash: dataa: comando não encontrado
+$ echo "[$v] $?"
+[] 127</pre>
+<p><strong>O que aconteceu:</strong> erro de digitação dentro do <code>$( )</code>. A variável ficou vazia e o código <code>127</code> quer dizer "comando não encontrado".</p>
+<p><strong>Como resolver:</strong> teste o comando sozinho primeiro (<code>date +%F</code>) e só depois coloque dentro do <code>$( )</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"EOF inesperado enquanto procurava por `)'"</strong>
+<pre class="file" data-file="data.sh">#!/usr/bin/env bash
+hoje=$(date +%F
+echo "Backup de $hoje"
+</pre>
+<pre class="term">$ bash data.sh
+data.sh: linha 4: encontrado EOF inesperado enquanto procurava por `)' correspondente
+$ echo $?
+2</pre>
+<p><strong>O que aconteceu:</strong> faltou fechar o <code>$(</code> da linha 2, e o Bash leu até o fim do arquivo (<em>EOF</em>, <em>end of file</em>) procurando o <code>)</code>. A linha indicada (4) é <strong>depois da última</strong>, não a do erro. Nenhuma linha do script rodou: o código <code>2</code> indica erro de sintaxe. No terminal, o mesmo erro aparece como o prompt <code>&gt;</code> esperando o resto (saia com <kbd>Ctrl</kbd>+<kbd>C</kbd>).</p>
+<p><strong>Como resolver:</strong> procure um <code>$(</code> sem par. <code>bash -n data.sh</code> confere a sintaxe sem rodar (veja <a href="depuracao.html">Depurar</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Espaço em volta do <code>=</code></strong>
+<pre class="term">$ hoje = $(date +%F)
+bash: hoje: comando não encontrado</pre>
+<p><strong>Como resolver:</strong> sem espaços: <code>hoje=$(date +%F)</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O erro apareceu na tela e a variável ficou vazia</strong>
+<p><strong>O que aconteceu:</strong> o comando escreveu no canal de erro, que o <code>$( )</code> não captura.</p>
+<p><strong>Como resolver:</strong> confira o código com <code>echo $?</code> logo depois. Se quiser a mensagem na variável, use <code>var=$(cmd 2&gt;&amp;1)</code>; se quiser escondê-la, <code>var=$(cmd 2&gt;/dev/null)</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>var=$(cmd)</code></td><td>Guarda a saída do comando</td><td><code>hoje=$(date +%F)</code></td></tr>
+<tr><td><code>"…$(cmd)…"</code></td><td>Usa a saída no meio de um texto</td><td><code>echo "Em $(pwd)"</code></td></tr>
+<tr><td><code>`cmd`</code></td><td>Forma antiga (evite)</td><td><code>`whoami`</code></td></tr>
+<tr><td><code>$(a "$(b)")</code></td><td>Aninhar</td><td><code>$(basename "$(pwd)")</code></td></tr>
+<tr><td><code>$(cmd 2&gt;&amp;1)</code></td><td>Captura saída e erros</td><td><code>msg=$(ls nada 2&gt;&amp;1)</code></td></tr>
+<tr><td><code>$(&lt; arq)</code></td><td>Conteúdo do arquivo, sem <code>cat</code></td><td><code>txt=$(&lt; notas.txt)</code></td></tr>
+<tr><td><code>if v=$(cmd); then</code></td><td>Captura e testa o código</td><td><code>if n=$(grep -c x a); then</code></td></tr>
+<tr><td><code>${ cmd; }</code></td><td>Sem subshell (bash 5.3+)</td><td>veja <a href="novidades.html">Novidades</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Guardar a saída</h3>
+<p>Complete para guardar em <code>eu</code> o nome do usuário (comando <code>whoami</code>):</p>
+<div class="ex-code">eu=<input data-answer="$(whoami)" aria-label="substituição de comando"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Ler um arquivo sem cat</h3>
+<p>Complete para guardar o conteúdo de <code>notas.txt</code> em <code>txt</code> sem chamar o <code>cat</code>:</p>
+<div class="ex-code">txt=<input data-answer="$(&lt; notas.txt)|$(&lt;notas.txt)" aria-label="substituição"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Capturar o erro também</h3>
+<p>Complete para que a variável <code>msg</code> receba inclusive as mensagens de erro do <code>ls</code>:</p>
+<div class="ex-code">msg=$(ls nada <input data-answer="2&gt;&amp;1" aria-label="redirecionamento">)</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Depois de <code>pasta=$(cd /tmp; pwd)</code>, onde você está?</p>
+<label><input type="radio" name="q4"> Em <code>/tmp</code>.</label>
+<label><input type="radio" name="q4"> Na mesma pasta de antes: o <code>cd</code> rodou numa cópia do shell.</label>
+<label><input type="radio" name="q4"> Na pasta pessoal.</label>
+<label><input type="radio" name="q4"> Dá erro: não se pode usar <code>cd</code> dentro de <code>$( )</code>.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Depois de <code>v=$(ls nada)</code>, o que <code>echo $?</code> mostra?</p>
+<label><input type="radio" name="q5"> <code>0</code>, porque a atribuição deu certo.</label>
+<label><input type="radio" name="q5"> Nada: atribuições não têm código.</label>
+<label><input type="radio" name="q5"> O código do <code>ls</code> (diferente de 0), porque deu erro.</label>
+<label><input type="radio" name="q5"> <code>127</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Por que preferir <code>$( )</code> às crases?</p>
+<label><input type="radio" name="q6"> Porque aninha sem precisar de barras e é mais fácil de ler.</label>
+<label><input type="radio" name="q6"> Porque as crases não funcionam mais no Bash 5.</label>
+<label><input type="radio" name="q6"> Porque <code>$( )</code> não cria subshell.</label>
+<label><input type="radio" name="q6"> Porque <code>$( )</code> captura também os erros.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>$(comando)</code> roda o comando e põe a saída dele no lugar; use para guardar em variável ou montar textos e nomes.</li>
+  <li>Prefira <code>$( )</code> às crases: aninha sem escapes e é mais legível.</li>
+  <li>Use aspas: <code>"$(…)"</code>. As quebras de linha do <strong>final</strong> são removidas.</li>
+  <li><code>var=$(cmd)</code> devolve o código de saída do <code>cmd</code>; só a saída padrão é capturada (use <code>2&gt;&amp;1</code> para os erros).</li>
+  <li><code>$(&lt; arq)</code> lê um arquivo sem <code>cat</code>. Cada <code>$( )</code> cria um subshell: o que muda lá dentro não volta, e em laços isso custa tempo.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
