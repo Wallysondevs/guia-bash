@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Expansão de Parâmetros — ${var:-padrão}, ${#var}, ${var%.*} e cia. | Guia Bash</title>
+<meta name="description" content="Expansão de parâmetros no Bash: valores padrão e obrigatórios (:- - := :? :+), tamanho, remover prefixo e sufixo (# ## % %%), extensão e pasta sem basename/dirname, substituir (/ // /# /%), fatias e maiúsculas/minúsculas, com saídas reais e missões.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Expansão de Parâmetros ${ }</span></h1>
+
+<p class="intro">Quando você escreve <code>$nome</code>, o Bash troca isso pelo valor. Com chaves, <code>${nome…}</code>, ele pode fazer mais coisas <strong>no caminho</strong>: usar um valor padrão, reclamar se a variável estiver vazia, cortar a extensão de um arquivo, trocar texto, pegar um pedaço ou mudar maiúsculas. Tudo isso sem chamar nenhum programa externo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Por que e quando usar <code>${var}</code> em vez de <code>$var</code>.</li>
+  <li>Valores padrão e obrigatórios: <code>:-</code>, <code>:=</code>, <code>:?</code>, <code>:+</code>, e o que muda sem o <code>:</code>.</li>
+  <li>Tamanho do texto (<code>${#var}</code>) e cortes no começo e no fim (<code>#</code>, <code>##</code>, <code>%</code>, <code>%%</code>), com nomes de arquivos.</li>
+  <li>Trocar texto (<code>/</code>, <code>//</code>, <code>/#</code>, <code>/%</code>), pegar fatias (<code>${var:2:3}</code>) e mudar a caixa (<code>^^</code>, <code>,,</code>).</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O nome "expansão de parâmetros"</h2>
+<p>No manual do Bash, uma variável é um tipo de <strong>parâmetro</strong> (os argumentos <code>$1</code>, <code>$2</code>… também são). <strong>Expandir</strong> é trocar o <code>$algo</code> pelo valor. Então "expansão de parâmetros" é só o nome oficial de "trocar a variável pelo valor", e as formas com chaves são variações dessa troca.</p>
+<p>Uma coisa importante: <strong>nenhuma dessas formas altera a variável</strong> (exceto <code>:=</code>, que você verá já já). Elas produzem um texto novo, que você mostra com <code>echo</code> ou guarda em outra variável.</p>
+
+<h2>A forma básica: <code>${var}</code></h2>
+<p>As chaves marcam onde o nome termina. Sem elas, o Bash pega o maior nome possível:</p>
+
+<pre class="term">$ nome=Ana
+$ echo "Olá, ${nome}!"
+Olá, Ana!
+$ echo "${nome}s"
+Anas                    « com chaves: a variável nome + a letra s
+$ echo "$nomes"
+                        « sem chaves: procurou a variável "nomes", que não existe</pre>
+
+<p>Regra prática: use <code>${nome}</code> sempre que o nome estiver colado em letras, números ou <code>_</code>. Para argumentos acima de 9, as chaves são obrigatórias: <code>${10}</code> (veja <a href="argumentos.html">Argumentos</a>).</p>
+
+<hr>
+
+<h2>Valores padrão e obrigatórios</h2>
+<p>Situação comum: um script recebe um nome, mas o usuário esqueceu de passar. Em vez de um <code>if</code>, você pode dizer na própria variável o que fazer quando ela está vazia.</p>
+
+<h3><code>${var:-padrão}</code>: use um padrão se estiver vazia</h3>
+<dl class="anatomy">
+  <dt>cor</dt><dd>A variável.</dd>
+  <dt>:-</dt><dd>"Se não existir <strong>ou</strong> estiver vazia, use…"</dd>
+  <dt>azul</dt><dd>…este texto no lugar. A variável <strong>não</strong> muda.</dd>
+</dl>
+
+<pre class="term">$ unset cor
+$ echo "Cor: ${cor:-azul}"
+Cor: azul               « cor não existe: usou o padrão
+$ echo "[$cor]"
+[]                      « e cor continua não existindo
+$ cor=
+$ echo "Cor: ${cor:-azul}"
+Cor: azul               « cor existe, mas vazia: também usou o padrão</pre>
+
+<p>O uso mais famoso é dar um valor padrão a um argumento de script:</p>
+
+<pre class="file" data-file="ola.sh">#!/usr/bin/env bash
+nome=${1:-Mundo}
+echo "Olá, $nome!"
+</pre>
+
+<pre class="term">$ bash ola.sh
+Olá, Mundo!             « sem argumento: $1 vazio, entrou o padrão
+$ bash ola.sh Ana
+Olá, Ana!</pre>
+
+<h3>Com <code>:</code> e sem <code>:</code> — a diferença</h3>
+<p>Todas as formas desta seção existem em duas versões. O <strong>dois-pontos</strong> decide se "vazia" conta como "não existe":</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>A variável…</th><th><code>${cor:-azul}</code></th><th><code>${cor-azul}</code></th></tr>
+<tr><td>não existe (<code>unset cor</code>)</td><td><code>azul</code></td><td><code>azul</code></td></tr>
+<tr><td>existe, vazia (<code>cor=</code>)</td><td><code>azul</code></td><td>(vazio)</td></tr>
+<tr><td>tem valor (<code>cor=verde</code>)</td><td><code>verde</code></td><td><code>verde</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ cor=
+$ echo "Cor: ${cor-azul}"
+Cor:                    « sem ":", vazia é um valor válido: ficou vazio
+$ unset cor
+$ echo "Cor: ${cor-azul}"
+Cor: azul</pre>
+
+<p>Na prática, quase sempre você quer a versão <strong>com</strong> <code>:</code>, porque para um script "vazio" e "não informado" são a mesma coisa.</p>
+
+<h3><code>${var:=padrão}</code>: use o padrão <strong>e guarde</strong></h3>
+<p>Igual ao <code>:-</code>, mas também <strong>atribui</strong> o padrão à variável. Daí em diante ela tem valor.</p>
+<pre class="term">$ unset pasta
+$ echo "${pasta:=backup}"
+backup
+$ echo "$pasta"
+backup                  « agora pasta existe de verdade</pre>
+
+<p>Para atribuir sem mostrar nada, use o comando <code>:</code> (dois-pontos), que não faz nada e devolve sucesso. Sem ele, o Bash tentaria rodar o valor como comando:</p>
+<pre class="term">$ ${x:=5}
+bash: 5: comando não encontrado        « a linha virou "5", e 5 não é um comando
+$ : ${x:=5}
+$ echo $x
+5</pre>
+<p>O <code>:=</code> não funciona com argumentos (<code>${1:=x}</code> dá erro): para eles, use <code>nome=${1:-x}</code>.</p>
+
+<h3><code>${var:?mensagem}</code>: obrigatória</h3>
+<p>Se a variável estiver vazia, mostra a mensagem como erro, devolve código <code>1</code> e, <strong>num script, encerra o script</strong> ali mesmo.</p>
+
+<pre class="term">$ unset destino
+$ echo "${destino:?informe o destino}"
+bash: destino: informe o destino
+$ echo $?
+1
+$ echo "[${destino:?}]"
+bash: destino: parâmetro nulo ou não inicializado     « sem mensagem, o Bash usa a dele</pre>
+
+<p>Num script, isso vira uma validação de argumento em uma linha:</p>
+<pre class="file" data-file="copia.sh">#!/usr/bin/env bash
+destino=${1:?Uso: copia.sh PASTA}
+echo "Copiando para $destino..."
+</pre>
+<pre class="term">$ bash copia.sh
+copia.sh: linha 2: 1: Uso: copia.sh PASTA        « nome do script, linha, parâmetro (1) e a sua mensagem
+$ echo $?
+1                                                « o echo da linha 3 nem rodou
+$ bash copia.sh /tmp
+Copiando para /tmp...</pre>
+
+<h3><code>${var:+alternativo}</code>: o contrário</h3>
+<p>Se a variável <strong>tem valor</strong>, usa o texto alternativo; se está vazia, não usa nada. Serve para acrescentar algo "só se":</p>
+<pre class="term">$ unset debug
+$ echo "[${debug:+--verbose}]"
+[]
+$ debug=1
+$ echo "[${debug:+--verbose}]"
+[--verbose]             « debug tem valor: entrou a opção
+$ debug=
+$ echo "[${debug:+--verbose}]"
+[]                      « vazia, com ":": nada
+$ echo "[${debug+--verbose}]"
+[--verbose]             « vazia, sem ":": existe, então entra</pre>
+
+<div class="tryscript" data-file="ola.sh" data-args="" data-goal="out:Olá\, Mundo!,src:\$\{1:-">
+<p class="try-task"><strong>Missão:</strong> rode o script sem argumento: aparece <code>Olá, !</code>. Faça ele usar <code>Mundo</code> quando nenhum nome for passado, sem usar <code>if</code>. Depois experimente pôr <code>Ana</code> no campo de argumentos.</p>
+<pre class="script">#!/usr/bin/env bash
+nome=$1
+echo "Olá, $nome!"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+nome=${1:-Mundo}
+echo "Olá, $nome!"
+</pre>
+</div>
+
+<hr>
+
+<h2>Tamanho: <code>${#var}</code></h2>
+<p>O <code>#</code> logo depois da chave quer dizer "quantos caracteres". O espaço conta, e letras acentuadas contam como uma (com <code>LANG</code> em UTF-8, como na máquina da Ana).</p>
+<pre class="term">$ cidade="Porto Alegre"
+$ echo ${#cidade}
+12                      « 11 letras + 1 espaço
+$ palavra=maçã
+$ echo ${#palavra}
+4
+$ nada=
+$ echo ${#nada}
+0</pre>
+
+<hr>
+
+<h2>Cortar o começo e o fim: <code>#</code> <code>##</code> <code>%</code> <code>%%</code></h2>
+<p>Estas quatro formas removem um pedaço do valor que <strong>casa com um padrão</strong>. O padrão usa os mesmos <a href="curingas.html">curingas</a> dos nomes de arquivo: <code>*</code> (qualquer coisa), <code>?</code> (um caractere), <code>[ ]</code>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Remove</th><th>Quanto</th><th>Para lembrar</th></tr>
+<tr><td><code>${var#padrão}</code></td><td>do <strong>começo</strong></td><td>o menor pedaço possível</td><td>No teclado americano, <code>#</code> fica à esquerda do <code>$</code>…</td></tr>
+<tr><td><code>${var##padrão}</code></td><td>do <strong>começo</strong></td><td>o maior pedaço possível</td><td>…e <code>%</code> fica à direita.</td></tr>
+<tr><td><code>${var%padrão}</code></td><td>do <strong>fim</strong></td><td>o menor pedaço possível</td><td>Dobrado = guloso (<em>greedy</em>):</td></tr>
+<tr><td><code>${var%%padrão}</code></td><td>do <strong>fim</strong></td><td>o maior pedaço possível</td><td>leva o máximo que conseguir.</td></tr>
+</table>
+</div>
+
+<p>O melhor jeito de entender é com um caminho de arquivo. Vamos usar este:</p>
+<pre class="term">$ arq=/home/ana/Documentos/projetos/backup.tar.gz</pre>
+
+<h3>Nome do arquivo e pasta, sem <code>basename</code> nem <code>dirname</code></h3>
+<dl class="anatomy">
+  <dt>${arq</dt><dd>A variável.</dd>
+  <dt>##</dt><dd>Remova do começo, o máximo possível…</dd>
+  <dt>*/</dt><dd>…qualquer coisa que termine em <code>/</code>. O maior pedaço vai até a <strong>última</strong> barra.</dd>
+  <dt>}</dt><dd>Fim.</dd>
+</dl>
+
+<pre class="term">$ echo "${arq##*/}"
+backup.tar.gz                           « tudo até a última / saiu: sobra o nome
+$ echo "${arq#*/}"
+home/ana/Documentos/projetos/backup.tar.gz   « # (menor): só até a primeira /
+$ echo "${arq%/*}"
+/home/ana/Documentos/projetos           « % (menor) do fim: da última / em diante saiu</pre>
+
+<p>Compare com os programas que fazem o mesmo:</p>
+<pre class="term">$ basename "$arq"
+backup.tar.gz
+$ dirname "$arq"
+/home/ana/Documentos/projetos</pre>
+
+<p>O resultado é igual, mas <code>basename</code> e <code>dirname</code> são <strong>programas externos</strong>: cada chamada cria um processo novo. Dentro de um laço que passa por mil arquivos, a expansão de parâmetros é muito mais rápida. Há uma diferença em um caso: para um nome sem barra, <code>dirname arquivo</code> responde <code>.</code> (a pasta atual), e <code>${x%/*}</code> devolve o próprio <code>arquivo</code>, porque não achou <code>/</code> para cortar.</p>
+
+<h3>Extensão e nome sem extensão</h3>
+<pre class="term">$ echo "${arq##*.}"
+gz                                      « ## *. : tudo até o ÚLTIMO ponto saiu
+$ echo "${arq#*.}"
+tar.gz                                  « #  *. : só até o PRIMEIRO ponto
+$ echo "${arq%.*}"
+/home/ana/Documentos/projetos/backup.tar   « %  .* : do último ponto em diante saiu
+$ echo "${arq%%.*}"
+/home/ana/Documentos/projetos/backup       « %% .* : do primeiro ponto em diante saiu</pre>
+
+<p>Para trocar uma extensão conhecida, use o texto exato no padrão e cole a nova logo depois:</p>
+<pre class="term">$ foto=ferias.jpg
+$ echo "${foto%.jpg}.png"
+ferias.png
+$ echo "${foto%.png}"
+ferias.jpg                              « o padrão não casou: nada é removido, sem erro</pre>
+
+<p>É assim que um laço renomeia arquivos em lote (o <a href="for.html"><code>for</code></a> é a próxima unidade):</p>
+<pre class="term" data-cwd="~/Downloads">$ for f in *.pdf *.jpg; do echo "$f -&gt; ${f%.*}"; done
+manual.pdf -&gt; manual
+foto.jpg -&gt; foto</pre>
+
+<div class="try" data-setup="arq=relatorio-final.odt" data-goal="var:base=relatorio-final,ran:\$\{arq" data-solucao="base=${arq%.odt}">
+<p class="try-task"><strong>Missão:</strong> a variável <code>arq</code> já vale <code>relatorio-final.odt</code>. Crie a variável <code>base</code> com o nome <strong>sem a extensão</strong>, usando expansão de parâmetros sobre <code>arq</code>. Confira com <code>echo "$base"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Substituir: <code>/</code> <code>//</code> <code>/#</code> <code>/%</code></h2>
+<p>Funciona como um "localizar e substituir": <code>${var/procurar/trocar}</code>. O que procurar também aceita curingas.</p>
+
+<pre class="term">$ frase="banana com banana e mais banana"
+$ echo "${frase/banana/uva}"
+uva com banana e mais banana            « uma barra: só a primeira ocorrência
+$ echo "${frase//banana/uva}"
+uva com uva e mais uva                  « duas barras: todas
+$ echo "${frase/#banana/UVA}"
+UVA com banana e mais banana            « /# : só se estiver no começo
+$ echo "${frase/%banana/UVA}"
+banana com banana e mais UVA            « /% : só se estiver no fim
+$ echo "${frase/#com/X}"
+banana com banana e mais banana         « "com" não está no começo: nada muda
+$ echo "${frase//banana}"
+ com  e mais                            « sem o "trocar": apaga as ocorrências</pre>
+
+<p>Dois usos do dia a dia:</p>
+<pre class="term">$ arquivo="Minhas Fotos de Férias.jpg"
+$ echo "${arquivo// /_}"
+Minhas_Fotos_de_Férias.jpg              « espaços viram _
+$ data=2026-10-15
+$ echo "${data//-//}"
+2026/10/15                              « hífens viram barras</pre>
+
+<p>No segundo exemplo, a <strong>primeira</strong> <code>/</code> depois de <code>-</code> separa o "procurar" do "trocar", então a última <code>/</code> é o texto novo. Se achar confuso, escreva <code>${data//-/\/}</code>: a barra escapada dá o mesmo resultado.</p>
+
+<hr>
+
+<h2>Fatias: <code>${var:início:quantos}</code></h2>
+<p>Pega um pedaço do texto. As posições começam em <strong>zero</strong>: o primeiro caractere é a posição 0.</p>
+
+<pre class="syntax">  b  a  s  h  s  c  r  i  p  t
+  0  1  2  3  4  5  6  7  8  9     ← posição
+-10 -9 -8 -7 -6 -5 -4 -3 -2 -1     ← contando do fim</pre>
+
+<dl class="anatomy">
+  <dt>texto</dt><dd>A variável.</dd>
+  <dt>:2</dt><dd>Comece na posição 2 (a terceira letra).</dd>
+  <dt>:3</dt><dd>Pegue 3 caracteres. Sem este número, vai até o fim.</dd>
+</dl>
+
+<pre class="term">$ texto=bashscript
+$ echo "${texto:0:4}"
+bash
+$ echo "${texto:4}"
+script                  « do 4 até o fim
+$ echo "${texto:2:3}"
+shs
+$ echo "${texto: -6}"
+script                  « negativo: conta do fim. Repare no ESPAÇO antes do -
+$ echo "${texto: -6:3}"
+scr
+$ echo "${texto:4:-2}"
+scri                    « tamanho negativo: "pare 2 antes do fim"
+$ echo "${texto:20}"
+                        « começo além do fim: vazio, sem erro</pre>
+
+<div class="warning">
+<strong><code>${texto:-6}</code> não é fatia!</strong>
+<pre class="term">$ echo "${texto:-6}"
+bashscript</pre>
+<p>Sem espaço, <code>:-</code> é o "valor padrão" que você viu acima: como <code>texto</code> tem valor, ele é usado inteiro. Para contar do fim, separe com espaço (<code>${texto: -6}</code>) ou use parênteses (<code>${texto:(-3)}</code>).</p>
+</div>
+
+<p>Um exemplo útil: mascarar um dado.</p>
+<pre class="term">$ cpf=12345678900
+$ echo "***.${cpf:3:3}.***-**"
+***.456.***-**</pre>
+
+<hr>
+
+<h2>Maiúsculas e minúsculas <span class="versao">bash 4.0+</span></h2>
+<p>O circunflexo (<code>^</code>, uma "seta para cima") sobe para maiúscula; a vírgula (<code>,</code>, "para baixo") desce para minúscula. Um símbolo muda só a primeira letra; dois mudam todas.</p>
+
+<pre class="term">$ nome="ana souza"
+$ echo "${nome^}"
+Ana souza
+$ echo "${nome^^}"
+ANA SOUZA
+$ grito="BOM DIA"
+$ echo "${grito,}"
+bOM DIA
+$ echo "${grito,,}"
+bom dia
+$ resp=SiM
+$ echo "${resp,,}"
+sim                     « ótimo para comparar respostas do usuário</pre>
+
+<p>Dá até para limitar quais letras mudam: <code>${nome^^[aeiou]}</code> resulta em <code>AnA sOUzA</code>. No Bash 3.2 do macOS essas formas não existem e dão <code>bad substitution</code>; lá, use <code>tr '[:upper:]' '[:lower:]'</code>. Se você quer que a variável <strong>sempre</strong> guarde em minúsculas, use <code>declare -l</code> (veja <a href="variaveis.html">Variáveis</a>).</p>
+
+<div class="tryscript" data-file="info.sh" data-args="/home/ana/Documentos/alunos.csv" data-goal="out:pasta: /home/ana/Documentos,out:arquivo: alunos.csv,out:extensão: csv,src:\$\{caminho">
+<p class="try-task"><strong>Missão:</strong> complete o script para mostrar a pasta, o nome do arquivo e a extensão do caminho recebido, <strong>usando só expansão de parâmetros</strong> (sem <code>basename</code>/<code>dirname</code>). Com o argumento do campo, a saída deve ser <code>pasta: /home/ana/Documentos</code>, <code>arquivo: alunos.csv</code> e <code>extensão: csv</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+caminho=${1:?Uso: info.sh CAMINHO}
+echo "pasta: ???"
+echo "arquivo: ???"
+echo "extensão: ???"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+caminho=${1:?Uso: info.sh CAMINHO}
+echo "pasta: ${caminho%/*}"
+echo "arquivo: ${caminho##*/}"
+echo "extensão: ${caminho##*.}"
+</pre>
+</div>
+
+<hr>
+
+<h2>Tabela-resumo</h2>
+<p>Exemplos com <code>a=/home/ana/foto.tar.gz</code>, <code>t=bashscript</code>, <code>n="ana souza"</code>, e <code>v</code> vazia:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th><th>Resultado</th></tr>
+<tr><td><code>${v}</code></td><td>Valor (chaves marcam o fim do nome)</td><td><code>${n}!</code></td><td><code>ana souza!</code></td></tr>
+<tr><td><code>${v:-p}</code></td><td>Padrão se vazia ou inexistente</td><td><code>${v:-azul}</code></td><td><code>azul</code></td></tr>
+<tr><td><code>${v-p}</code></td><td>Padrão só se inexistente</td><td><code>${v-azul}</code></td><td>(vazio)</td></tr>
+<tr><td><code>${v:=p}</code></td><td>Padrão e atribui</td><td><code>${v:=azul}</code></td><td><code>azul</code> (e <code>v</code> passa a valer azul)</td></tr>
+<tr><td><code>${v:?msg}</code></td><td>Erro se vazia (encerra o script)</td><td><code>${v:?faltou}</code></td><td><code>bash: v: faltou</code></td></tr>
+<tr><td><code>${v:+alt}</code></td><td>Alternativo se tem valor</td><td><code>${n:+sim}</code></td><td><code>sim</code></td></tr>
+<tr><td><code>${#v}</code></td><td>Tamanho</td><td><code>${#t}</code></td><td><code>10</code></td></tr>
+<tr><td><code>${v#p}</code></td><td>Remove do começo (menor)</td><td><code>${a#*/}</code></td><td><code>home/ana/foto.tar.gz</code></td></tr>
+<tr><td><code>${v##p}</code></td><td>Remove do começo (maior)</td><td><code>${a##*/}</code></td><td><code>foto.tar.gz</code></td></tr>
+<tr><td><code>${v%p}</code></td><td>Remove do fim (menor)</td><td><code>${a%.*}</code></td><td><code>/home/ana/foto.tar</code></td></tr>
+<tr><td><code>${v%%p}</code></td><td>Remove do fim (maior)</td><td><code>${a%%.*}</code></td><td><code>/home/ana/foto</code></td></tr>
+<tr><td><code>${v/x/y}</code></td><td>Troca a primeira</td><td><code>${n/a/A}</code></td><td><code>Ana souza</code></td></tr>
+<tr><td><code>${v//x/y}</code></td><td>Troca todas</td><td><code>${n//a/A}</code></td><td><code>AnA souzA</code></td></tr>
+<tr><td><code>${v/#x/y}</code></td><td>Troca se estiver no começo</td><td><code>${t/#bash/zsh}</code></td><td><code>zshscript</code></td></tr>
+<tr><td><code>${v/%x/y}</code></td><td>Troca se estiver no fim</td><td><code>${t/%script/!}</code></td><td><code>bash!</code></td></tr>
+<tr><td><code>${v:i:n}</code></td><td>Fatia</td><td><code>${t:4:3}</code></td><td><code>scr</code></td></tr>
+<tr><td><code>${v: -n}</code></td><td>Últimos n caracteres</td><td><code>${t: -3}</code></td><td><code>ipt</code></td></tr>
+<tr><td><code>${v^}</code> / <code>${v^^}</code></td><td>Maiúscula na 1ª / em todas</td><td><code>${n^^}</code></td><td><code>ANA SOUZA</code></td></tr>
+<tr><td><code>${v,}</code> / <code>${v,,}</code></td><td>Minúscula na 1ª / em todas</td><td><code>${n,}</code></td><td><code>ana souza</code></td></tr>
+</table>
+</div>
+
+<h3>O que fica para depois</h3>
+<p>Existem ainda outras formas, menos comuns: <code>${!prefixo*}</code> (nomes de variáveis que começam com um prefixo), <code>${!nome}</code> (indireção, em <a href="eval-indirecao.html">eval, Indireção e nameref</a>), os transformadores <code>${v@Q}</code>, <code>${v@U}</code>, <code>${v@L}</code>… e as formas aplicadas a <a href="arrays.html">arrays</a>. Receitas de texto mais elaboradas (aparar espaços, dividir, repetir) estão em <a href="strings.html">Manipular Strings</a>, e a lista completa em <a href="ref-expansoes.html">Cola de Expansões</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"substituição incorreta"</strong>
+<pre class="term">$ echo "${nome.txt}"
+bash: ${nome.txt}: substituição incorreta
+$ echo ${1nome}
+bash: ${1nome}: substituição incorreta</pre>
+<p><strong>O que aconteceu:</strong> o que está dentro das chaves não é um nome válido seguido de um operador conhecido. O ponto não faz parte de nenhum operador, e <code>1nome</code> não é nome de variável. Em inglês a mensagem é <code>bad substitution</code>; no macOS (Bash 3.2) ela aparece também ao usar <code>^^</code> ou <code>,,</code>.</p>
+<p><strong>Como resolver:</strong> feche as chaves logo depois do nome: <code>"${nome}.txt"</code>. Confira se o operador existe na tabela acima.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu o <code>&gt;</code> e o Bash ficou esperando</strong>
+<pre class="term">$ echo "${nome"
+&gt;</pre>
+<p><strong>O que aconteceu:</strong> faltou fechar a chave (ou as aspas), e o Bash está esperando o resto do comando no prompt de continuação.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para cancelar e digite de novo. Num script, o erro aparece assim: <code>encontrado EOF inesperado enquanto procurava por `"' correspondente</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"comando não encontrado" com <code>${ nome}</code> <span class="versao">bash 5.3+</span></strong>
+<pre class="term">$ echo ${ nome; }
+bash: nome: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> no Bash 5.3, <code>${</code> seguido de <strong>espaço</strong> é uma forma nova de <a href="substituicao-comando.html">substituição de comando</a>: o Bash tentou rodar <code>nome</code> como comando. Em versões antigas, isso dava "substituição incorreta".</p>
+<p><strong>Como resolver:</strong> nunca ponha espaço depois de <code>${</code>: <code>${nome}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não removeu nada</strong>
+<pre class="term">$ f=foto.JPG
+$ echo "${f%.jpg}"
+foto.JPG</pre>
+<p><strong>O que aconteceu:</strong> o padrão não casou, e nesse caso o Bash devolve o valor inteiro, sem erro. Aqui, maiúsculas e minúsculas são diferentes (<code>.JPG</code> ≠ <code>.jpg</code>).</p>
+<p><strong>Como resolver:</strong> use um padrão mais geral (<code>${f%.*}</code> remove qualquer extensão) ou um conjunto: <code>${f%.[jJ][pP][gG]}</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A fatia com negativo devolveu o texto inteiro</strong>
+<p><strong>O que aconteceu:</strong> você escreveu <code>${texto:-3}</code> (padrão) em vez de <code>${texto: -3}</code> (fatia). Veja o aviso na seção de fatias.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Valor padrão</h3>
+<p>Complete para que <code>porta</code> valha <code>8080</code> quando o script for chamado sem argumentos:</p>
+<div class="ex-code">porta=${1<input data-answer=":-" aria-label="operador">8080}</div>
+</div>
+
+<div class="exercise">
+<h3>2. Só o nome do arquivo</h3>
+<p><code>c=/var/log/syslog.1</code>. Complete para mostrar só <code>syslog.1</code>:</p>
+<div class="ex-code">echo "${c<input data-answer="##*/" aria-label="operador e padrão">}"</div>
+</div>
+
+<div class="exercise">
+<h3>3. Trocar extensão</h3>
+<p><code>f=notas.txt</code>. Complete para mostrar <code>notas.bak</code>:</p>
+<div class="ex-code">echo "${f<input data-answer="%.txt|%.*" aria-label="remover do fim">}.bak"</div>
+</div>
+
+<div class="exercise">
+<h3>4. Tudo em maiúsculas</h3>
+<p>Complete para mostrar o valor de <code>cidade</code> todo em maiúsculas:</p>
+<div class="ex-code">echo "${cidade<input data-answer="^^" aria-label="operador">}"</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. <code>arq=dados.tar.gz</code>. O que mostra <code>echo "${arq%%.*}"</code>?</p>
+<label><input type="radio" name="q5"> <code>dados.tar</code></label>
+<label><input type="radio" name="q5"> <code>gz</code></label>
+<label><input type="radio" name="q5"> <code>dados</code></label>
+<label><input type="radio" name="q5"> <code>tar.gz</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">6. <code>x=</code> (vazia). O que mostra <code>echo "[${x-padrão}]"</code>?</p>
+<label><input type="radio" name="q6"> <code>[padrão]</code></label>
+<label><input type="radio" name="q6"> <code>[]</code></label>
+<label><input type="radio" name="q6"> Um erro: substituição incorreta.</label>
+<label><input type="radio" name="q6"> <code>[-padrão]</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>${var}</code> marca onde o nome termina; as outras formas transformam o valor sem alterar a variável (só <code>:=</code> atribui).</li>
+  <li><code>:-</code> padrão, <code>:=</code> padrão e guarda, <code>:?</code> obrigatória, <code>:+</code> alternativo. Sem o <code>:</code>, "vazia" conta como valor.</li>
+  <li><code>#</code>/<code>##</code> cortam do começo, <code>%</code>/<code>%%</code> do fim; dobrado = o maior pedaço. <code>${a##*/}</code> é o nome, <code>${a%/*}</code> a pasta, <code>${a##*.}</code> a extensão.</li>
+  <li><code>/</code> troca a primeira, <code>//</code> todas, <code>/#</code> no começo, <code>/%</code> no fim.</li>
+  <li><code>${v:i:n}</code> fatia a partir do 0; para contar do fim, use espaço: <code>${v: -3}</code>. <code>^^</code> e <code>,,</code> mudam a caixa (bash 4+).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

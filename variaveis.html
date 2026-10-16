@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Variáveis — escopo, export, env e declare | Guia Bash</title>
+<meta name="description" content="Variáveis de shell e de ambiente no Bash: export, env, printenv, VAR=valor comando, por que um script não muda o terminal, declare (-i -r -x -l -u -p), readonly, unset e nomes válidos, com saídas reais e missões no simulador.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Variáveis, Escopo e export</span></h1>
+
+<p class="intro">Em <a href="variaveis-intro.html">Variáveis: o Básico</a> você criou <code>nome=Ana</code> e leu com <code>$nome</code>. Agora vamos responder às perguntas que aparecem quando você começa a escrever scripts: <strong>quem enxerga</strong> uma variável, por que um script não consegue mudar o seu terminal, e como dar "superpoderes" a uma variável com <code>declare</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre variável <strong>de shell</strong> e variável <strong>de ambiente</strong>, e o papel do <code>export</code>.</li>
+  <li>Como listar o ambiente com <code>env</code> e <code>printenv</code>, e como passar uma variável para um único comando (<code>VAR=valor comando</code>).</li>
+  <li>Por que um script filho nunca altera as variáveis do terminal pai, e o que fazer quando você quer isso.</li>
+  <li>Os atributos do <code>declare</code> (<code>-i -r -x -l -u -p</code>), o <code>readonly</code> e o <code>unset</code>.</li>
+  <li>Quais nomes são válidos e quais são as variáveis especiais mais usadas.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: o filho não sabe o que o pai sabe</h2>
+<p>Todo programa que você roda no terminal é um <strong>processo filho</strong> do Bash. Pense numa casa: o Bash é a mãe, e cada comando é um filho que ela manda fazer uma tarefa. A mãe tem anotações num caderno (as variáveis). Quando o filho sai, ele <strong>não leva o caderno inteiro</strong>: leva só uma cópia das folhas que a mãe marcou como "pode levar".</p>
+<p>Essas folhas marcadas são o <strong>ambiente</strong> (<em>environment</em>). Marcar uma folha é o que o comando <code>export</code> faz.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tipo</th><th>Quem enxerga</th><th>Como criar</th><th>Exemplo</th></tr>
+<tr><td>Variável <strong>de shell</strong></td><td>Só o próprio Bash onde foi criada</td><td><code>nome=valor</code></td><td><code>cidade=Recife</code></td></tr>
+<tr><td>Variável <strong>de ambiente</strong></td><td>O Bash <strong>e</strong> todos os programas que ele abrir depois</td><td><code>export nome=valor</code></td><td><code>HOME</code>, <code>PATH</code>, <code>LANG</code></td></tr>
+</table>
+</div>
+
+<h3>A prova com <code>bash -c</code></h3>
+<p>Para ver isso acontecendo, vamos usar um "filho" de teste: <code>bash -c '…'</code> abre <strong>outro</strong> Bash, roda o texto entre aspas e fecha. As aspas são <strong>simples</strong> de propósito: assim quem troca <code>$cidade</code> pelo valor é o Bash filho, não o seu (as <a href="aspas.html">aspas simples</a> impedem a troca no pai).</p>
+
+<dl class="anatomy">
+  <dt>bash</dt><dd>Abre um novo Bash, filho do atual.</dd>
+  <dt>-c</dt><dd>"Rode este comando e saia" (de <em>command</em>).</dd>
+  <dt>'echo "No filho: [$cidade]"'</dt><dd>O comando que o filho vai rodar. Os colchetes não têm função especial: estão aí só para você ver quando o valor está vazio.</dd>
+</dl>
+
+<pre class="term">$ cidade=Recife
+$ echo "$cidade"
+Recife                                « o próprio Bash enxerga
+$ bash -c 'echo "No filho: [$cidade]"'
+No filho: []                          « o filho NÃO enxerga: colchetes vazios
+$ export cidade
+$ bash -c 'echo "No filho: [$cidade]"'
+No filho: [Recife]                    « depois do export, o filho recebe uma cópia</pre>
+
+<p>O que aconteceu, linha a linha:</p>
+<ol>
+  <li><code>cidade=Recife</code> criou uma variável <strong>de shell</strong>. Ela existe, mas fica "em casa".</li>
+  <li>O primeiro <code>bash -c</code> mostrou <code>[]</code>: para o filho, <code>$cidade</code> não existe, e uma variável que não existe vale texto vazio. Repare que <strong>não houve erro</strong>: o Bash não avisa.</li>
+  <li><code>export cidade</code> não mostrou nada. Ele só marcou a variável para ir junto com os filhos. O código de saída é <code>0</code> (deu certo).</li>
+  <li>O segundo <code>bash -c</code> já recebeu <code>Recife</code>.</li>
+</ol>
+
+<h3>As formas do <code>export</code></h3>
+<dl class="anatomy">
+  <dt>export</dt><dd>"Exportar": colocar no ambiente dos próximos filhos.</dd>
+  <dt>cor=verde</dt><dd>Você pode criar e exportar na mesma linha. Sem o <code>=valor</code>, exporta uma variável que já existe.</dd>
+</dl>
+
+<pre class="term">$ export cor=verde
+$ bash -c 'echo "cor no filho: $cor"'
+cor no filho: verde
+$ declare -p cor
+declare -x cor="verde"                « o -x quer dizer "exportada"</pre>
+
+<p>O comando <code>declare -p</code> (de <em>print</em>) mostra a variável <strong>e os atributos</strong> dela. Compare: uma variável comum aparece com <code>--</code> (nenhum atributo), e uma exportada aparece com <code>-x</code>:</p>
+
+<pre class="term">$ fruta=uva
+$ declare -p fruta
+declare -- fruta="uva"                « -- = sem atributos: variável de shell</pre>
+
+<p>Para "desexportar" sem apagar, use <code>export -n</code>. A variável continua existindo, mas volta a ser só de shell:</p>
+
+<pre class="term">$ export -n cidade
+$ declare -p cidade
+declare -- cidade="Recife"</pre>
+
+<div class="tip">
+<strong>Exportar uma vez basta</strong>
+<p>Depois do <code>export</code>, se você mudar o valor (<code>cidade=Natal</code>), a variável continua exportada. Não precisa repetir o <code>export</code>. Muita gente escreve variáveis de ambiente em <strong>MAIÚSCULAS</strong> (<code>EDITOR</code>, <code>JAVA_HOME</code>) e as suas, de script, em minúsculas. É só convenção, mas ajuda a não sobrescrever uma variável do sistema sem querer.</p>
+</div>
+
+<div class="try" data-goal="var:cor=verde,ran:\bexport\b,out:verde" data-solucao="cor=verde;;export cor;;bash -c 'echo $cor'">
+<p class="try-task"><strong>Missão:</strong> crie a variável <code>cor</code> com o valor <code>verde</code> e rode <code>bash -c 'echo $cor'</code>: nada aparece. Agora use <code>export</code> e rode o <code>bash -c</code> de novo até o filho mostrar <code>verde</code>.</p>
+</div>
+
+<hr>
+
+<h2>Ver o ambiente: <code>env</code> e <code>printenv</code></h2>
+<p>Dois programas mostram as variáveis de ambiente (só as exportadas):</p>
+
+<dl class="anatomy">
+  <dt>env</dt><dd>Sem argumentos, lista o ambiente inteiro, uma variável por linha, no formato <code>NOME=valor</code>.</dd>
+  <dt>printenv NOME</dt><dd>Mostra só o valor de uma variável. Sem o nome, faz o mesmo que <code>env</code>.</dd>
+</dl>
+
+<pre class="term">$ env | head -n 5
+SHELL=/bin/bash
+LANGUAGE=pt_BR:pt:en
+EDITOR=nano
+PWD=/home/ana
+LOGNAME=ana
+$ printenv HOME
+/home/ana
+$ export cidade
+$ printenv cidade
+Recife
+$ env | grep cidade
+cidade=Recife</pre>
+
+<p>Cortamos o <code>env</code> com <code>head -n 5</code> (as 5 primeiras linhas). A lista completa muda de máquina para máquina. Para procurar uma variável, o jeito mais prático é <code>env | grep NOME</code> (o <code>|</code> é um <a href="pipes.html">pipe</a>).</p>
+
+<h3>Quando o <code>printenv</code> não mostra nada</h3>
+<p>Se a variável não existe <strong>ou</strong> não foi exportada, o <code>printenv</code> fica calado. A diferença aparece no código de saída:</p>
+
+<pre class="term">$ fruta=uva
+$ printenv fruta
+$ echo $?
+1                                     « 1 = não achei (fruta é só de shell)
+$ printenv naoexiste
+$ echo $?
+1</pre>
+
+<h3><code>env</code>, <code>set</code> e <code>declare -p</code>: quem mostra o quê</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th><th>Quando usar</th></tr>
+<tr><td><code>env</code> / <code>printenv</code></td><td>Só as variáveis de ambiente (exportadas)</td><td>Saber o que um programa vai receber.</td></tr>
+<tr><td><code>printenv NOME</code></td><td>O valor de uma variável de ambiente</td><td>Conferir uma variável, com código de saída útil em scripts.</td></tr>
+<tr><td><code>set</code></td><td>Todas as variáveis do shell (exportadas ou não) e também as funções</td><td>Ver tudo o que o Bash sabe. É longo.</td></tr>
+<tr><td><code>declare -p NOME</code></td><td>A variável e os atributos dela (<code>-x</code>, <code>-i</code>, <code>-r</code>…)</td><td>Descobrir se algo está exportado, se é número, se é só leitura.</td></tr>
+</table>
+</div>
+
+<p>Na máquina da Ana, <code>env | wc -l</code> deu <code>14</code> linhas e <code>set | wc -l</code> deu <code>49</code>: o <code>set</code> mostra bem mais, porque inclui as variáveis que ficam só no shell.</p>
+
+<hr>
+
+<h2>Uma variável só para um comando: <code>VAR=valor comando</code></h2>
+<p>Às vezes você quer mudar uma variável <strong>só para um comando</strong>, sem mexer no terminal. Basta escrever a atribuição <strong>antes</strong> do comando, na mesma linha, separada por espaço.</p>
+
+<dl class="anatomy">
+  <dt>LANG=C</dt><dd>Atribuição temporária: vale só para o comando desta linha. <code>C</code> é o idioma "neutro", em inglês.</dd>
+  <dt>ls nada</dt><dd>O comando que recebe a variável no ambiente dele.</dd>
+</dl>
+
+<pre class="term">$ ls nada
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+$ LANG=C ls nada
+ls: cannot access 'nada': No such file or directory     « só este comando falou inglês
+$ echo "$LANG"
+pt_BR.UTF-8                                             « o terminal continua em português</pre>
+
+<p>Isso é muito útil para pesquisar uma mensagem de erro na internet: a versão em inglês tem muito mais resultados. Outro exemplo, com uma variável nossa:</p>
+
+<pre class="term">$ nome=Bruno bash -c 'echo "Filho vê: $nome"'
+Filho vê: Bruno
+$ echo "Pai vê: [$nome]"
+Pai vê: []                            « no terminal, nome nem chegou a existir</pre>
+
+<p>O programa <code>env</code> também sabe fazer isso: <code>env cor=azul comando</code> é o mesmo que <code>cor=azul comando</code>. A forma sem <code>env</code> é a mais comum no Bash.</p>
+
+<div class="warning">
+<strong>Não funciona com o <code>echo $VAR</code> na mesma linha</strong>
+<p><code>nome=Bruno echo "$nome"</code> mostra vazio. Por quê? O <code>$nome</code> é trocado pelo valor <strong>antes</strong> de o comando rodar, quando <code>nome</code> ainda não existe. A atribuição temporária vai para o <strong>ambiente do comando</strong>, e o <code>echo</code> não lê o ambiente: ele só imprime o que recebeu. Por isso os exemplos acima usam <code>bash -c '…'</code> com aspas simples.</p>
+</div>
+
+<hr>
+
+<h2>Escopo: o script filho não altera o pai</h2>
+<p>Esta é a regra que mais confunde quem começa: <strong>um script rodado com <code>bash script.sh</code> ou <code>./script.sh</code> é um processo filho</strong>. Ele recebe uma cópia do ambiente, pode mudar a cópia à vontade, e quando termina a cópia é jogada fora. O terminal (o pai) nunca vê as mudanças, <strong>nem com <code>export</code></strong>.</p>
+
+<p>Vamos provar com este script:</p>
+
+<pre class="file" data-file="muda.sh">echo "No script, antes: cidade=[$cidade]"
+cidade=Manaus
+export cidade
+echo "No script, depois: cidade=[$cidade]"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td>1</td><td>Mostra o valor que o script recebeu ao começar.</td></tr>
+<tr><td>2</td><td>Muda o valor <strong>dentro do script</strong>.</td></tr>
+<tr><td>3</td><td>Exporta. Isso só afeta os filhos <strong>do script</strong>, não o pai dele.</td></tr>
+<tr><td>4</td><td>Mostra o valor novo.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ cidade=Recife
+$ bash muda.sh
+No script, antes: cidade=[]                 « não exportada: o script não recebeu
+No script, depois: cidade=[Manaus]
+$ echo "No terminal: cidade=[$cidade]"
+No terminal: cidade=[Recife]                « o terminal não mudou
+$ export cidade
+$ bash muda.sh
+No script, antes: cidade=[Recife]           « agora o script recebeu a cópia
+No script, depois: cidade=[Manaus]
+$ echo "No terminal: cidade=[$cidade]"
+No terminal: cidade=[Recife]                « e mesmo assim o terminal não mudou</pre>
+
+<pre class="syntax">  terminal (pai)            script (filho)
+  cidade=Recife  ── cópia ──►  cidade=Recife
+                               cidade=Manaus   (muda só a cópia)
+  cidade=Recife  ◄── nada ──   (fim: a cópia some)</pre>
+
+<p>O ambiente só desce, de pai para filho. Nunca sobe.</p>
+
+<h3>E se eu quiser que o script mude o terminal?</h3>
+<p>Então não rode o script como filho: peça ao <strong>próprio</strong> Bash para ler e executar as linhas, com <code>source</code> (ou o ponto, <code>.</code>, que é o mesmo comando).</p>
+
+<pre class="term">$ source muda.sh
+No script, antes: cidade=[Recife]
+No script, depois: cidade=[Manaus]
+$ echo "No terminal: cidade=[$cidade]"
+No terminal: cidade=[Manaus]                « agora mudou, porque não houve filho</pre>
+
+<p>É assim que funciona o <code>source ~/.bashrc</code> depois de editar o arquivo de configuração (veja <a href="inicializacao.html">Arquivos de Inicialização</a>). As diferenças entre <code>bash script.sh</code>, <code>./script.sh</code> e <code>source</code> estão em <a href="executar.html">Formas de Executar</a>.</p>
+
+<div class="tip">
+<strong>Como confirmar que existe um filho</strong>
+<p><code>$$</code> é o número do processo (PID) do Bash atual. Compare: <code>echo $$</code> e <code>bash -c 'echo $$'</code> mostram números diferentes (na máquina da Ana deu <code>24163</code> e <code>24167</code>; na sua, serão outros). Números diferentes = processos diferentes = cadernos diferentes.</p>
+</div>
+
+<hr>
+
+<h2><code>declare</code>: variáveis com atributos</h2>
+<p>O comando <code>declare</code> cria variáveis e dá a elas <strong>atributos</strong>, como "só aceita número" ou "sempre em maiúsculas". Cada atributo é uma letra depois do <code>-</code>. O nome <code>typeset</code> é um sinônimo antigo (vem do ksh).</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Origem do nome</th><th>O que faz</th></tr>
+<tr><td><code>-i</code></td><td><em>integer</em> (inteiro)</td><td>Toda atribuição é calculada como conta.</td></tr>
+<tr><td><code>-r</code></td><td><em>readonly</em> (só leitura)</td><td>Não pode mais ser mudada nem apagada.</td></tr>
+<tr><td><code>-x</code></td><td><em>export</em></td><td>O mesmo que <code>export</code>.</td></tr>
+<tr><td><code>-l</code></td><td><em>lowercase</em></td><td>Converte o valor para minúsculas.</td></tr>
+<tr><td><code>-u</code></td><td><em>uppercase</em></td><td>Converte o valor para maiúsculas.</td></tr>
+<tr><td><code>-p</code></td><td><em>print</em></td><td>Mostra a variável e os atributos.</td></tr>
+</table>
+</div>
+
+<p>Para tirar um atributo, troque o <code>-</code> por <code>+</code>: <code>declare +x cidade</code> desexporta (como <code>export -n</code>). O <code>-a</code> e o <code>-A</code> criam <a href="arrays.html">arrays</a> e <a href="arrays-associativos.html">arrays associativos</a>, vistos no Nível 3.</p>
+
+<h3><code>declare -i</code>: a variável faz contas sozinha</h3>
+<pre class="term">$ declare -i total
+$ total=5+3
+$ echo $total
+8                                     « sem o -i, ficaria o texto "5+3"
+$ total=total*2
+$ echo $total
+16                                    « dentro da conta, o nome já vale o número
+$ total=abc
+$ echo $total
+0                                     « "abc" foi lido como variável inexistente = 0</pre>
+
+<p>Repare na terceira atribuição: <code>abc</code> não deu erro, virou <code>0</code>. Isso acontece porque, numa conta, uma palavra é tratada como <strong>nome de variável</strong>, e uma variável que não existe vale zero. Já um texto com espaço quebra a conta:</p>
+
+<pre class="term">$ total="10 laranjas"
+bash: 10 laranjas: erro de sintaxe aritmética na expressão (token de erro é "laranjas")
+$ echo $?
+1</pre>
+
+<p>As contas em si (<code>$(( ))</code>, <code>let</code>, divisão inteira) são o assunto de <a href="aritmetica.html">Contas</a>.</p>
+
+<h3><code>declare -l</code> e <code>-u</code>: minúsculas e maiúsculas</h3>
+<pre class="term">$ declare -l cidade=RECIFE
+$ echo $cidade
+recife
+$ declare -u sigla=pe
+$ echo $sigla
+PE
+$ sigla+=ba
+$ echo $sigla
+PEBA                                  « o atributo continua valendo nas próximas atribuições</pre>
+<p>Útil para padronizar respostas do usuário (<code>sim</code>, <code>Sim</code>, <code>SIM</code> viram todas <code>sim</code>). O operador <code>+=</code> acrescenta texto ao final. Esses atributos não existem no Bash 3.2 do macOS <span class="versao">bash 4.0+</span>.</p>
+
+<h3><code>declare -r</code> e <code>readonly</code>: constantes</h3>
+<p>Uma variável só de leitura é uma <strong>constante</strong>: o valor fica fixo até o shell terminar.</p>
+
+<pre class="term">$ declare -r PI=3.14
+$ PI=3
+bash: PI: a variável permite somente leitura
+$ echo $?
+1
+$ unset PI
+bash: unset: PI: impossível remover definição: variable somente-leitura
+$ readonly SITE=guia
+$ SITE=outro
+bash: SITE: a variável permite somente leitura</pre>
+
+<p><code>readonly NOME=valor</code> e <code>declare -r NOME=valor</code> fazem a mesma coisa. A mensagem do <code>unset</code> mistura português e inglês ("variable") porque a tradução do Bash está incompleta: é assim mesmo. Não há como "destravar" uma constante: só fechando o terminal (num script, ela some quando o script termina). <code>readonly -p</code> lista todas, inclusive as do próprio Bash, como <code>UID</code>.</p>
+
+<h3><code>declare -p</code>: o raio-x</h3>
+<pre class="term">$ declare -p total cidade sigla
+declare -i total="0"
+declare -l cidade="recife"
+declare -u sigla="PEBA"
+$ declare -p nome
+bash: declare: nome: não encontrado      « a variável não existe</pre>
+
+<div class="tryscript" data-file="conta.sh" data-goal="out:42,src:declare -i" >
+<p class="try-task"><strong>Missão:</strong> o script abaixo mostra <code>7*6</code> em vez do resultado. Sem usar <code>$(( ))</code>, faça ele mostrar <code>42</code> dando um atributo à variável <code>conta</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+conta=7*6
+echo "$conta"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+declare -i conta
+conta=7*6
+echo "$conta"
+</pre>
+</div>
+
+<div class="try" data-goal="var:sigla=SP,ran:\bdeclare\b" data-solucao="declare -u sigla;;sigla=sp">
+<p class="try-task"><strong>Missão:</strong> crie a variável <code>sigla</code> de um jeito que, ao digitar <code>sigla=sp</code> (em minúsculas), ela guarde <code>SP</code>. Confira com <code>declare -p sigla</code>.</p>
+</div>
+
+<hr>
+
+<h2>Apagar: <code>unset</code></h2>
+<p><code>unset</code> (desfazer a definição) apaga a variável de verdade. Depois dele, ela não existe mais, nem vazia.</p>
+
+<pre class="term">$ nome=Ana
+$ unset nome
+$ echo "[$nome]"
+[]
+$ declare -p nome
+bash: declare: nome: não encontrado</pre>
+
+<p>Há uma diferença sutil entre <strong>vazia</strong> (<code>nome=</code>, existe com valor "") e <strong>inexistente</strong> (depois do <code>unset</code>). O <code>echo</code> mostra as duas iguais, mas <code>declare -p</code> e os testes <code>[[ -v nome ]]</code> distinguem. Essa diferença volta em <a href="expansao-parametros.html">Expansão de Parâmetros</a>, com <code>${nome-padrão}</code> e <code>${nome:-padrão}</code>.</p>
+
+<p>Apagar uma variável exportada também a tira do ambiente dos próximos filhos:</p>
+<pre class="term">$ export cor=verde
+$ unset cor
+$ bash -c 'echo "cor no filho: [$cor]"'
+cor no filho: []</pre>
+
+<hr>
+
+<h2>Nomes válidos</h2>
+<p>Um nome de variável pode ter <strong>letras sem acento, números e <code>_</code></strong>, e <strong>não pode começar com número</strong>. Maiúsculas e minúsculas são diferentes: <code>nome</code>, <code>Nome</code> e <code>NOME</code> são três variáveis.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>Válido?</th><th>Por quê</th></tr>
+<tr><td><code>nome</code>, <code>_ok</code>, <code>Nome2</code>, <code>total_geral</code></td><td>Sim</td><td>Letras, números e <code>_</code>, começando com letra ou <code>_</code>.</td></tr>
+<tr><td><code>2x</code></td><td>Não</td><td>Começa com número.</td></tr>
+<tr><td><code>meu-nome</code></td><td>Não</td><td>O hífen não é permitido. Use <code>meu_nome</code>.</td></tr>
+<tr><td><code>preço</code></td><td>Não</td><td>Letra acentuada. Use <code>preco</code>.</td></tr>
+</table>
+</div>
+
+<p>Quando o nome é inválido, o Bash não reconhece aquilo como atribuição e tenta rodar a linha inteira como se fosse um <strong>comando</strong>:</p>
+
+<pre class="term">$ 2x=5
+bash: 2x=5: comando não encontrado
+$ meu-nome=Ana
+bash: meu-nome=Ana: comando não encontrado</pre>
+
+<h3>Onde o nome termina</h3>
+<p>Ao ler <code>$corclaro</code>, o Bash procura a variável <code>corclaro</code> inteira, não <code>cor</code> seguida de "claro". Use chaves para marcar o fim do nome:</p>
+<pre class="term">$ cor=azul
+$ echo "$corclaro"
+                                      « linha vazia: corclaro não existe
+$ echo "${cor}claro"
+azulclaro</pre>
+
+<hr>
+
+<h2>Variáveis especiais principais</h2>
+<p>O Bash cria e atualiza sozinho algumas variáveis. Estas são as que você vai usar com mais frequência. A lista completa está em <a href="ref-variaveis.html">Variáveis Especiais</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Significa</th><th>Exemplo de valor</th><th>Visto em</th></tr>
+<tr><td><code>$?</code></td><td>Código de saída do último comando</td><td><code>0</code></td><td><a href="codigo-saida.html">Código de Saída</a></td></tr>
+<tr><td><code>$$</code></td><td>PID do shell atual</td><td><code>24163</code></td><td>esta página</td></tr>
+<tr><td><code>$!</code></td><td>PID do último comando em segundo plano (<code>&amp;</code>)</td><td><code>24180</code></td><td><a href="jobs.html">Jobs</a></td></tr>
+<tr><td><code>$0</code></td><td>Nome do script (ou do shell)</td><td><code>bash</code>, <code>backup.sh</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>$1</code> … <code>$9</code>, <code>${10}</code></td><td>Argumentos do script</td><td><code>Ana</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>$#</code></td><td>Quantos argumentos</td><td><code>2</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>"$@"</code></td><td>Todos os argumentos, cada um separado</td><td><code>"a" "b c"</code></td><td><a href="argumentos.html">Argumentos</a></td></tr>
+<tr><td><code>$_</code></td><td>Último argumento do comando anterior</td><td><code>Documentos</code> (depois de <code>ls Documentos</code>)</td><td>—</td></tr>
+<tr><td><code>HOME</code>, <code>USER</code>, <code>PWD</code></td><td>Pasta pessoal, usuário, pasta atual</td><td><code>/home/ana</code>, <code>ana</code></td><td><a href="navegar.html">Navegar</a></td></tr>
+<tr><td><code>PATH</code></td><td>Pastas onde os comandos são procurados</td><td><code>/usr/local/bin:/usr/bin:…</code></td><td><a href="path.html">PATH</a></td></tr>
+<tr><td><code>RANDOM</code></td><td>Número aleatório de 0 a 32767</td><td><code>17544</code></td><td><a href="aritmetica.html">Contas</a></td></tr>
+<tr><td><code>SECONDS</code></td><td>Segundos desde que o shell abriu</td><td><code>312</code></td><td><a href="ref-variaveis.html">Referência</a></td></tr>
+<tr><td><code>BASH_VERSION</code></td><td>Versão do Bash</td><td><code>5.3.9(1)-release</code></td><td><a href="onde-tem-bash.html">Bash em Cada Sistema</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"comando não encontrado" ao criar a variável</strong>
+<pre class="term">$ nome = Ana
+bash: nome: comando não encontrado
+$ nome= Ana
+bash: Ana: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> com espaço antes do <code>=</code>, o Bash entendeu <code>nome</code> como um comando com os argumentos <code>=</code> e <code>Ana</code>. Com espaço só depois, entendeu "rode o comando <code>Ana</code> com a variável <code>nome</code> vazia" (é a forma <code>VAR=valor comando</code>!).</p>
+<p><strong>Como resolver:</strong> nenhum espaço em volta do <code>=</code>: <code>nome=Ana</code>. Se o valor tiver espaço, use aspas: <code>nome="Ana Souza"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O script não "vê" a variável que criei no terminal</strong>
+<pre class="term">$ cidade=Recife
+$ bash muda.sh
+No script, antes: cidade=[]</pre>
+<p><strong>O que aconteceu:</strong> a variável é só de shell; o script é um filho e não a recebeu.</p>
+<p><strong>Como confirmar:</strong> <code>declare -p cidade</code> mostra <code>declare --</code> (sem <code>-x</code>).</p>
+<p><strong>Como resolver:</strong> <code>export cidade</code>, ou passe só para aquele comando: <code>cidade=Recife bash muda.sh</code>. Melhor ainda, para scripts: passe como <a href="argumentos.html">argumento</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Rodei o script, mas a variável não mudou no terminal</strong>
+<p><strong>O que aconteceu:</strong> é o escopo. O script é um filho e as mudanças dele morrem com ele, mesmo com <code>export</code>.</p>
+<p><strong>Como resolver:</strong> se a ideia é configurar o terminal, rode com <code>source script.sh</code>. Se a ideia é obter um valor, faça o script <strong>imprimir</strong> o valor e capture com <code>valor=$(bash script.sh)</code> (veja <a href="substituicao-comando.html">Substituição de Comando</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"a variável permite somente leitura"</strong>
+<pre class="term">$ PI=3
+bash: PI: a variável permite somente leitura</pre>
+<p><strong>O que aconteceu:</strong> a variável foi criada com <code>readonly</code> ou <code>declare -r</code> (por você, por um script carregado com <code>source</code> ou pelo próprio Bash, como <code>UID</code>).</p>
+<p><strong>Como resolver:</strong> use outro nome. Não existe "desligar" o <code>-r</code>: num terminal, só abrindo um novo.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada (linha vazia)</strong>
+<p><strong>O que aconteceu:</strong> a variável não existe ou está vazia, e o Bash não reclama disso. Causas comuns: erro de digitação (<code>$nmoe</code>), maiúscula/minúscula trocada (<code>$Nome</code>), nome colado em texto (<code>$corclaro</code>) ou variável criada num filho.</p>
+<p><strong>Como confirmar:</strong> <code>declare -p nome</code>. Se responder "não encontrado", ela não existe neste shell. Em scripts, <code>set -u</code> transforma isso em erro (veja <a href="modo-estrito.html">set -euo pipefail</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>nome=valor</code></td><td>Cria variável de shell</td><td><code>cidade=Recife</code></td></tr>
+<tr><td><code>export nome</code></td><td>Põe no ambiente dos filhos</td><td><code>export cidade</code></td></tr>
+<tr><td><code>export nome=valor</code></td><td>Cria e exporta</td><td><code>export EDITOR=nano</code></td></tr>
+<tr><td><code>export -n nome</code></td><td>Tira do ambiente (sem apagar)</td><td><code>export -n cidade</code></td></tr>
+<tr><td><code>VAR=valor comando</code></td><td>Variável só para aquele comando</td><td><code>LANG=C ls nada</code></td></tr>
+<tr><td><code>env</code> / <code>printenv</code></td><td>Lista o ambiente</td><td><code>env | grep LANG</code></td></tr>
+<tr><td><code>printenv NOME</code></td><td>Valor de uma variável de ambiente</td><td><code>printenv HOME</code></td></tr>
+<tr><td><code>declare -i n</code></td><td>Atribuições viram contas</td><td><code>n=5+3</code> → 8</td></tr>
+<tr><td><code>declare -l</code> / <code>-u</code></td><td>Minúsculas / maiúsculas</td><td><code>declare -u sigla=pe</code></td></tr>
+<tr><td><code>declare -r</code> / <code>readonly</code></td><td>Constante</td><td><code>readonly PI=3.14</code></td></tr>
+<tr><td><code>declare -x</code></td><td>Mesmo que <code>export</code></td><td><code>declare -x cor=azul</code></td></tr>
+<tr><td><code>declare -p nome</code></td><td>Mostra valor e atributos</td><td><code>declare -x cor="azul"</code></td></tr>
+<tr><td><code>unset nome</code></td><td>Apaga a variável</td><td><code>unset cidade</code></td></tr>
+<tr><td><code>source arq</code> / <code>. arq</code></td><td>Roda no shell atual (muda o pai)</td><td><code>source ~/.bashrc</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Passar para os filhos</h3>
+<p>Complete para que o script <code>relatorio.sh</code>, rodado depois, receba a variável <code>ANO</code>:</p>
+<div class="ex-code">ANO=2026; <input data-answer="export" aria-label="comando"> ANO; bash relatorio.sh</div>
+</div>
+
+<div class="exercise">
+<h3>2. Só para um comando</h3>
+<p>Complete para rodar <code>date</code> com o idioma <code>C</code> (inglês), sem mudar o idioma do terminal:</p>
+<div class="ex-code"><input data-answer="LANG=C" aria-label="atribuição temporária"> date</div>
+</div>
+
+<div class="exercise">
+<h3>3. Ver os atributos</h3>
+<p>Complete para descobrir se a variável <code>cidade</code> está exportada:</p>
+<div class="ex-code">declare <input data-answer="-p" aria-label="opção"> cidade</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O script <code>config.sh</code> tem a linha <code>export TEMA=escuro</code>. A Ana roda <code>bash config.sh</code> e depois <code>echo $TEMA</code>. O que aparece?</p>
+<label><input type="radio" name="q4"> <code>escuro</code>, porque houve <code>export</code>.</label>
+<label><input type="radio" name="q4"> Um erro: "TEMA: comando não encontrado".</label>
+<label><input type="radio" name="q4"> Uma linha vazia: o script é um filho e não muda o terminal.</label>
+<label><input type="radio" name="q4"> <code>TEMA</code>.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Depois de <code>declare -i n</code> e <code>n=abc</code>, quanto vale <code>$n</code>?</p>
+<label><input type="radio" name="q5"> <code>abc</code></label>
+<label><input type="radio" name="q5"> <code>0</code></label>
+<label><input type="radio" name="q5"> Dá erro e <code>n</code> fica vazia.</label>
+<label><input type="radio" name="q5"> <code>1</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Qual destes é um nome de variável válido?</p>
+<label><input type="radio" name="q6"> <code>1lugar</code></label>
+<label><input type="radio" name="q6"> <code>data-hoje</code></label>
+<label><input type="radio" name="q6"> <code>preço</code></label>
+<label><input type="radio" name="q6"> <code>_data_hoje</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Variável de shell fica no Bash atual; com <code>export</code> ela vira de ambiente e é <strong>copiada</strong> para os programas filhos.</li>
+  <li><code>env</code> e <code>printenv</code> mostram o ambiente; <code>declare -p</code> mostra uma variável com seus atributos.</li>
+  <li><code>VAR=valor comando</code> muda a variável só para aquele comando.</li>
+  <li>O ambiente só desce: um script filho nunca altera o terminal. Para isso, use <code>source</code>.</li>
+  <li><code>declare</code> dá atributos (<code>-i</code> conta, <code>-l</code>/<code>-u</code> caixa, <code>-r</code> constante, <code>-x</code> exporta); <code>unset</code> apaga.</li>
+  <li>Nomes: letras sem acento, números e <code>_</code>, sem começar com número, sem espaço no <code>=</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
