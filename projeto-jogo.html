@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto Jogo da Adivinhação — RANDOM, read, while, select e recorde | Guia Bash</title>
+<meta name="description" content="Projeto passo a passo: um jogo de adivinhar o número em Bash, com RANDOM, read, while, if, contador de tentativas, validação de entrada com [[ =~ ]], níveis de dificuldade com select e case, recorde salvo em arquivo e cores opcionais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Jogo da Adivinhação</span></h1>
+
+<p class="intro">O computador pensa num número e você tenta adivinhar; a cada palpite ele diz "maior" ou "menor". É o "olá, mundo" dos jogos, e um ótimo treino: em seis etapas você usa números aleatórios, leitura do teclado, laços, decisões, validação com expressão regular, menus, arquivos e cores. E descobre por que <strong>todo dado digitado pelo usuário precisa ser conferido</strong>: a versão sem validação pode ser vencida digitando uma palavra.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Um jogo <code>adivinha.sh</code> com três níveis (1–10, 1–100, 1–1000) escolhidos num menu.</li>
+  <li>Validação do palpite: só números, dentro do intervalo, sem cair na armadilha do <code>08</code>.</li>
+  <li>Um recorde por nível guardado em <code>~/.adivinha_recordes</code>.</li>
+  <li>Cores que aparecem no terminal e somem quando a saída vai para um arquivo.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>45 min</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="read.html">Ler do Teclado (read)</a>, <a href="while.html">while e until</a>, <a href="if.html">if, elif, else</a>, <a href="aritmetica.html">Contas</a>. Ajudam: <a href="regex.html">Regex com [[ =~ ]]</a> e <a href="interativo.html">Menus e Cores</a>.</td></tr>
+<tr><td>Onde roda</td><td>Nas caixas "Experimente": quando o script faz <code>read</code>, o simulador abre um campo para você digitar. E no seu computador, claro.</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Sobre as sessões desta página</strong>
+<p>Para que os exemplos se repitam, as sessões foram gravadas com uma <strong>semente</strong> fixa (<code>ADIVINHA_SEMENTE=7</code>, explicada na etapa 2), que faz o número secreto do nível médio ser sempre 45. O que você digita aparece depois de cada <code>Seu palpite:</code>, como no terminal.</p>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Etapa 1 — Sortear um número e dar um palpite</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o coração do jogo em 10 linhas: sortear, perguntar, comparar.</p>
+
+<pre class="file" data-file="adivinha.sh">#!/usr/bin/env bash
+# adivinha.sh — versão 1: um palpite só
+secreto=$(( RANDOM % 100 + 1 ))
+read -rp "Pensei num número entre 1 e 100. Seu palpite: " palpite
+if (( palpite &lt; secreto )); then
+  echo "Errou! O número é MAIOR. Era $secreto."
+elif (( palpite &gt; secreto )); then
+  echo "Errou! O número é MENOR. Era $secreto."
+else
+  echo "Acertou de primeira!"
+fi
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>secreto=$(( RANDOM % 100 + 1 ))</code></td><td><code>RANDOM</code> é uma variável especial: cada vez que é lida, vale um número aleatório de 0 a 32767. O <code>% 100</code> (resto da divisão por 100) dá 0 a 99; o <code>+ 1</code> dá 1 a 100. Veja <a href="aritmetica.html">Contas</a>.</td></tr>
+<tr><td><code>read -rp "…" palpite</code></td><td>Mostra a pergunta (<code>-p</code>, de <em>prompt</em>) e guarda o que for digitado em <code>palpite</code>. O <code>-r</code> deixa a barra invertida em paz. Veja <a href="read.html">read</a>.</td></tr>
+<tr><td><code>if (( palpite &lt; secreto ))</code></td><td>Comparação numérica. Dentro de <code>(( ))</code> as variáveis dispensam o <code>$</code> e o <code>&lt;</code> é "menor que" (fora, seria redirecionamento!).</td></tr>
+<tr><td><code>elif … else … fi</code></td><td>Senão-se, senão, fim. Veja <a href="if.html">if, elif, else</a>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ chmod +x adivinha.sh
+$ ./adivinha.sh
+Pensei num número entre 1 e 100. Seu palpite: 50
+Errou! O número é MAIOR. Era 69.
+$ ./adivinha.sh
+Pensei num número entre 1 e 100. Seu palpite: 50
+Acertou de primeira!            « sorte! cada execução sorteia outro número</pre>
+
+<div class="tryscript" data-file="adivinha.sh" data-stdin="60\n" data-goal="out:MENOR">
+<p class="try-task"><strong>Missão:</strong> para testar, o número secreto foi fixado em 42 e o palpite em 60 (pela entrada). Rode e veja: o jogo diz "Acertou" com 60! Falta o ramo do "menor". Acrescente um <code>elif</code> que diga <code>O número é MENOR.</code></p>
+<pre class="script">#!/usr/bin/env bash
+secreto=42      # fixo, só para testar
+read -rp "Seu palpite: " palpite
+if (( palpite &lt; secreto )); then
+  echo "O número é MAIOR."
+else
+  echo "Acertou de primeira!"
+fi
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+secreto=42      # fixo, só para testar
+read -rp "Seu palpite: " palpite
+if (( palpite &lt; secreto )); then
+  echo "O número é MAIOR."
+elif (( palpite &gt; secreto )); then
+  echo "O número é MENOR."
+else
+  echo "Acertou de primeira!"
+fi
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 2 — Repetir até acertar e contar as tentativas</h3>
+<p><strong>O que vamos fazer e por quê:</strong> um palpite só não é jogo. Um laço <code>while true</code> repete "pergunta e compara" para sempre, até um <code>break</code> no acerto. Um contador guarda quantas tentativas foram.</p>
+
+<pre class="file" data-file="adivinha.sh">#!/usr/bin/env bash
+# adivinha.sh — versão 2: repete até acertar e conta as tentativas
+[[ -n ${ADIVINHA_SEMENTE-} ]] &amp;&amp; RANDOM=$ADIVINHA_SEMENTE
+secreto=$(( RANDOM % 100 + 1 ))
+tentativas=0
+echo "Pensei num número entre 1 e 100."
+while true; do
+  read -rp "Seu palpite: " palpite
+  tentativas=$(( tentativas + 1 ))
+  if (( palpite &lt; secreto )); then
+    echo "O número é MAIOR que $palpite."
+  elif (( palpite &gt; secreto )); then
+    echo "O número é MENOR que $palpite."
+  else
+    echo "Acertou! Era $secreto. Você usou $tentativas tentativa(s)."
+    break
+  fi
+done
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>[[ -n ${ADIVINHA_SEMENTE-} ]] &amp;&amp; RANDOM=$ADIVINHA_SEMENTE</code></td><td>Um recurso <strong>para testar</strong>: se a variável de ambiente <code>ADIVINHA_SEMENTE</code> existir, ela vira a semente do <code>RANDOM</code>. Com a mesma semente, o Bash sorteia sempre a mesma sequência, e o jogo fica repetível. O <code>${…-}</code> dá vazio se a variável não existe.</td></tr>
+<tr><td><code>while true; do</code></td><td><code>true</code> sempre dá certo, então o laço só termina por dentro. Veja <a href="while.html">while e until</a>.</td></tr>
+<tr><td><code>tentativas=$(( tentativas + 1 ))</code></td><td>Soma 1 a cada palpite.</td></tr>
+<tr><td><code>break</code></td><td>Sai do laço. Veja <a href="break-continue.html">break e continue</a>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ADIVINHA_SEMENTE=7 ./adivinha.sh          « a variável vale só para este comando
+Pensei num número entre 1 e 100.
+Seu palpite: 50
+O número é MENOR que 50.
+Seu palpite: 25
+O número é MAIOR que 25.
+Seu palpite: 37
+O número é MAIOR que 37.
+Seu palpite: 43
+O número é MAIOR que 43.
+Seu palpite: 46
+O número é MENOR que 46.
+Seu palpite: 45
+Acertou! Era 45. Você usou 6 tentativa(s).</pre>
+<p>A estratégia de chutar sempre o meio do que sobrou (50, 25, 37…) se chama <strong>busca binária</strong>: cada palpite corta as possibilidades pela metade, e 7 palpites bastam para qualquer número de 1 a 100.</p>
+
+<h4>Agora tente quebrar o jogo</h4>
+<pre class="term">$ ADIVINHA_SEMENTE=7 ./adivinha.sh
+Pensei num número entre 1 e 100.
+Seu palpite: 50
+O número é MENOR que 50.
+Seu palpite: abc
+O número é MAIOR que abc.            « abc virou 0?
+Seu palpite: 45
+Acertou! Era 45. Você usou 3 tentativa(s).
+$ ADIVINHA_SEMENTE=7 ./adivinha.sh
+Pensei num número entre 1 e 100.
+Seu palpite: 08
+./adivinha.sh: linha 10: ((: 08: valor muito grande para esta base de numeração (token de erro é "08")
+./adivinha.sh: linha 12: ((: 08: valor muito grande para esta base de numeração (token de erro é "08")
+Acertou! Era 45. Você usou 1 tentativa(s).          « venceu com um erro!
+$ ADIVINHA_SEMENTE=7 ./adivinha.sh
+Pensei num número entre 1 e 100.
+Seu palpite: secreto
+Acertou! Era 45. Você usou 1 tentativa(s).          « trapaça com o nome da variável</pre>
+<p>Três defeitos de uma vez, todos por confiar no que foi digitado:</p>
+<ul>
+  <li><strong><code>abc</code></strong>: dentro de <code>(( ))</code>, uma palavra é tratada como <strong>nome de variável</strong>. Não existe variável <code>abc</code>, então ela vale 0.</li>
+  <li><strong><code>08</code></strong>: na aritmética do Bash, um número que começa com 0 é <strong>octal</strong> (base 8), e 8 não existe em octal. O <code>(( ))</code> dá erro, devolve "falso", o <code>elif</code> também, e o <code>else</code> declara vitória.</li>
+  <li><strong><code>secreto</code></strong>: o pior. <code>palpite</code> vale o texto <code>secreto</code>, que na aritmética é a variável <code>secreto</code>: o jogo compara o número com ele mesmo. É uma pequena <strong>injeção de código</strong>, o mesmo tipo de falha que derruba sistemas de verdade.</li>
+</ul>
+
+<div class="tryscript" data-file="adivinha.sh" data-stdin="10\n50\n42\n" data-goal="out:usou 3 tentativa">
+<p class="try-task"><strong>Missão:</strong> o número está fixo em 42 e a entrada já tem três palpites (10, 50, 42). Faça o jogo contar as tentativas e terminar com <code>Acertou! Você usou 3 tentativa(s).</code></p>
+<pre class="script">#!/usr/bin/env bash
+secreto=42
+while true; do
+  read -rp "Seu palpite: " palpite || exit 1     # entrada acabou
+  if (( palpite &lt; secreto )); then
+    echo "O número é MAIOR que $palpite."
+  elif (( palpite &gt; secreto )); then
+    echo "O número é MENOR que $palpite."
+  else
+    echo "Acertou!"
+    break
+  fi
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+secreto=42
+tentativas=0
+while true; do
+  read -rp "Seu palpite: " palpite || exit 1     # entrada acabou
+  tentativas=$(( tentativas + 1 ))
+  if (( palpite &lt; secreto )); then
+    echo "O número é MAIOR que $palpite."
+  elif (( palpite &gt; secreto )); then
+    echo "O número é MENOR que $palpite."
+  else
+    echo "Acertou! Você usou $tentativas tentativa(s)."
+    break
+  fi
+done
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 3 — Validar a entrada com <code>[[ =~ ]]</code></h3>
+<p><strong>O que vamos fazer e por quê:</strong> antes de fazer qualquer conta com o palpite, conferimos que ele é <strong>só dígitos</strong>, tiramos o zero da frente e checamos o intervalo. Palpite inválido não conta como tentativa.</p>
+
+<pre class="file" data-file="adivinha.sh (trecho novo da versão 3)">  read -rp "Seu palpite: " palpite
+  if [[ ! $palpite =~ ^[0-9]+$ ]]; then
+    echo "Digite só números."
+    continue
+  fi
+  palpite=$(( 10#$palpite ))
+  if (( palpite &lt; 1 || palpite &gt; maximo )); then
+    echo "Fora do intervalo: o número está entre 1 e $maximo."
+    continue
+  fi
+  tentativas=$(( tentativas + 1 ))</pre>
+
+<p>A expressão regular, parte por parte:</p>
+<dl class="anatomy">
+  <dt>[[ ! $palpite =~</dt><dd>"O palpite <strong>não</strong> casa com a regex…" Veja <a href="regex.html">Regex com [[ =~ ]]</a>.</dd>
+  <dt>^</dt><dd>…começando no início do texto…</dd>
+  <dt>[0-9]+</dt><dd>…um ou mais dígitos…</dd>
+  <dt>$</dt><dd>…e terminando no fim do texto. Sem o <code>^</code> e o <code>$</code>, <code>a1b</code> passaria (tem um dígito no meio).</dd>
+  <dt>]]</dt><dd>A regex fica <strong>sem aspas</strong>; entre aspas ela seria comparada como texto literal.</dd>
+</dl>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>continue</code></td><td>Volta para o início do laço (nova pergunta) sem contar a tentativa.</td></tr>
+<tr><td><code>palpite=$(( 10#$palpite ))</code></td><td><code>10#</code> força a base 10: <code>08</code> vira 8 e <code>007</code> vira 7. Resolve o "valor muito grande para esta base".</td></tr>
+<tr><td><code>(( palpite &lt; 1 || palpite &gt; maximo ))</code></td><td><code>||</code> = "ou". O <code>maximo</code> virou variável para a etapa 4.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ADIVINHA_SEMENTE=7 ./adivinha.sh
+Pensei num número entre 1 e 100.
+Seu palpite: abc
+Digite só números.
+Seu palpite:                          « só Enter
+Digite só números.
+Seu palpite: 150
+Fora do intervalo: o número está entre 1 e 100.
+Seu palpite: 0
+Fora do intervalo: o número está entre 1 e 100.
+Seu palpite: 08
+O número é MAIOR que 8.               « 08 virou 8
+Seu palpite: 50
+O número é MENOR que 50.
+Seu palpite: 45
+Acertou! Era 45. Você usou 3 tentativa(s).      « só os 3 válidos contaram</pre>
+
+<div class="tryscript" data-file="adivinha.sh" data-stdin="abc\n42\n" data-goal="out:Digite só números,src:=~">
+<p class="try-task"><strong>Missão:</strong> a entrada tem <code>abc</code> e depois <code>42</code>. Hoje o <code>abc</code> vira 0 e conta como tentativa. Acrescente a validação com <code>[[ ! $palpite =~ ^[0-9]+$ ]]</code> que escreve <code>Digite só números.</code> e volta ao início com <code>continue</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+secreto=42
+tentativas=0
+while true; do
+  read -rp "Seu palpite: " palpite || exit 1     # entrada acabou
+  tentativas=$(( tentativas + 1 ))
+  if (( palpite &lt; secreto )); then
+    echo "O número é MAIOR que $palpite."
+  elif (( palpite &gt; secreto )); then
+    echo "O número é MENOR que $palpite."
+  else
+    echo "Acertou! Você usou $tentativas tentativa(s)."
+    break
+  fi
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+secreto=42
+tentativas=0
+while true; do
+  read -rp "Seu palpite: " palpite || exit 1     # entrada acabou
+  if [[ ! $palpite =~ ^[0-9]+$ ]]; then
+    echo "Digite só números."
+    continue
+  fi
+  tentativas=$(( tentativas + 1 ))
+  if (( palpite &lt; secreto )); then
+    echo "O número é MAIOR que $palpite."
+  elif (( palpite &gt; secreto )); then
+    echo "O número é MENOR que $palpite."
+  else
+    echo "Acertou! Você usou $tentativas tentativa(s)."
+    break
+  fi
+done
+</pre>
+</div>
+
+<div class="note">
+<strong>Outras formas de validar</strong>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Observação</th></tr>
+<tr><td>Regex</td><td><code>[[ $x =~ ^[0-9]+$ ]]</code></td><td>A mais clara. <span class="versao">bash 3.0+</span></td></tr>
+<tr><td>Padrão com <code>case</code></td><td><code>case $x in ''|*[!0-9]*) echo inválido ;; esac</code></td><td>Funciona até no <code>sh</code>: "vazio, ou tem algum caractere que não é dígito". Veja <a href="case.html">case</a>.</td></tr>
+<tr><td>Curinga estendido</td><td><code>[[ $x == +([0-9]) ]]</code></td><td>Precisa de <code>extglob</code> (ligado por padrão dentro de <code>[[ ]]</code>). Veja <a href="curingas.html">Curingas</a>.</td></tr>
+</table>
+</div>
+</div>
+</li>
+
+<li>
+<h3>Etapa 4 — Níveis de dificuldade com <code>select</code></h3>
+<p><strong>O que vamos fazer e por quê:</strong> o <code>select</code> monta um menu numerado sozinho, lê a escolha e repete se ela for inválida. Combinado com <code>case</code>, cada nível define o <code>maximo</code>. Veja <a href="interativo.html">Menus e Cores</a>.</p>
+
+<pre class="file" data-file="adivinha.sh (trecho novo da versão 4)">escolher_nivel() {
+  local PS3='Escolha o nível (1-3): '
+  select nivel in fácil médio difícil; do
+    case $nivel in
+      fácil)   maximo=10;   break ;;
+      médio)   maximo=100;  break ;;
+      difícil) maximo=1000; break ;;
+      *) echo "Opção inválida: digite 1, 2 ou 3." ;;
+    esac
+  done
+}
+
+escolher_nivel
+secreto=$(( RANDOM % maximo + 1 ))</pre>
+
+<dl class="anatomy">
+  <dt>local PS3='…'</dt><dd><code>PS3</code> é o texto da pergunta do <code>select</code> (o "prompt 3"). Com <code>local</code>, ele só vale dentro da função.</dd>
+  <dt>select nivel in fácil médio difícil</dt><dd>Mostra <code>1) fácil 2) médio 3) difícil</code>. Se o usuário digitar <code>2</code>, <code>nivel</code> recebe <code>médio</code>; se digitar algo fora da lista, <code>nivel</code> fica vazio (e o que foi digitado vai para <code>REPLY</code>).</dd>
+  <dt>case $nivel in</dt><dd>Decide pelo nome escolhido.</dd>
+  <dt>break</dt><dd>Sai do <code>select</code>, que, como o <code>while true</code>, repetiria para sempre.</dd>
+  <dt>*)</dt><dd>Escolha inválida: avisa e o <code>select</code> pergunta de novo.</dd>
+</dl>
+
+<pre class="term">$ ./adivinha.sh
+1) fácil
+2) médio
+3) difícil
+Escolha o nível (1-3): 9
+Opção inválida: digite 1, 2 ou 3.
+Escolha o nível (1-3): médio              « o select quer o NÚMERO, não o nome
+Opção inválida: digite 1, 2 ou 3.
+Escolha o nível (1-3): 2
+Pensei num número entre 1 e 100 (nível médio).</pre>
+<p>Repare que, depois de uma resposta inválida, o <code>select</code> não repete o menu, só a pergunta. Se apertar Enter sem digitar nada, ele mostra o menu de novo.</p>
+
+<div class="tryscript" data-file="niveis.sh" data-stdin="4\n" data-goal="out:entre 1 e 10000">
+<p class="try-task"><strong>Missão:</strong> crie um quarto nível, <code>insano</code>, com números de 1 a 10000. A entrada já escolhe a opção 4.</p>
+<pre class="script">#!/usr/bin/env bash
+PS3='Escolha o nível: '
+select nivel in fácil médio difícil; do
+  case $nivel in
+    fácil)   maximo=10;   break ;;
+    médio)   maximo=100;  break ;;
+    difícil) maximo=1000; break ;;
+    *) echo "Opção inválida." ;;
+  esac
+done
+echo "Pensei num número entre 1 e $maximo (nível $nivel)."
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+PS3='Escolha o nível: '
+select nivel in fácil médio difícil insano; do
+  case $nivel in
+    fácil)   maximo=10;   break ;;
+    médio)   maximo=100;  break ;;
+    difícil) maximo=1000; break ;;
+    insano)  maximo=10000; break ;;
+    *) echo "Opção inválida." ;;
+  esac
+done
+echo "Pensei num número entre 1 e $maximo (nível $nivel)."
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 5 — Guardar o recorde num arquivo</h3>
+<p><strong>O que vamos fazer e por quê:</strong> variáveis morrem quando o script termina. Para o recorde sobreviver, ele vai para um arquivo. O formato é o mais simples possível, uma linha <code>nível=tentativas</code> por nível, que dá para ler e escrever com o próprio Bash. Dentro do script, os recordes ficam num array associativo indexado pelo nível.</p>
+
+<pre class="file" data-file="adivinha.sh (trechos novos da versão 5)">arquivo_recordes=~/.adivinha_recordes
+declare -A recorde
+
+carregar_recordes() {
+  [[ -r $arquivo_recordes ]] || return 0
+  local nivel n
+  while IFS='=' read -r nivel n; do
+    recorde[$nivel]=$n
+  done &lt; "$arquivo_recordes"
+}
+
+salvar_recordes() {
+  local nivel
+  for nivel in "${!recorde[@]}"; do
+    printf '%s=%s\n' "$nivel" "${recorde[$nivel]}"
+  done &gt; "$arquivo_recordes"
+}
+
+# … depois do laço do jogo:
+if [[ -z ${recorde[$nivel]-} ]] || (( tentativas &lt; recorde[$nivel] )); then
+  echo "Novo recorde no nível $nivel!"
+  recorde[$nivel]=$tentativas
+  salvar_recordes
+fi</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>[[ -r $arquivo ]] || return 0</code></td><td>Na primeira vez o arquivo não existe: não é erro, só não há recordes. <code>-r</code> = "existe e posso ler".</td></tr>
+<tr><td><code>while IFS='=' read -r nivel n</code></td><td>O <code>IFS='='</code> só para este <code>read</code> faz o <code>=</code> separar os campos: <code>médio=6</code> vira <code>nivel=médio</code> e <code>n=6</code>. Veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>.</td></tr>
+<tr><td><code>done &gt; "$arquivo_recordes"</code></td><td>Toda a saída do laço vai para o arquivo, que é reescrito do zero (com <code>&gt;</code>, não <code>&gt;&gt;</code>).</td></tr>
+<tr><td><code>[[ -z ${recorde[$nivel]-} ]] || (( … ))</code></td><td>"Não há recorde neste nível, <strong>ou</strong> fiz menos tentativas que ele." O <code>||</code> só avalia a conta se a primeira parte for falsa, então nunca comparamos com um recorde vazio.</td></tr>
+<tr><td><code>${recorde[$nivel]:-nenhum}</code></td><td>(Na mensagem inicial.) Mostra o recorde ou a palavra "nenhum".</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ADIVINHA_SEMENTE=7 ./adivinha.sh
+1) fácil
+2) médio
+3) difícil
+Escolha o nível (1-3): 2
+Pensei num número entre 1 e 100. Recorde do nível médio: nenhum
+Seu palpite: 50
+O número é MENOR que 50.
+…
+Seu palpite: 45
+Acertou! Era 45. Você usou 7 tentativa(s).
+Novo recorde no nível médio!
+$ cat .adivinha_recordes
+médio=7
+$ ADIVINHA_SEMENTE=7 ./adivinha.sh
+1) fácil
+2) médio
+3) difícil
+Escolha o nível (1-3): 2
+Pensei num número entre 1 e 100. Recorde do nível médio: 7
+Seu palpite: 45
+Acertou! Era 45. Você usou 1 tentativa(s).          « com a semente, já sabemos o número…
+Novo recorde no nível médio!
+$ cat .adivinha_recordes
+médio=1</pre>
+<p>(A primeira partida foi encurtada com <code>…</code>.) Funciona, e mostra também por que a semente é só para testes: quem sabe a semente sabe o número. O arquivo começa com ponto, então fica oculto no <code>ls</code> (use <code>ls -a</code>).</p>
+
+<div class="tryscript" data-file="recorde.sh" data-setup="printf 'médio=5\n' &gt; .adivinha_recordes" data-goal="contains:~/.adivinha_recordes=médio=2">
+<p class="try-task"><strong>Missão:</strong> o recorde atual do nível médio é 5 (está no arquivo). A partida simulada fez 2 tentativas, o script anuncia o recorde, mas a função <code>salvar_recordes</code> está vazia. Escreva-a para o arquivo ficar com <code>médio=2</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+arquivo_recordes=~/.adivinha_recordes
+declare -A recorde
+
+carregar_recordes() {
+  [[ -r $arquivo_recordes ]] || return 0
+  local nivel n
+  while IFS='=' read -r nivel n; do
+    recorde[$nivel]=$n
+  done &lt; "$arquivo_recordes"
+}
+
+salvar_recordes() {
+  :   # escreva aqui
+}
+
+carregar_recordes
+nivel=médio
+tentativas=2          # de mentira: a partida foi simulada
+echo "Recorde anterior: ${recorde[$nivel]:-nenhum}"
+if [[ -z ${recorde[$nivel]-} ]] || (( tentativas &lt; recorde[$nivel] )); then
+  echo "Novo recorde no nível $nivel!"
+  recorde[$nivel]=$tentativas
+  salvar_recordes
+fi
+cat "$arquivo_recordes"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+arquivo_recordes=~/.adivinha_recordes
+declare -A recorde
+
+carregar_recordes() {
+  [[ -r $arquivo_recordes ]] || return 0
+  local nivel n
+  while IFS='=' read -r nivel n; do
+    recorde[$nivel]=$n
+  done &lt; "$arquivo_recordes"
+}
+
+salvar_recordes() {
+  local nivel
+  for nivel in "${!recorde[@]}"; do
+    printf '%s=%s\n' "$nivel" "${recorde[$nivel]}"
+  done &gt; "$arquivo_recordes"
+}
+
+carregar_recordes
+nivel=médio
+tentativas=2          # de mentira: a partida foi simulada
+echo "Recorde anterior: ${recorde[$nivel]:-nenhum}"
+if [[ -z ${recorde[$nivel]-} ]] || (( tentativas &lt; recorde[$nivel] )); then
+  echo "Novo recorde no nível $nivel!"
+  recorde[$nivel]=$tentativas
+  salvar_recordes
+fi
+cat "$arquivo_recordes"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 6 — Cores (só quando faz sentido) e saída com Ctrl+D</h3>
+<p><strong>O que vamos fazer e por quê:</strong> verde para o acerto, amarelo para as dicas, vermelho para erros. Cores no terminal são <strong>sequências de escape</strong>: caracteres invisíveis que começam com o caractere ESC (<code>\e</code>) e que o terminal interpreta. O cuidado: se a saída for para um arquivo ou um pipe, essas sequências viram lixo (<code>^[[32m</code>). Então só ligamos as cores quando a saída é um terminal.</p>
+
+<pre class="file" data-file="adivinha.sh (trechos novos da versão 6)"># Cores só quando a saída é um terminal e o usuário não pediu NO_COLOR
+if [[ -t 1 &amp;&amp; -z ${NO_COLOR-} ]]; then
+  verde=$'\e[32m' amarelo=$'\e[33m' vermelho=$'\e[31m' normal=$'\e[0m'
+else
+  verde='' amarelo='' vermelho='' normal=''
+fi
+
+  # no laço, as mensagens ganham cor:
+  echo "${verde}Acertou! Era $secreto. Você usou $tentativas tentativa(s).${normal}"
+
+  # e o read trata o Ctrl+D (fim da entrada):
+  read -rp "Seu palpite: " palpite || { echo; echo "Desistiu? O número era $secreto."; exit 1; }</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>[[ -t 1 ]]</code></td><td>"O descritor 1 (a saída padrão) é um terminal?" Falso em <code>./adivinha.sh &gt; log</code> ou <code>./adivinha.sh | tee log</code>.</td></tr>
+<tr><td><code>${NO_COLOR-}</code></td><td><code>NO_COLOR</code> é uma convenção (no-color.org): quem a define não quer cores em programa nenhum.</td></tr>
+<tr><td><code>$'\e[32m'</code></td><td>Aspas <code>$'…'</code> transformam <code>\e</code> no caractere ESC de verdade. <code>[32m</code> = verde, <code>[33m</code> = amarelo, <code>[31m</code> = vermelho, <code>[0m</code> = volta ao normal. Veja <a href="aspas.html">Aspas e Escapes</a>.</td></tr>
+<tr><td><code>read … || { …; exit 1; }</code></td><td>Com <kbd>Ctrl</kbd>+<kbd>D</kbd> (fim da entrada), o <code>read</code> falha; sem isso, o laço perguntaria para sempre com um palpite vazio.</td></tr>
+</table>
+</div>
+
+<p>A alternativa ao <code>$'\e[32m'</code> é o <code>tput setaf 2</code>, que pergunta ao terminal qual é a sequência certa. Veja a comparação em <a href="interativo.html">Menus e Cores</a>. Aqui ficamos com o escape direto, que funciona em praticamente todos os terminais atuais.</p>
+
+<pre class="term">$ ./adivinha.sh
+1) fácil
+2) médio
+3) difícil
+Escolha o nível (1-3): 1
+Pensei num número entre 1 e 10. Recorde do nível fácil: nenhum
+Seu palpite: 3
+O número é MAIOR que 3.
+Seu palpite:                          « aqui a Ana apertou Ctrl+D
+Desistiu? O número era 6.
+$ echo $?
+1</pre>
+</li>
+
+</ol>
+
+<hr>
+
+<h2>O jogo completo</h2>
+<p>Passa no <a href="shellcheck.html">ShellCheck</a> sem avisos.</p>
+
+<pre class="file" data-file="adivinha.sh">#!/usr/bin/env bash
+# adivinha.sh — jogo de adivinhar o número, com níveis e recorde.
+# Para testar com o mesmo número sempre: ADIVINHA_SEMENTE=7 ./adivinha.sh
+arquivo_recordes=~/.adivinha_recordes
+declare -A recorde
+
+# Cores só quando a saída é um terminal e o usuário não pediu NO_COLOR
+if [[ -t 1 &amp;&amp; -z ${NO_COLOR-} ]]; then
+  verde=$'\e[32m' amarelo=$'\e[33m' vermelho=$'\e[31m' normal=$'\e[0m'
+else
+  verde='' amarelo='' vermelho='' normal=''
+fi
+
+carregar_recordes() {
+  [[ -r $arquivo_recordes ]] || return 0
+  local nivel n
+  while IFS='=' read -r nivel n; do
+    recorde[$nivel]=$n
+  done &lt; "$arquivo_recordes"
+}
+
+salvar_recordes() {
+  local nivel
+  for nivel in "${!recorde[@]}"; do
+    printf '%s=%s\n' "$nivel" "${recorde[$nivel]}"
+  done &gt; "$arquivo_recordes"
+}
+
+escolher_nivel() {
+  local PS3='Escolha o nível (1-3): '
+  select nivel in fácil médio difícil; do
+    case $nivel in
+      fácil)   maximo=10;   break ;;
+      médio)   maximo=100;  break ;;
+      difícil) maximo=1000; break ;;
+      *) echo "Opção inválida: digite 1, 2 ou 3." ;;
+    esac
+  done
+}
+
+[[ -n ${ADIVINHA_SEMENTE-} ]] &amp;&amp; RANDOM=$ADIVINHA_SEMENTE
+
+carregar_recordes
+escolher_nivel
+[[ -n ${nivel-} ]] || { echo; echo "Até a próxima!"; exit 0; }   # Ctrl+D no menu
+
+secreto=$(( RANDOM % maximo + 1 ))
+tentativas=0
+echo "Pensei num número entre 1 e $maximo. Recorde do nível $nivel: ${recorde[$nivel]:-nenhum}"
+
+while true; do
+  read -rp "Seu palpite: " palpite || { echo; echo "Desistiu? O número era $secreto."; exit 1; }
+  if [[ ! $palpite =~ ^[0-9]+$ ]]; then
+    echo "${vermelho}Digite só números.${normal}"
+    continue
+  fi
+  palpite=$(( 10#$palpite ))
+  if (( palpite &lt; 1 || palpite &gt; maximo )); then
+    echo "${vermelho}Fora do intervalo: o número está entre 1 e $maximo.${normal}"
+    continue
+  fi
+  tentativas=$(( tentativas + 1 ))
+  if (( palpite &lt; secreto )); then
+    echo "${amarelo}O número é MAIOR que $palpite.${normal}"
+  elif (( palpite &gt; secreto )); then
+    echo "${amarelo}O número é MENOR que $palpite.${normal}"
+  else
+    echo "${verde}Acertou! Era $secreto. Você usou $tentativas tentativa(s).${normal}"
+    break
+  fi
+done
+
+if [[ -z ${recorde[$nivel]-} ]] || (( tentativas &lt; recorde[$nivel] )); then
+  echo "Novo recorde no nível $nivel!"
+  recorde[$nivel]=$tentativas
+  salvar_recordes
+fi
+</pre>
+
+<pre class="term">$ ADIVINHA_SEMENTE=7 ./adivinha.sh
+1) fácil
+2) médio
+3) difícil
+Escolha o nível (1-3): 5
+Opção inválida: digite 1, 2 ou 3.
+Escolha o nível (1-3): 2
+Pensei num número entre 1 e 100. Recorde do nível médio: 7
+Seu palpite: 50
+O número é MENOR que 50.
+Seu palpite: 25
+O número é MAIOR que 25.
+Seu palpite: 37
+O número é MAIOR que 37.
+Seu palpite: 43
+O número é MAIOR que 43.
+Seu palpite: 46
+O número é MENOR que 46.
+Seu palpite: 45
+Acertou! Era 45. Você usou 6 tentativa(s).
+Novo recorde no nível médio!</pre>
+
+<div class="tryscript" data-file="adivinha.sh">
+<p class="try-task"><strong>Jogue:</strong> clique em Rodar e digite seus palpites nos campos que aparecem. Depois mude o script à vontade (que tal um limite de tentativas por nível?).</p>
+<pre class="script">#!/usr/bin/env bash
+# adivinha.sh — jogo de adivinhar o número, com níveis e recorde.
+# Para testar com o mesmo número sempre: ADIVINHA_SEMENTE=7 ./adivinha.sh
+arquivo_recordes=~/.adivinha_recordes
+declare -A recorde
+
+# Cores só quando a saída é um terminal e o usuário não pediu NO_COLOR
+if [[ -t 1 &amp;&amp; -z ${NO_COLOR-} ]]; then
+  verde=$'\e[32m' amarelo=$'\e[33m' vermelho=$'\e[31m' normal=$'\e[0m'
+else
+  verde='' amarelo='' vermelho='' normal=''
+fi
+
+carregar_recordes() {
+  [[ -r $arquivo_recordes ]] || return 0
+  local nivel n
+  while IFS='=' read -r nivel n; do
+    recorde[$nivel]=$n
+  done &lt; "$arquivo_recordes"
+}
+
+salvar_recordes() {
+  local nivel
+  for nivel in "${!recorde[@]}"; do
+    printf '%s=%s\n' "$nivel" "${recorde[$nivel]}"
+  done &gt; "$arquivo_recordes"
+}
+
+escolher_nivel() {
+  local PS3='Escolha o nível (1-3): '
+  select nivel in fácil médio difícil; do
+    case $nivel in
+      fácil)   maximo=10;   break ;;
+      médio)   maximo=100;  break ;;
+      difícil) maximo=1000; break ;;
+      *) echo "Opção inválida: digite 1, 2 ou 3." ;;
+    esac
+  done
+}
+
+[[ -n ${ADIVINHA_SEMENTE-} ]] &amp;&amp; RANDOM=$ADIVINHA_SEMENTE
+
+carregar_recordes
+escolher_nivel
+[[ -n ${nivel-} ]] || { echo; echo "Até a próxima!"; exit 0; }   # Ctrl+D no menu
+
+secreto=$(( RANDOM % maximo + 1 ))
+tentativas=0
+echo "Pensei num número entre 1 e $maximo. Recorde do nível $nivel: ${recorde[$nivel]:-nenhum}"
+
+while true; do
+  read -rp "Seu palpite: " palpite || { echo; echo "Desistiu? O número era $secreto."; exit 1; }
+  if [[ ! $palpite =~ ^[0-9]+$ ]]; then
+    echo "${vermelho}Digite só números.${normal}"
+    continue
+  fi
+  palpite=$(( 10#$palpite ))
+  if (( palpite &lt; 1 || palpite &gt; maximo )); then
+    echo "${vermelho}Fora do intervalo: o número está entre 1 e $maximo.${normal}"
+    continue
+  fi
+  tentativas=$(( tentativas + 1 ))
+  if (( palpite &lt; secreto )); then
+    echo "${amarelo}O número é MAIOR que $palpite.${normal}"
+  elif (( palpite &gt; secreto )); then
+    echo "${amarelo}O número é MENOR que $palpite.${normal}"
+  else
+    echo "${verde}Acertou! Era $secreto. Você usou $tentativas tentativa(s).${normal}"
+    break
+  fi
+done
+
+if [[ -z ${recorde[$nivel]-} ]] || (( tentativas &lt; recorde[$nivel] )); then
+  echo "Novo recorde no nível $nivel!"
+  recorde[$nivel]=$tentativas
+  salvar_recordes
+fi
+</pre>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong><code>valor muito grande para esta base de numeração</code></strong>
+<p><strong>O que aconteceu:</strong> um número com zero na frente (<code>08</code>, <code>09</code>) entrou numa conta e foi lido como octal. Acontece muito com horas e datas (<code>date +%H</code> às 8h dá <code>08</code>). <strong>Como resolver:</strong> <code>$(( 10#$x ))</code>. Veja <a href="aritmetica.html">Contas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>A regex aceita tudo (ou nada)</strong>
+<p><strong>O que aconteceu:</strong> a regex foi escrita entre aspas (<code>=~ "^[0-9]+$"</code>), e aí ela é comparada como texto literal; ou faltou o <code>^</code>/<code>$</code>, e <code>12abc</code> passa. <strong>Como resolver:</strong> regex sem aspas, ou numa variável: <code>re='^[0-9]+$'; [[ $x =~ $re ]]</code>. Veja <a href="regex.html">Regex com [[ =~ ]]</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O jogo não para de perguntar, mesmo com Ctrl+D</strong>
+<p><strong>O que aconteceu:</strong> o <code>read</code> falha no fim da entrada, mas o laço <code>while true</code> não olha para isso. <strong>Como resolver:</strong> <code>read … || exit</code>, como na etapa 6. Para sair agora, <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+</div>
+
+<div class="cenario">
+<strong>O número é sempre o mesmo</strong>
+<p><strong>O que aconteceu:</strong> a variável <code>ADIVINHA_SEMENTE</code> ficou exportada no seu terminal (<code>export ADIVINHA_SEMENTE=7</code>). <strong>Como confirmar:</strong> <code>declare -p ADIVINHA_SEMENTE</code>. <strong>Como resolver:</strong> <code>unset ADIVINHA_SEMENTE</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Aparece <code>^[[32m</code> no arquivo de log</strong>
+<p><strong>O que aconteceu:</strong> as cores foram ligadas sem o teste <code>[[ -t 1 ]]</code> e a saída foi para um arquivo. <strong>Como resolver:</strong> o teste da etapa 6, ou rode com <code>NO_COLOR=1 ./adivinha.sh</code>.</p>
+</div>
+
+<hr>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li><strong>Limite de tentativas:</strong> 4 no fácil, 7 no médio, 10 no difícil. Esgotou, perdeu.</li>
+  <li><strong>Esquentando/esfriando:</strong> em vez de "maior/menor", diga "quente" quando a diferença for menor que 5% do máximo. Dica: <code>dif=$(( palpite &gt; secreto ? palpite - secreto : secreto - palpite ))</code>.</li>
+  <li><strong>Placar com nomes:</strong> pergunte o nome do jogador e guarde <code>nível=tentativas=nome</code>.</li>
+  <li><strong>Inverta os papéis:</strong> você pensa no número e o script adivinha com busca binária, perguntando "maior, menor ou acertou?".</li>
+  <li><strong>Melhor sorteio:</strong> troque <code>RANDOM</code> por <code>SRANDOM</code> (32 bits, não aceita semente) quando não houver <code>ADIVINHA_SEMENTE</code>. <span class="versao">bash 5.1+</span></li>
+</ul>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Sorteio de 1 a 6</h3>
+<p>Complete para sortear um dado (1 a 6):</p>
+<div class="ex-code">dado=$(( RANDOM <input data-answer="% 6 + 1|%6+1|% 6+1|%6 + 1" aria-label="conta"> ))</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Na versão sem validação, por que digitar <code>secreto</code> vence o jogo?</p>
+<label><input type="radio" name="q2"> Porque o <code>read</code> lê o número secreto do arquivo.</label>
+<label><input type="radio" name="q2"> Porque palavras valem sempre 0.</label>
+<label><input type="radio" name="q2"> Porque dentro de <code>(( ))</code> a palavra é lida como o nome da variável <code>secreto</code>, e o número é comparado com ele mesmo.</label>
+<label><input type="radio" name="q2"> Porque o Bash ignora palavras na entrada.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Só dígitos</h3>
+<p>Complete a regex que aceita um ou mais dígitos e nada mais:</p>
+<div class="ex-code">[[ $palpite =~ <input data-answer="^[0-9]+$|^[[:digit:]]+$" aria-label="regex"> ]]</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Num menu <code>select op in sim não</code>, o usuário digita <code>sim</code> (a palavra). O que acontece?</p>
+<label><input type="radio" name="q4"> <code>op</code> recebe <code>sim</code>.</label>
+<label><input type="radio" name="q4"> <code>op</code> fica vazia e <code>REPLY</code> recebe <code>sim</code>; o select espera o número da opção.</label>
+<label><input type="radio" name="q4"> O script termina com erro.</label>
+<label><input type="radio" name="q4"> O menu escolhe a opção 1.</label>
+</div>
+
+<div class="exercise">
+<h3>5. Base 10</h3>
+<p>Complete para transformar <code>09</code> em 9 sem erro:</p>
+<div class="ex-code">n=$(( <input data-answer="10#$x|10#${x}" aria-label="expressão"> ))</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Para que serve o <code>[[ -t 1 ]]</code> antes de ligar as cores?</p>
+<label><input type="radio" name="q6"> Para não escrever sequências de escape quando a saída vai para um arquivo ou pipe.</label>
+<label><input type="radio" name="q6"> Para saber se o usuário digitou 1.</label>
+<label><input type="radio" name="q6"> Para esperar 1 segundo.</label>
+<label><input type="radio" name="q6"> Para testar se o arquivo 1 existe.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>$(( RANDOM % N + 1 ))</code> sorteia de 1 a N; <code>RANDOM=semente</code> torna o sorteio repetível para testes.</li>
+  <li><code>while true</code> + <code>break</code> para o laço principal; <code>continue</code> para descartar uma entrada.</li>
+  <li>Nunca faça conta com o que foi digitado sem validar: <code>[[ $x =~ ^[0-9]+$ ]]</code> e <code>10#$x</code>.</li>
+  <li><code>select</code> + <code>case</code> fazem um menu com repetição automática; <code>PS3</code> é a pergunta.</li>
+  <li>Estado que precisa sobreviver vai para um arquivo simples, lido com <code>IFS='=' read</code>.</li>
+  <li>Cores só com <code>[[ -t 1 ]]</code> e respeitando <code>NO_COLOR</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
