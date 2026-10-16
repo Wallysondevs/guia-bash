@@ -322,7 +322,7 @@ var NIVEIS = [
     var out = [], j = idx + 1;
     while (j < linhas.length && /^> ?/.test(linhas[j])) j++; // linhas de continuação
     for (; j < linhas.length; j++) {
-      if (/^(\$|#>) ?/.test(linhas[j])) break;
+      if (/^(\$|#>)( |$)/.test(linhas[j])) break;
       out.push(linhas[j].replace(/\s*«.*$/, ""));
     }
     return out;
@@ -427,7 +427,8 @@ var NIVEIS = [
         cmds[cmds.length - 1] += "\n" + mc[1];
         return;
       }
-      var m = /^(\$|#>) ?(.*)$/.exec(l);
+      var m = /^(\$|#>)(?: (.*)|())$/.exec(l);
+      if (m && m[2] == null) m[2] = "";
       ultimoCmd = !!m;
       if (m) {
         var root_ = m[1] === "#>", u = root_ ? "root" : user, home = root_ ? "/root" : homeUser;

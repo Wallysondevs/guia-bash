@@ -64,7 +64,7 @@ volta 2
 volta 3
 </pre>
 ```
-- `$ ` = comando digitado (vira `ana@notebook:~$`). `#> ` = como root.
+- `$ ` (com espaço) = comando digitado (vira `ana@notebook:~$`). Uma linha de saída que começa com `$` sem espaço (ex.: `$HOME`) é saída, não comando. `#> ` = como root.
 - `> ` **logo depois de um comando** = linha de continuação (o prompt secundário `PS2` do Bash). Use para comandos de várias linhas, exatamente como o Bash mostra.
 - O prompt acompanha `cd` (com aspas, `\ `, `~`, variáveis atribuídas antes na mesma sessão, `cd -`, `CDPATH`), `pushd` e `popd`, inclusive vários na mesma linha (`cd a && cd b`). Um `cd` cuja saída seguinte é `bash: cd: …` não muda a pasta. Não acompanha `cd` dentro de laços/funções. Pasta inicial: `data-cwd="~/scripts"`. `data-user`, `data-host`, `data-title` mudam a janela.
 - `«` inicia uma anotação (etiqueta laranja, não é copiada).
