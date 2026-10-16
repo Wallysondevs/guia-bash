@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Curingas — *, ? e [ ] para escolher arquivos | Guia Bash</title>
+<meta name="description" content="Aprenda os curingas do Bash (*, ?, [abc], [a-z], [!x], [[:digit:]]): quem expande é o Bash antes do comando rodar, o que acontece quando nada casa, arquivos ocultos, aspas que desligam o curinga, erros reais e missões no simulador.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Curingas</span></h1>
+
+<p class="intro">Curingas são caracteres especiais, como <code>*</code> e <code>?</code>, que funcionam como a carta coringa do baralho: valem por "qualquer coisa". Com eles você escreve <code>*.jpg</code> e o Bash entende "todos os arquivos que terminam em <code>.jpg</code>". O detalhe mais importante desta aula: <strong>quem faz essa troca é o Bash</strong>, antes de o comando rodar.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Os curingas <code>*</code>, <code>?</code> e <code>[ ]</code> (com faixas, negação e classes como <code>[[:digit:]]</code>).</li>
+  <li>Como ver, com <code>echo</code>, a lista que o Bash monta antes de chamar o comando.</li>
+  <li>O que acontece quando nada casa com o padrão, e por que isso cria arquivos chamados <code>*.txt</code>.</li>
+  <li>Por que os arquivos ocultos ficam de fora e como as aspas desligam o curinga.</li>
+  <li>Quais opções (<code>nullglob</code>, <code>globstar</code>, <code>extglob</code>) mudam esse comportamento.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: escolher arquivos sem digitar cada nome</h2>
+<p>A Ana voltou de viagem com fotos, um mapa e um roteiro numa pasta. Ela quer ver só as fotos, depois só as que têm número, depois mover tudo que é imagem para outra pasta. Digitar cada nome cansa e erra. Com curingas ela descreve um <strong>padrão</strong> ("começa com foto", "termina em .jpg") e o Bash encontra os nomes.</p>
+
+<p>Vamos criar a pasta de exemplo. O <code>touch</code> cria arquivos vazios (veja <a href="criar-copiar.html">Criar, Copiar e Mover</a>); aqui só os nomes importam:</p>
+
+<pre class="term">$ mkdir viagem
+$ cd viagem
+$ touch foto1.jpg foto2.jpg foto10.jpg fotoA.jpg foto3.png mapa.pdf roteiro.txt Roteiro-antigo.txt
+$ ls
+foto10.jpg  foto2.jpg  fotoA.jpg  Roteiro-antigo.txt
+foto1.jpg   foto3.png  mapa.pdf   roteiro.txt</pre>
+
+<p>Para repetir os exemplos no simulador, rode esses três comandos primeiro.</p>
+
+<hr>
+
+<h2>Quem expande o curinga é o Bash</h2>
+<p>Quando você digita <code>ls *.jpg</code>, o <code>ls</code> <strong>nunca vê</strong> o <code>*</code>. Acontece assim:</p>
+
+<pre class="syntax">1. você digita:         ls *.jpg
+2. o Bash procura na pasta os nomes que combinam com *.jpg
+3. o Bash reescreve:    ls foto10.jpg foto1.jpg foto2.jpg fotoA.jpg
+4. só agora o ls roda, recebendo 4 nomes comuns</pre>
+
+<p>Esse passo 2 se chama <strong>expansão de nomes de arquivo</strong> (em inglês, <em>pathname expansion</em> ou <em>globbing</em>; os padrões são chamados de <em>globs</em>). Como é o Bash que faz, os curingas funcionam com <strong>qualquer</strong> comando: <code>ls</code>, <code>cp</code>, <code>rm</code>, <code>wc</code>, <code>echo</code>…</p>
+
+<h3>A prova com <code>echo</code></h3>
+<p>O <code>echo</code> só repete os argumentos que recebeu. Então ele é perfeito para ver o resultado da expansão:</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo *.jpg
+foto10.jpg foto1.jpg foto2.jpg fotoA.jpg     « o echo recebeu 4 nomes, não "*.jpg"</pre>
+
+<h3>A prova com <code>set -x</code></h3>
+<p>Com <code>set -x</code> ligado, o Bash mostra, numa linha começando com <code>+</code>, o comando exatamente como ele vai rodar, já expandido:</p>
+
+<pre class="term">$ set -x
+$ ls *.txt
++ ls --color=auto frutas.txt                 « o Bash trocou *.txt por frutas.txt
+frutas.txt
+$ set +x
++ set +x</pre>
+
+<p>O <code>--color=auto</code> apareceu porque <code>ls</code> é um <em>alias</em> definido no <code>.bashrc</code> da Ana (veja <a href="ls.html">Listar</a>). <code>set +x</code> desliga o modo. Ele é estudado em <a href="depuracao.html">Depurar</a>.</p>
+
+<div class="tip">
+<strong>Hábito de ouro: teste com echo antes</strong>
+<p>Antes de um <code>rm *.log</code> ou <code>mv *.jpg fotos/</code>, rode o mesmo comando com <code>echo</code> na frente: <code>echo rm *.log</code>. Você vê exatamente quais arquivos seriam afetados, sem afetar nenhum.</p>
+</div>
+
+<hr>
+
+<h2><code>*</code>: qualquer quantidade de caracteres</h2>
+<p>O asterisco casa com <strong>qualquer sequência</strong> de caracteres, inclusive com <strong>nenhum</strong> caractere.</p>
+
+<dl class="anatomy">
+  <dt>foto</dt><dd>Texto fixo: o nome tem que começar exatamente com "foto".</dd>
+  <dt>*</dt><dd>Depois, qualquer coisa (ou nada).</dd>
+</dl>
+
+<pre class="term" data-cwd="~/viagem">$ echo *
+foto10.jpg foto1.jpg foto2.jpg foto3.png fotoA.jpg mapa.pdf Roteiro-antigo.txt roteiro.txt
+$ echo foto*
+foto10.jpg foto1.jpg foto2.jpg foto3.png fotoA.jpg     « começam com "foto"
+$ echo *a*
+mapa.pdf Roteiro-antigo.txt                            « têm um "a" em qualquer lugar
+$ echo *roteiro.txt
+roteiro.txt                                            « aqui o * casou com nada</pre>
+
+<p>Em <code>*a*</code>, repare que <code>fotoA.jpg</code> ficou de fora: <code>A</code> maiúsculo e <code>a</code> minúsculo são letras diferentes para o Bash. E <code>Roteiro-antigo.txt</code> entrou por causa do "a" de "antigo".</p>
+
+<div class="note">
+<strong>Por que foto10 vem antes de foto1?</strong>
+<p>O Bash devolve a lista em ordem alfabética, seguindo o idioma do sistema (<code>LANG=pt_BR.UTF-8</code>). Nessa ordem, a pontuação é deixada de lado na primeira comparação: <code>foto10.jpg</code> é comparado como "foto10jpg" e <code>foto1.jpg</code> como "foto1jpg". Na quinta posição, "0" vem antes de "j". Por isso numerar com zero à esquerda (<code>foto01</code>, <code>foto02</code>…) deixa tudo em ordem; as <a href="chaves.html">chaves</a> fazem isso com <code>{01..10}</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>?</code>: exatamente um caractere</h2>
+<p>A interrogação vale por <strong>um</strong> caractere, qualquer um. Nem zero, nem dois.</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo foto?.jpg
+foto1.jpg foto2.jpg fotoA.jpg      « um caractere entre "foto" e ".jpg"
+$ echo foto??.jpg
+foto10.jpg                         « dois caracteres
+$ echo ?????.*
+foto1.jpg foto2.jpg foto3.png fotoA.jpg     « nome com 5 caracteres antes do ponto</pre>
+
+<p>Use <code>?</code> quando o <strong>tamanho</strong> importa, por exemplo para pegar <code>foto1</code> a <code>foto9</code> sem pegar <code>foto10</code>.</p>
+
+<hr>
+
+<h2><code>[ ]</code>: um caractere de uma lista</h2>
+<p>Os colchetes também valem por <strong>um caractere só</strong>, mas você escolhe quais são aceitos.</p>
+
+<dl class="anatomy">
+  <dt>foto</dt><dd>Texto fixo.</dd>
+  <dt>[12]</dt><dd>Um caractere que seja <code>1</code> ou <code>2</code>.</dd>
+  <dt>.jpg</dt><dd>Texto fixo.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/viagem">$ echo foto[12].jpg
+foto1.jpg foto2.jpg
+$ echo [mr]*
+mapa.pdf roteiro.txt               « começa com m ou r (minúsculos)</pre>
+
+<h3>Faixas: <code>[1-3]</code>, <code>[a-z]</code></h3>
+<p>Um hífen entre dois caracteres indica uma faixa: <code>[1-3]</code> é o mesmo que <code>[123]</code>; <code>[0-9]</code> é qualquer algarismo; <code>[a-z]</code> é qualquer letra minúscula sem acento.</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo foto[1-3].*
+foto1.jpg foto2.jpg foto3.png</pre>
+
+<div class="note">
+<strong>[a-z] não pega maiúsculas no Bash moderno</strong>
+<p>No Bash 5 (e no 4.3 com a opção ligada), as faixas seguem a tabela ASCII: <code>[a-z]</code> é só de "a" a "z" minúsculos e <code>[A-Z]</code> só maiúsculas, sem acentos. Quem controla isso é a opção <code>globasciiranges</code>, ligada por padrão. Versões antigas seguiam o idioma, e <code>[a-z]</code> podia incluir maiúsculas. Para não depender disso, use as classes (logo abaixo).</p>
+</div>
+
+<h3>Negação: <code>[!x]</code> ou <code>[^x]</code></h3>
+<p>Um <code>!</code> logo depois do <code>[</code> inverte a lista: "um caractere que <strong>não</strong> seja estes". O Bash também aceita <code>^</code> no lugar do <code>!</code>; o <code>!</code> é o padrão POSIX, funciona em qualquer shell.</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo foto[!0-9].jpg
+fotoA.jpg                          « depois de "foto", algo que não é algarismo
+$ echo foto[^0-9].jpg
+fotoA.jpg                          « mesma coisa</pre>
+
+<h3>Classes: <code>[[:digit:]]</code> e companhia</h3>
+<p>Dentro dos colchetes você pode usar nomes de <strong>classes</strong> de caracteres. Repare nos colchetes duplos: os de fora são o curinga, os de dentro (com dois-pontos) são o nome da classe.</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo foto[[:digit:]].*
+foto1.jpg foto2.jpg foto3.png      « um algarismo depois de "foto"
+$ echo [[:upper:]]*
+Roteiro-antigo.txt                 « começa com letra maiúscula</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Classe</th><th>Casa com</th><th>Mais ou menos igual a</th></tr>
+<tr><td><code>[[:digit:]]</code></td><td>Um algarismo</td><td><code>[0-9]</code></td></tr>
+<tr><td><code>[[:alpha:]]</code></td><td>Uma letra, <strong>inclusive acentuada</strong></td><td><code>[a-zA-Z]</code> + acentos</td></tr>
+<tr><td><code>[[:upper:]]</code></td><td>Uma letra maiúscula (inclusive <code>Á</code>)</td><td><code>[A-Z]</code> + acentos</td></tr>
+<tr><td><code>[[:lower:]]</code></td><td>Uma letra minúscula</td><td><code>[a-z]</code> + acentos</td></tr>
+<tr><td><code>[[:alnum:]]</code></td><td>Letra ou algarismo</td><td><code>[a-zA-Z0-9]</code> + acentos</td></tr>
+<tr><td><code>[[:space:]]</code></td><td>Espaço, Tab…</td><td></td></tr>
+<tr><td><code>[[:punct:]]</code></td><td>Pontuação (<code>. , - _ !</code>…)</td><td></td></tr>
+</table>
+</div>
+
+<p>Na pasta pessoal da Ana, a diferença aparece com o "Á" de "Área de trabalho":</p>
+
+<pre class="term">$ echo [A-F]*
+Documentos Downloads               « "Área" não entra: Á não está entre A e F
+$ echo [[:upper:]]*
+Área de trabalho Documentos Downloads Imagens Modelos Música Público Vídeos</pre>
+
+<div class="try" data-setup="mkdir viagem;;cd viagem;;touch foto1.jpg foto2.jpg foto10.jpg fotoA.jpg foto3.png mapa.pdf roteiro.txt Roteiro-antigo.txt" data-goal="ran:^\s*echo\b,outre:^foto1\.jpg foto2\.jpg foto3\.png$" data-solucao="echo foto[0-9].*">
+<p class="try-task"><strong>Missão:</strong> você está na pasta <code>viagem</code>. Usando <code>echo</code> e curingas, mostre só as fotos numeradas com <strong>um único algarismo</strong>, de qualquer extensão: <code>foto1.jpg foto2.jpg foto3.png</code> (sem <code>foto10.jpg</code> e sem <code>fotoA.jpg</code>).</p>
+</div>
+
+<hr>
+
+<h2>Curingas funcionam com qualquer comando</h2>
+<p>Como a expansão é do Bash, o mesmo padrão serve para mover, copiar, apagar, contar. Na pasta <code>Downloads</code>, a Ana separa os arquivos compactados:</p>
+
+<pre class="term" data-cwd="~/Downloads">$ ls
+foto.jpg          manual.pdf  ubuntu-26.04-desktop-amd64.iso
+fotos-viagem.zip  musica.mp3
+$ mkdir compactados
+$ echo mv *.zip *.iso compactados/
+mv fotos-viagem.zip ubuntu-26.04-desktop-amd64.iso compactados/    « conferindo antes
+$ mv *.zip *.iso compactados/
+$ ls
+compactados  foto.jpg  manual.pdf  musica.mp3
+$ ls compactados
+fotos-viagem.zip  ubuntu-26.04-desktop-amd64.iso
+$ mv compactados/* .               « desfazendo, para os próximos exemplos
+$ rmdir compactados</pre>
+
+<dl class="anatomy">
+  <dt>mv</dt><dd>Move arquivos. Quando recebe vários nomes, o <strong>último</strong> é a pasta de destino.</dd>
+  <dt>*.zip *.iso</dt><dd>Dois padrões. O Bash expande cada um e junta tudo numa lista só.</dd>
+  <dt>compactados/</dt><dd>O destino. A <code>/</code> no fim deixa claro que é uma pasta.</dd>
+</dl>
+
+<div class="warning">
+<strong>Um espaço a mais pode ser uma tragédia</strong>
+<p><code>rm *.bak</code> apaga os arquivos que terminam em <code>.bak</code>. Já <code>rm * .bak</code> (com espaço) são dois argumentos: <code>*</code>, que vira <strong>todos</strong> os arquivos da pasta, e <code>.bak</code>. Por isso o hábito do <code>echo rm …</code> antes. Mais sobre apagar com segurança em <a href="remover.html">Apagar com Segurança</a>.</p>
+</div>
+
+<h3>Nomes com espaço continuam inteiros</h3>
+<p>Um bom motivo para usar curingas em vez de copiar a saída do <code>ls</code>: cada nome encontrado vira <strong>um</strong> argumento, mesmo que tenha espaços.</p>
+
+<pre class="term" data-cwd="~/viagem">$ touch "minha foto.jpg"
+$ for f in *.jpg; do echo "[$f]"; done
+[foto10.jpg]
+[foto1.jpg]
+[foto2.jpg]
+[fotoA.jpg]
+[minha foto.jpg]                   « um item só, com o espaço
+$ rm "minha foto.jpg"              « desfazendo, para os próximos exemplos</pre>
+
+<p>O <code>for</code> repete o <code>echo</code> para cada nome; os colchetes no texto só mostram onde cada item começa e termina. Laços são assunto de <a href="for.html">for</a>, e o porquê de não usar <code>$(ls)</code> está em <a href="boas-praticas.html">Boas Práticas</a>.</p>
+
+<div class="try" data-setup="mkdir bagunca;;cd bagunca;;touch foto1.jpg foto2.jpg foto10.jpg tela.png notas.txt lista.txt musica.mp3" data-goal="file:~/bagunca/imagens/foto1.jpg,file:~/bagunca/imagens/foto10.jpg,file:~/bagunca/imagens/tela.png,absent:~/bagunca/foto2.jpg,file:~/bagunca/notas.txt,file:~/bagunca/musica.mp3" data-solucao="mkdir imagens;;mv *.jpg *.png imagens/">
+<p class="try-task"><strong>Missão:</strong> você está na pasta <code>bagunca</code>. Crie a pasta <code>imagens</code> e mova para ela, com <strong>um único</strong> <code>mv</code>, todos os <code>.jpg</code> e <code>.png</code>. Os <code>.txt</code> e o <code>.mp3</code> devem ficar onde estão. Dica: confira primeiro com <code>echo mv …</code>.</p>
+</div>
+
+<hr>
+
+<h2>Curingas e pastas</h2>
+<p>Um curinga casa com <strong>uma parte</strong> do caminho por vez: o <code>*</code> nunca "atravessa" uma barra <code>/</code>. Para olhar dentro de pastas, escreva a barra no padrão:</p>
+
+<pre class="term">$ echo */*.jpg
+Downloads/foto.jpg Imagens/ferias.jpg viagem/foto10.jpg viagem/foto1.jpg viagem/foto2.jpg viagem/fotoA.jpg
+$ echo */
+Área de trabalho/ Documentos/ Downloads/ Imagens/ Modelos/ Música/ Público/ viagem/ Vídeos/
+$ echo */*/*/*.html
+Documentos/projetos/site/index.html          « três níveis de pasta</pre>
+
+<p>Um padrão terminado em <code>/</code> (como <code>*/</code>) só casa com <strong>pastas</strong>.</p>
+
+<h3><code>ls</code> com curinga que pega pastas</h3>
+<p>Quando o Bash entrega uma pasta ao <code>ls</code>, ele lista o <strong>conteúdo</strong> dela. Por isso <code>ls D*</code> parece estranho:</p>
+
+<pre class="term">$ ls D*
+Documentos:
+acesso.log  alunos.csv  notas.txt  projetos  relatorio.odt
+
+Downloads:
+foto.jpg          manual.pdf  ubuntu-26.04-desktop-amd64.iso
+fotos-viagem.zip  musica.mp3
+$ ls -d D*
+Documentos  Downloads              « -d: mostre as pastas, não o que há dentro</pre>
+
+<hr>
+
+<h2>Quando nada casa: o padrão fica como está</h2>
+<p>Se nenhum arquivo combina com o padrão, o Bash <strong>não</strong> dá erro. Ele simplesmente deixa o padrão como foi digitado, com o <code>*</code> e tudo, e passa assim para o comando:</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo *.doc
+*.doc                              « nenhum .doc: o echo recebeu o texto "*.doc"
+$ ls *.JPG
+ls: não foi possível acessar '*.JPG': Arquivo ou diretório inexistente
+$ echo $?
+2</pre>
+
+<p>No segundo caso, quem reclamou foi o <code>ls</code>: ele recebeu o nome <code>*.JPG</code> literalmente e foi procurar um arquivo com esse nome estranho. (Não havia <code>.JPG</code> em maiúsculas; os curingas diferenciam maiúsculas de minúsculas.) O código <code>2</code> é o jeito do <code>ls</code> dizer "problema sério". O <code>rm</code> faz o mesmo:</p>
+
+<pre class="term">$ rm *.tmp
+rm: não foi possível remover '*.tmp': Arquivo ou diretório inexistente
+$ echo $?
+1</pre>
+
+<h3>A pegadinha: um arquivo chamado <code>*.doc</code></h3>
+<p>Com um comando que <strong>cria</strong> arquivos, o padrão literal vira um nome de arquivo de verdade:</p>
+
+<pre class="term" data-cwd="~/viagem">$ touch *.doc
+$ ls
+'*.doc'       foto1.jpg   foto3.png   mapa.pdf             roteiro.txt
+ foto10.jpg   foto2.jpg   fotoA.jpg   Roteiro-antigo.txt
+$ rm '*.doc'                       « aspas: apague o arquivo chamado *.doc, e só ele</pre>
+
+<p>O <code>ls</code> mostra <code>'*.doc'</code> entre aspas porque o nome tem um caractere especial. Para apagá-lo, as aspas são <strong>obrigatórias</strong>: um <code>rm *.doc</code> sem aspas também funcionaria aqui (o padrão casaria com o próprio arquivo <code>*.doc</code>), mas, se houvesse outros <code>.doc</code> na pasta, todos iriam junto.</p>
+
+<p>Se você prefere outro comportamento, o Bash tem duas opções (ligadas com <code>shopt -s</code>, apresentadas mais abaixo):</p>
+
+<pre class="term">$ shopt -s nullglob
+$ echo *.xyz
+                                   « nullglob: sem correspondência, o padrão some
+$ shopt -u nullglob
+$ shopt -s failglob
+$ echo *.xyz
+bash: sem correspondência: *.xyz   « failglob: vira erro, e o comando nem roda
+$ echo $?
+1
+$ shopt -u failglob</pre>
+
+<hr>
+
+<h2>Arquivos ocultos ficam de fora</h2>
+<p>No Linux, um nome que começa com ponto (<code>.bashrc</code>, <code>.profile</code>) é "oculto". Os curingas respeitam isso: <code>*</code> e <code>?</code> <strong>não casam com o ponto inicial</strong>. Para pegar ocultos, o padrão tem que começar com um ponto escrito por você:</p>
+
+<pre class="term">$ echo *
+Área de trabalho Documentos Downloads frutas.txt Imagens Modelos Música Público viagem Vídeos
+$ echo .*
+.bash_history .bashrc .profile</pre>
+
+<p>Repare que <code>.*</code> não trouxe <code>.</code> (a pasta atual) nem <code>..</code> (a pasta de cima). Isso é novidade do <span class="versao">bash 5.2+</span> (opção <code>globskipdots</code>). Em versões antigas, <code>.*</code> incluía os dois, e um <code>rm -r .*</code> tentava apagar a pasta de cima! Se o seu Bash for mais velho, use <code>.[!.]*</code>.</p>
+
+<p>O mesmo vale dentro de pastas: <code>*.jpg</code> não pega <code>.escondido.jpg</code>. Para os curingas incluírem ocultos, existe a opção <code>dotglob</code>.</p>
+
+<hr>
+
+<h2>Aspas desligam o curinga</h2>
+<p>Entre aspas, simples ou duplas, o <code>*</code>, o <code>?</code> e os <code>[ ]</code> são caracteres comuns. A barra invertida desliga um caractere só:</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo *.jpg
+foto10.jpg foto1.jpg foto2.jpg fotoA.jpg
+$ echo "*.jpg"
+*.jpg
+$ echo '*.jpg'
+*.jpg
+$ echo \*.jpg
+*.jpg</pre>
+
+<p>Isso é útil quando o <strong>programa</strong> precisa receber o padrão, e não a lista. O <code>find</code> é o exemplo clássico: em <code>find . -name '*.jpg'</code>, as aspas fazem o <code>*</code> chegar intacto ao <code>find</code>, que procura em todas as subpastas (veja <a href="ferramentas-texto.html">grep, sed, awk e cia.</a>). E é por isso que <code>ls "*.jpg"</code> dá erro: o <code>ls</code> procura um arquivo chamado, literalmente, <code>*.jpg</code>.</p>
+
+<p>Com variáveis acontece a mesma coisa. Sem aspas, o valor da variável passa pelos curingas; com aspas, não:</p>
+
+<pre class="term">$ padrao="*.txt"
+$ echo $padrao
+frutas.txt                         « sem aspas: o Bash expandiu o * do valor
+$ echo "$padrao"
+*.txt                              « com aspas: o texto exato</pre>
+
+<p>É um dos motivos para escrever <code>"$var"</code> sempre: um valor com <code>*</code> sem aspas pode virar uma lista de arquivos sem você perceber. A aula <a href="aspas.html">Aspas e Escapes</a> detalha tudo isso.</p>
+
+<hr>
+
+<h2>Opções que mudam os curingas</h2>
+<p>O comando <code>shopt</code> (<em>shell options</em>) liga (<code>-s</code>, <em>set</em>) e desliga (<code>-u</code>, <em>unset</em>) comportamentos do Bash. Estas são as que mexem com curingas. Aqui fica só a apresentação; o assunto completo está em <a href="shopt.html">Opções do Shell</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Padrão</th><th>O que faz quando ligada</th></tr>
+<tr><td><code>nullglob</code></td><td>desligada</td><td>Padrão sem correspondência vira <strong>nada</strong> (em vez de ficar literal).</td></tr>
+<tr><td><code>failglob</code></td><td>desligada</td><td>Padrão sem correspondência é <strong>erro</strong>, e o comando não roda.</td></tr>
+<tr><td><code>dotglob</code></td><td>desligada</td><td><code>*</code> e <code>?</code> passam a incluir os ocultos.</td></tr>
+<tr><td><code>nocaseglob</code></td><td>desligada</td><td>Ignora maiúsculas/minúsculas: <code>*.jpg</code> pega <code>FOTO.JPG</code>.</td></tr>
+<tr><td><code>globstar</code> <span class="versao">bash 4.0+</span></td><td>desligada</td><td><code>**</code> entra em todas as subpastas.</td></tr>
+<tr><td><code>extglob</code></td><td>desligada*</td><td>Padrões estendidos como <code>!(*.iso)</code>, "tudo menos .iso".</td></tr>
+</table>
+</div>
+
+<p>* Em muitos sistemas, o pacote <code>bash-completion</code> liga o <code>extglob</code> nos terminais interativos; em scripts, ele começa desligado.</p>
+
+<p>Um gostinho do <code>globstar</code> e do <code>extglob</code>:</p>
+
+<pre class="term">$ shopt -s globstar
+$ echo **/*.html
+Documentos/projetos/site/index.html      « achou em qualquer profundidade
+$ shopt -s extglob
+$ echo Downloads/!(*.iso)
+Downloads/foto.jpg Downloads/fotos-viagem.zip Downloads/manual.pdf Downloads/musica.mp3</pre>
+
+<p>Para ver como uma opção está agora, rode <code>shopt</code> seguido do nome:</p>
+
+<pre class="term">$ shopt nullglob dotglob globstar
+nullglob                off
+dotglob                 off
+globstar                off</pre>
+
+<hr>
+
+<h2>Curingas ou chaves?</h2>
+<p>As <a href="chaves.html">chaves</a> (<code>{jpg,png}</code>, <code>{1..5}</code>) se parecem com curingas, mas são outra coisa: elas <strong>geram</strong> texto, existindo arquivo ou não. Os curingas <strong>procuram</strong> arquivos que existem.</p>
+
+<pre class="term" data-cwd="~/viagem">$ echo foto[1-5].jpg
+foto1.jpg foto2.jpg                       « só os que existem
+$ echo foto{1..5}.jpg
+foto1.jpg foto2.jpg foto3.jpg foto4.jpg foto5.jpg   « gera os 5, existam ou não</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quero…</th><th>Use</th><th>Exemplo</th></tr>
+<tr><td>Qualquer nome com certo começo/fim</td><td><code>*</code></td><td><code>ls *.pdf</code></td></tr>
+<tr><td>Nomes com tamanho certo</td><td><code>?</code></td><td><code>ls foto?.jpg</code></td></tr>
+<tr><td>Um caractere entre alguns</td><td><code>[ ]</code></td><td><code>ls foto[1-3].*</code></td></tr>
+<tr><td>Um caractere de um tipo (algarismo, maiúscula…)</td><td><code>[[:classe:]]</code></td><td><code>ls [[:upper:]]*</code></td></tr>
+<tr><td>Criar nomes que ainda não existem</td><td>chaves</td><td><code>touch nota{1..3}.txt</code></td></tr>
+<tr><td>Procurar em todas as subpastas</td><td><code>**</code> (globstar) ou <code>find</code></td><td><code>find . -name '*.jpg'</code></td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="ran:^\s*echo\s+\.,outre:^\.bash_history \.bashrc \.profile$" data-solucao="echo .*">
+<p class="try-task"><strong>Missão:</strong> na sua pasta pessoal, use <code>echo</code> e um curinga para mostrar <strong>só os arquivos ocultos</strong> (os que começam com ponto). Depois compare com <code>echo *</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"não foi possível acessar '*.xyz'"</strong>
+<pre class="term">$ ls *.xyz
+ls: não foi possível acessar '*.xyz': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> nenhum arquivo casou com o padrão; o Bash passou o texto <code>*.xyz</code> literalmente, e o <code>ls</code> não achou arquivo com esse nome.</p>
+<p><strong>Como confirmar:</strong> <code>echo *.xyz</code>. Se aparecer o próprio padrão, nada casou.</p>
+<p><strong>Como resolver:</strong> confira a pasta (<code>pwd</code>), as maiúsculas (<code>*.JPG</code> × <code>*.jpg</code>) e se o padrão não ficou entre aspas.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu um arquivo chamado <code>*.txt</code></strong>
+<p><strong>O que aconteceu:</strong> você rodou algo como <code>touch *.txt</code> ou <code>echo oi &gt; *.txt</code> numa pasta sem nenhum <code>.txt</code>. O padrão ficou literal e virou nome.</p>
+<p><strong>Como resolver:</strong> apague com aspas: <code>rm '*.txt'</code>. Para criar vários arquivos, use chaves: <code>touch nota{1..3}.txt</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Lista de argumentos muito longa"</strong>
+<pre class="term" data-cwd="~/muitos">$ rm *.log
+bash: /usr/bin/rm: Lista de argumentos muito longa
+$ echo $?
+126</pre>
+<p><strong>O que aconteceu:</strong> a pasta tinha 40 mil arquivos <code>.log</code>. O Bash expandiu o padrão sem problema, mas a lista ficou grande demais para o sistema entregar a um programa externo (o limite é de alguns megabytes de argumentos). O código <code>126</code> quer dizer "o comando não pôde ser executado".</p>
+<p><strong>Como resolver:</strong> deixe outro programa procurar os arquivos, como o <code>find</code>: <code>find . -name '*.log' -delete</code>. Ou use o <code>printf</code>, que é interno do Bash (não tem esse limite), junto com o <code>xargs</code>, que divide a lista em pedaços:</p>
+<pre class="term" data-cwd="~/muitos">$ printf '%s\0' *.log | xargs -0 rm
+$ echo $?
+0</pre>
+</div>
+
+<div class="cenario">
+<strong>O curinga pegou pastas junto</strong>
+<pre class="term">$ cp * /tmp
+cp: -r não especificado; omitindo o diretório 'Área de trabalho'
+cp: -r não especificado; omitindo o diretório 'Documentos'
+…                                  « encurtado: uma linha para cada pasta
+$ echo $?
+1</pre>
+<p><strong>O que aconteceu:</strong> o <code>*</code> casa com <strong>qualquer</strong> nome, inclusive de pastas. O <code>cp</code> copiou os arquivos e reclamou das pastas.</p>
+<p><strong>Como resolver:</strong> seja específico (<code>cp *.txt /tmp</code>) ou, se queria as pastas também, use <code>cp -r</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O padrão não pegou arquivos com maiúsculas ou ocultos</strong>
+<p><strong>O que aconteceu:</strong> <code>*.jpg</code> não casa com <code>FOTO.JPG</code>, e <code>*</code> não casa com <code>.config</code>.</p>
+<p><strong>Como resolver:</strong> liste as variações (<code>*.jpg *.JPG</code>, ou <code>*.[jJ][pP][gG]</code>), use <code>.*</code> para ocultos, ou as opções <code>nocaseglob</code> e <code>dotglob</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Padrão</th><th>Casa com</th><th>Exemplo → resultado na pasta viagem</th></tr>
+<tr><td><code>*</code></td><td>Qualquer sequência, inclusive vazia</td><td><code>*.png</code> → <code>foto3.png</code></td></tr>
+<tr><td><code>?</code></td><td>Exatamente um caractere</td><td><code>foto??.jpg</code> → <code>foto10.jpg</code></td></tr>
+<tr><td><code>[abc]</code></td><td>Um caractere da lista</td><td><code>[mr]*</code> → <code>mapa.pdf roteiro.txt</code></td></tr>
+<tr><td><code>[a-z]</code></td><td>Um caractere da faixa</td><td><code>foto[1-3].*</code> → <code>foto1.jpg foto2.jpg foto3.png</code></td></tr>
+<tr><td><code>[!x]</code> / <code>[^x]</code></td><td>Um caractere que <strong>não</strong> está na lista</td><td><code>foto[!0-9].jpg</code> → <code>fotoA.jpg</code></td></tr>
+<tr><td><code>[[:digit:]]</code></td><td>Um caractere da classe</td><td><code>[[:upper:]]*</code> → <code>Roteiro-antigo.txt</code></td></tr>
+<tr><td><code>.*</code></td><td>Ocultos (sem <code>.</code> e <code>..</code> no 5.2+)</td><td><code>.*</code> → <code>.bash_history .bashrc .profile</code> (em <code>~</code>)</td></tr>
+<tr><td><code>*/</code></td><td>Só pastas</td><td><code>ls -d */</code></td></tr>
+<tr><td><code>'*'</code> <code>"*"</code> <code>\*</code></td><td>O caractere <code>*</code> literal</td><td><code>rm '*.doc'</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Todos os PDFs</h3>
+<p>Complete para listar todos os arquivos terminados em <code>.pdf</code>:</p>
+<div class="ex-code">ls <input data-answer="*.pdf" aria-label="padrão"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Exatamente um caractere</h3>
+<p>Complete para pegar <code>nota1.txt</code> até <code>nota9.txt</code>, mas <strong>não</strong> <code>nota10.txt</code>:</p>
+<div class="ex-code">ls nota<input data-answer="?|[0-9]|[1-9]|[[:digit:]]" aria-label="curinga">.txt</div>
+</div>
+
+<div class="exercise">
+<h3>3. Ver a expansão</h3>
+<p>Qual comando mostra, sem fazer nada com os arquivos, a lista que o Bash monta para <code>*.log</code>?</p>
+<div class="ex-code"><input data-answer="echo" aria-label="comando"> *.log</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Na pasta não existe nenhum <code>.bak</code>. O que o <code>echo *.bak</code> mostra?</p>
+<label><input type="radio" name="q4"> Nada, uma linha vazia.</label>
+<label><input type="radio" name="q4"> <code>*.bak</code></label>
+<label><input type="radio" name="q4"> <code>bash: sem correspondência: *.bak</code></label>
+<label><input type="radio" name="q4"> Todos os arquivos da pasta.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Em <code>ls *.jpg</code>, em que momento o <code>*</code> é trocado pelos nomes?</p>
+<label><input type="radio" name="q5"> Quando o <code>ls</code> abre a pasta.</label>
+<label><input type="radio" name="q5"> Depois que o <code>ls</code> termina.</label>
+<label><input type="radio" name="q5"> Antes de o <code>ls</code> rodar, pelo Bash.</label>
+<label><input type="radio" name="q5"> Nunca: o <code>ls</code> recebe o <code>*</code> e procura sozinho.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Por que <code>echo *</code> não mostra o <code>.bashrc</code>?</p>
+<label><input type="radio" name="q6"> Porque <code>*</code> não casa com nomes que começam com ponto.</label>
+<label><input type="radio" name="q6"> Porque o <code>.bashrc</code> é protegido pelo sistema.</label>
+<label><input type="radio" name="q6"> Porque o <code>echo</code> esconde arquivos de configuração.</label>
+<label><input type="radio" name="q6"> Porque o <code>.bashrc</code> não é um arquivo de verdade.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">7. O que <code>rm "*.tmp"</code> (com aspas) apaga?</p>
+<label><input type="radio" name="q7"> Todos os arquivos terminados em <code>.tmp</code>.</label>
+<label><input type="radio" name="q7"> Todos os arquivos da pasta.</label>
+<label><input type="radio" name="q7"> Nada: aspas não são permitidas no <code>rm</code>.</label>
+<label><input type="radio" name="q7"> Só um arquivo chamado, literalmente, <code>*.tmp</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>*</code> = qualquer coisa (até nada); <code>?</code> = um caractere; <code>[ ]</code> = um caractere da lista, faixa (<code>[0-9]</code>), negação (<code>[!x]</code>) ou classe (<code>[[:digit:]]</code>).</li>
+  <li>Quem expande é o <strong>Bash</strong>, antes de o comando rodar. Veja a lista com <code>echo</code> ou <code>set -x</code>.</li>
+  <li>Se nada casa, o padrão fica literal: o <code>ls</code> reclama e o <code>touch</code> cria um arquivo chamado <code>*.txt</code>.</li>
+  <li>Ocultos ficam de fora (use <code>.*</code>); maiúsculas e minúsculas são diferentes.</li>
+  <li>Aspas e <code>\</code> desligam o curinga; por isso <code>"$var"</code> é mais seguro.</li>
+  <li><code>nullglob</code>, <code>failglob</code>, <code>dotglob</code>, <code>globstar</code> e <code>extglob</code> mudam as regras: veja <a href="shopt.html">Opções do Shell</a>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
