@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Opções do Shell — set, shopt, nullglob, globstar e extglob | Guia Bash</title>
+<meta name="description" content="As opções que mudam o comportamento do Bash: set (-e -u -x -f -C, pipefail, noclobber, posix, $-) e shopt (nullglob, failglob, dotglob, globstar, extglob, nocasematch, autocd, cdspell…), com saídas reais e onde ativar cada uma.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Opções do Shell</span></h1>
+
+<p class="intro">O Bash tem dezenas de "interruptores" que mudam o jeito como ele trabalha: parar no primeiro erro, mostrar cada comando antes de rodar, fazer o <code>*</code> entrar em subpastas, ignorar maiúsculas… Eles se ligam e desligam com dois comandos internos: <code>set</code> e <code>shopt</code>. Nesta aula você conhece os dois e as opções que mais fazem diferença no dia a dia.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre <code>set</code> e <code>shopt</code>, e como ligar, desligar, listar e consultar opções.</li>
+  <li>As opções do <code>set</code>: <code>-e</code>, <code>-u</code>, <code>-x</code>, <code>-f</code>, <code>-C</code>, <code>pipefail</code>, <code>posix</code>, <code>vi</code>, e a variável <code>$-</code>.</li>
+  <li>As opções de curingas: <code>nullglob</code>, <code>failglob</code>, <code>dotglob</code>, <code>globstar</code>, <code>extglob</code>, <code>nocaseglob</code>.</li>
+  <li>Outras úteis: <code>nocasematch</code>, <code>autocd</code>, <code>cdspell</code>, <code>histappend</code>, <code>lastpipe</code>, <code>inherit_errexit</code>…</li>
+  <li>Onde ativar cada uma: no script ou no <code>~/.bashrc</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Dois painéis de interruptores</h2>
+<p>Pense no quadro de luz de uma casa: cada disjuntor liga ou desliga uma parte. O Bash tem <strong>dois quadros</strong>, por motivos históricos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>set</code></th><th><code>shopt</code></th></tr>
+<tr><td>Origem</td><td>Opções antigas, a maioria do padrão POSIX (valem também no <code>sh</code>)</td><td>Opções só do Bash (<em>shell options</em>)</td></tr>
+<tr><td>Ligar</td><td><code>set -x</code> ou <code>set -o xtrace</code></td><td><code>shopt -s globstar</code> (<em>set</em>)</td></tr>
+<tr><td>Desligar</td><td><code>set +x</code> ou <code>set +o xtrace</code></td><td><code>shopt -u globstar</code> (<em>unset</em>)</td></tr>
+<tr><td>Ver todas</td><td><code>set -o</code></td><td><code>shopt</code></td></tr>
+<tr><td>Ver em forma de comando</td><td><code>set +o</code></td><td><code>shopt -p</code> (<em>print</em>)</td></tr>
+<tr><td>Testar uma (sem mostrar)</td><td><code>[[ -o xtrace ]]</code></td><td><code>shopt -q globstar</code> (<em>quiet</em>)</td></tr>
+</table>
+</div>
+
+<p>Repare na lógica "ao contrário" do <code>set</code>: <strong>menos liga</strong> (<code>-x</code>) e <strong>mais desliga</strong> (<code>+x</code>). Vem de quando as opções eram letras na linha de comando do <code>sh</code>. Acostume-se: <code>set -e</code> liga, <code>set +e</code> desliga.</p>
+
+<hr>
+
+<h2>Ver e consultar opções</h2>
+
+<pre class="term">$ set -o | head -12
+allexport      	off
+braceexpand    	on
+emacs          	on
+errexit        	off
+errtrace       	off
+functrace      	off
+hashall        	on
+histexpand     	on
+history        	on
+ignoreeof      	off
+interactive-comments	on
+keyword        	off
+$ set -o | wc -l
+27                                 « 27 opções do set…
+$ shopt | wc -l
+59                                 « …e 59 do shopt no Bash 5.3</pre>
+
+<p>Cada linha tem o nome da opção e o estado (<code>on</code>/<code>off</code>). Para ver só algumas, passe os nomes:</p>
+
+<pre class="term">$ shopt nullglob dotglob globstar extglob
+nullglob            	off
+dotglob             	off
+globstar            	off
+extglob             	off</pre>
+
+<p>O código de saída do <code>shopt nomes…</code> é 0 se <strong>todas</strong> estiverem ligadas e 1 se alguma estiver desligada. Para testar uma num <code>if</code>, use <code>-q</code>, que não mostra nada:</p>
+
+<pre class="term">$ shopt -q extglob; echo $?
+1                                  « 1 = desligada
+$ shopt -p | head -5
+shopt -u array_expand_once
+shopt -u assoc_expand_once
+shopt -u autocd
+shopt -u bash_source_fullpath
+shopt -u cdable_vars</pre>
+
+<p>O <code>shopt -p</code> mostra cada opção como o <strong>comando</strong> que a deixaria naquele estado. É útil para guardar e restaurar: <code>antes=$(shopt -p nullglob)</code>, muda o que quiser e depois <code>eval "$antes"</code>.</p>
+
+<h3>A variável <code>$-</code></h3>
+<p>As opções de uma letra do <code>set</code> que estão ligadas aparecem juntas na variável especial <code>$-</code>:</p>
+
+<pre class="term">$ echo $-
+hiBHs
+$ set -o noclobber; echo $-
+hiBCHs                             « apareceu o C</pre>
+
+<dl class="anatomy">
+  <dt>h</dt><dd><code>hashall</code>: lembra onde os comandos estão (<a href="path.html">PATH</a>).</dd>
+  <dt>i</dt><dd>Shell <strong>interativo</strong>. Num script, não aparece. É o teste que o <code>~/.bashrc</code> faz no começo.</dd>
+  <dt>B</dt><dd><code>braceexpand</code>: as <a href="chaves.html">chaves</a> <code>{a,b}</code> funcionam.</dd>
+  <dt>C</dt><dd><code>noclobber</code> (o <code>set -C</code>).</dd>
+  <dt>H</dt><dd><code>histexpand</code>: o <code>!!</code> do <a href="historico.html">histórico</a>.</dd>
+  <dt>s</dt><dd>Os comandos vêm da entrada padrão.</dd>
+</dl>
+
+<p>Num terminal com controle de jobs aparece também o <code>m</code> (<code>monitor</code>, veja <a href="jobs.html">Jobs</a>). A variável <code>$SHELLOPTS</code> traz a mesma informação por extenso: <code>braceexpand:emacs:hashall:histexpand:history:interactive-comments</code>.</p>
+
+<hr>
+
+<h2>As opções do <code>set</code></h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Curta</th><th>Longa (<code>set -o …</code>)</th><th>O que faz</th></tr>
+<tr><td><code>-e</code></td><td><code>errexit</code></td><td>Sai do script quando um comando falha</td></tr>
+<tr><td><code>-u</code></td><td><code>nounset</code></td><td>Usar variável que não existe vira erro</td></tr>
+<tr><td><code>-x</code></td><td><code>xtrace</code></td><td>Mostra cada comando (já expandido) antes de rodar, com <code>+</code> na frente</td></tr>
+<tr><td><code>-f</code></td><td><code>noglob</code></td><td>Desliga os curingas: <code>*</code> fica sendo um <code>*</code></td></tr>
+<tr><td><code>-C</code></td><td><code>noclobber</code></td><td>O <code>&gt;</code> não apaga arquivo que já existe</td></tr>
+<tr><td>(não tem)</td><td><code>pipefail</code></td><td>O código de um pipe é o do último comando que falhou, e não só o do último</td></tr>
+<tr><td>(não tem)</td><td><code>posix</code></td><td>Comporta-se mais como o <code>sh</code> do padrão POSIX</td></tr>
+<tr><td>(não tem)</td><td><code>vi</code> / <code>emacs</code></td><td>Atalhos de edição da linha no estilo vi ou emacs (o padrão)</td></tr>
+</table>
+</div>
+
+<p>As três primeiras (<code>-e</code>, <code>-u</code> e <code>pipefail</code>) formam o famoso <code>set -euo pipefail</code>, que tem uma aula só para ele: <a href="modo-estrito.html">set -euo pipefail</a>. O <code>-x</code> é o assunto de <a href="depuracao.html">Depurar</a>. Aqui vai uma demonstração rápida de cada uma:</p>
+
+<pre class="term">$ set -u
+$ echo "Olá, $nmoe"                « erro de digitação: era $nome
+bash: nmoe: variável não associada
+$ set +u
+$ set -C
+$ echo oi &gt; frutas.txt
+bash: frutas.txt: impossível sobrescrever arquivo existente
+$ set +C
+$ set -f
+$ echo *.txt
+*.txt                              « com -f, o * não é curinga
+$ set +f
+$ false | true; echo $?
+0                                  « sem pipefail: vale só o último (true)
+$ set -o pipefail
+$ false | true; echo $?
+1                                  « com pipefail: a falha do false aparece
+$ set -x
+$ echo "$HOME"
++ echo /home/ana                   « o -x mostra o comando já expandido
+/home/ana
+$ set +x
++ set +x</pre>
+
+<ul>
+  <li><strong>"variável não associada"</strong> é como o Bash em português diz <em>unbound variable</em>: a variável nunca recebeu valor.</li>
+  <li>Com <code>noclobber</code>, você ainda pode forçar a escrita com <code>&gt;|</code> (veja <a href="redirecionamento.html">Redirecionamento</a>).</li>
+  <li>O <code>+ set +x</code> no fim é o próprio <code>set +x</code> sendo mostrado: ele ainda roda com o <code>-x</code> ligado.</li>
+</ul>
+
+<h3><code>set -o posix</code> e <code>bash --posix</code></h3>
+<p>O modo POSIX faz o Bash seguir o padrão em alguns pontos onde ele, normalmente, faz diferente. Ele <strong>não</strong> desliga os recursos do Bash (arrays e <code>[[ ]]</code> continuam funcionando). Para testar se um script roda no <code>sh</code> de verdade, use o próprio <code>sh</code>; veja <a href="portabilidade.html">POSIX sh e Bashismos</a>.</p>
+
+<pre class="term">$ bash --posix -c "echo \$POSIXLY_CORRECT; shopt -o posix"
+y
+posix               	on</pre>
+
+<p>(O <code>shopt -o</code> mostra opções do <code>set</code> com o formato do <code>shopt</code>.)</p>
+
+<h3><code>set -o vi</code></h3>
+<p>Muda os atalhos de edição da linha de comando para o estilo do editor vi: você digita no modo de inserção e aperta <code>Esc</code> para navegar com <code>h</code>, <code>j</code>, <code>k</code>, <code>l</code>. Para voltar ao normal: <code>set -o emacs</code>. Os atalhos do modo padrão estão em <a href="editar-linha.html">Editar a Linha</a>.</p>
+
+<hr>
+
+<h2>Curingas sob medida (<code>shopt</code>)</h2>
+<p>A maior parte das opções do <code>shopt</code> muda o comportamento dos <a href="curingas.html">curingas</a> (<code>*</code>, <code>?</code>, <code>[ ]</code>). Para entender por que elas existem, comece pelo comportamento padrão.</p>
+
+<h3>Quando o curinga não casa com nada: <code>nullglob</code> e <code>failglob</code></h3>
+<p>Na pasta pessoal da Ana não há nenhum PDF. Por padrão, um curinga que não casa com nada <strong>fica como está</strong>, com o <code>*</code> e tudo:</p>
+
+<pre class="term">$ echo *.pdf
+*.pdf                              « o padrão: o texto passa literalmente
+$ ls *.pdf
+ls: não foi possível acessar '*.pdf': Arquivo ou diretório inexistente</pre>
+
+<p>Num laço, isso é um problema: <code>for f in *.pdf</code> roda <strong>uma vez</strong>, com <code>f</code> valendo <code>*.pdf</code>. A opção <code>nullglob</code> ("curinga nulo") faz o curinga sem resultado <strong>sumir</strong>:</p>
+
+<pre class="term">$ shopt -s nullglob
+$ echo *.pdf
+                                   « linha vazia: o *.pdf sumiu
+$ for f in *.pdf; do echo "achei $f"; done; echo "fim"
+fim                                « o laço não rodou nenhuma vez</pre>
+
+<div class="warning">
+<strong>A pegadinha do <code>nullglob</code></strong>
+<p>Se o curinga some, o comando fica <strong>sem argumento</strong>. E vários comandos sem argumento agem sobre a pasta atual:</p>
+<pre class="term">$ ls *.pdf
+Área de trabalho
+Documentos
+Downloads
+frutas.txt
+Imagens
+Modelos
+Música
+Público
+Vídeos                             « virou só "ls": listou tudo!</pre>
+<p>Com <code>nullglob</code>, um <code>ls *.pdf</code> lista tudo e um <code>grep texto *.log</code> fica esperando o teclado. Por isso ele é ótimo em laços de scripts e perigoso no terminal. Ligue-o só no script, e de preferência só no trecho que precisa.</p>
+</div>
+
+<p>Já o <code>failglob</code> transforma o "não casou" num <strong>erro</strong>, e o comando nem roda:</p>
+
+<pre class="term">$ shopt -s failglob
+$ echo *.pdf
+bash: sem correspondência: *.pdf
+$ echo $?
+1</pre>
+
+<h3>Arquivos ocultos: <code>dotglob</code></h3>
+<p>O <code>*</code> normalmente <strong>pula</strong> os arquivos que começam com ponto (os ocultos). Com <code>dotglob</code>, eles entram (mas <code>.</code> e <code>..</code> continuam de fora):</p>
+
+<pre class="term">$ echo *
+Área de trabalho Documentos Downloads frutas.txt Imagens Modelos Música Público Vídeos
+$ shopt -s dotglob
+$ echo *
+Área de trabalho .bash_history .bashrc Documentos Downloads frutas.txt Imagens Modelos Música .profile Público Vídeos</pre>
+
+<h3>Entrar em subpastas: <code>globstar</code> e <code>**</code> <span class="versao">bash 4.0+</span></h3>
+<p>Com <code>globstar</code> ligado, <code>**</code> casa com "qualquer quantidade de pastas", inclusive nenhuma. É um <code>find</code> simples feito pelo próprio Bash:</p>
+
+<pre class="term">$ echo Documentos/*/*.html
+Documentos/*/*.html                « só desce um nível, e o site está em projetos/site
+$ shopt -s globstar
+$ echo **/*.html
+Documentos/projetos/site/index.html
+$ echo Documentos/**
+Documentos/ Documentos/acesso.log Documentos/alunos.csv Documentos/notas.txt Documentos/projetos Documentos/projetos/backup.sh Documentos/projetos/site Documentos/projetos/site/index.html Documentos/projetos/site/style.css Documentos/relatorio.odt</pre>
+
+<dl class="anatomy">
+  <dt>**</dt><dd>Qualquer caminho de pastas: <code>Documentos</code>, <code>Documentos/projetos</code>, <code>Documentos/projetos/site</code>…</dd>
+  <dt>/</dt><dd>Separador de pasta.</dd>
+  <dt>*.html</dt><dd>Um arquivo terminado em <code>.html</code> em qualquer uma delas.</dd>
+</dl>
+
+<p>Sem <code>globstar</code>, o <code>**</code> funciona como um <code>*</code> comum. Cuidado em pastas enormes (como <code>/</code> ou <code>~</code> inteira): o Bash precisa visitar todas as subpastas antes de rodar o comando.</p>
+
+<div class="try" data-goal="ran:shopt +-s +globstar,out:Documentos/projetos/site/index.html" data-solucao="shopt -s globstar;;echo Documentos/**/*.html">
+<p class="try-task"><strong>Missão:</strong> mostre, com um único <code>echo</code> e um curinga, todos os arquivos <code>.html</code> que estão em qualquer subpasta de <code>Documentos</code>. Você vai precisar ligar uma opção antes.</p>
+</div>
+
+<h3>Padrões estendidos: <code>extglob</code></h3>
+<p>O <code>extglob</code> (<em>extended glob</em>, "curinga estendido") acrescenta cinco padrões novos, todos no formato <code>símbolo(alternativas)</code>, com as alternativas separadas por <code>|</code>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Padrão</th><th>Casa com…</th><th>Lembre como</th></tr>
+<tr><td><code>!(lista)</code></td><td>Tudo, <strong>menos</strong> o que casar com a lista</td><td><code>!</code> = "não"</td></tr>
+<tr><td><code>@(lista)</code></td><td>Exatamente uma das alternativas</td><td><code>@</code> = "uma"</td></tr>
+<tr><td><code>?(lista)</code></td><td>Zero ou uma ocorrência</td><td>Como o <code>?</code> das regex</td></tr>
+<tr><td><code>*(lista)</code></td><td>Zero ou mais ocorrências</td><td>Como o <code>*</code> das regex</td></tr>
+<tr><td><code>+(lista)</code></td><td>Uma ou mais ocorrências</td><td>Como o <code>+</code> das regex</td></tr>
+</table>
+</div>
+
+<pre class="term" data-cwd="~/Documentos">$ shopt -s extglob
+$ echo !(*.txt)
+acesso.log alunos.csv projetos relatorio.odt   « tudo, menos .txt
+$ echo *.@(csv|log)
+acesso.log alunos.csv                          « termina em .csv ou .log
+$ echo +(a|n)*
+acesso.log alunos.csv notas.txt                « começa com uma ou mais letras a ou n
+$ echo ?(notas).txt
+notas.txt
+$ ls !(*.odt|projetos)
+acesso.log
+alunos.csv
+notas.txt</pre>
+
+<p>O <code>!( )</code> é o mais usado: "apague tudo menos os <code>.conf</code>" vira <code>rm -- !(*.conf)</code>. Confira sempre antes com <code>echo</code>.</p>
+
+<div class="warning">
+<strong>Ligue o <code>extglob</code> numa linha anterior</strong>
+<p>O Bash lê (analisa) uma linha inteira, ou uma função inteira, <strong>antes</strong> de rodar qualquer parte dela. Se o <code>shopt -s extglob</code> estiver na mesma linha, ou dentro da mesma função que usa <code>!( )</code>, o padrão é lido quando a opção ainda está desligada, e o <code>(</code> vira erro de sintaxe:</p>
+<pre class="term">$ shopt -s extglob; echo !(*.txt)
+bash: erro de sintaxe próximo ao token inesperado `('</pre>
+<p>Em scripts, coloque o <code>shopt -s extglob</code> logo no começo, numa linha própria, fora de funções.</p>
+</div>
+
+<div class="try" data-goal="ran:shopt +-s +extglob,out:Documentos/alunos.csv,out:Documentos/projetos" data-solucao="shopt -s extglob;;echo Documentos/!(*.txt|*.odt)">
+<p class="try-task"><strong>Missão:</strong> mostre com <code>echo</code> tudo o que há em <code>Documentos</code>, <strong>menos</strong> os arquivos <code>.txt</code> e <code>.odt</code>. Use um padrão <code>!( )</code> com duas alternativas.</p>
+</div>
+
+<h3>Maiúsculas e minúsculas: <code>nocaseglob</code> e <code>globasciiranges</code></h3>
+<p><code>nocaseglob</code> faz os curingas ignorarem maiúsculas/minúsculas: <code>d*</code> passa a achar <code>Documentos</code>.</p>
+
+<pre class="term">$ echo d*
+d*                                 « nada começa com d minúsculo
+$ shopt -s nocaseglob
+$ echo d*
+Documentos Downloads</pre>
+
+<p>O <code>globasciiranges</code> (ligado por padrão desde o Bash 5.0) faz intervalos como <code>[a-z]</code> seguirem a ordem da tabela ASCII, e não a do idioma. Assim <code>[a-z]</code> pega só minúsculas, como a maioria das pessoas espera. Para "qualquer maiúscula, inclusive acentuada", o certo é a classe <code>[[:upper:]]</code>:</p>
+
+<pre class="term">$ echo [[:upper:]]*
+Área de trabalho Documentos Downloads Imagens Modelos Música Público Vídeos</pre>
+
+<hr>
+
+<h2>Outras opções úteis do <code>shopt</code></h2>
+
+<h3><code>nocasematch</code>: comparar sem ligar para maiúsculas</h3>
+<p>Vale para <code>[[ == ]]</code>, <code>[[ =~ ]]</code> e para o <a href="case.html"><code>case</code></a>. Perfeito para respostas do usuário:</p>
+
+<pre class="term">$ resp=SIM
+$ [[ $resp == sim ]] &amp;&amp; echo igual || echo diferente
+diferente
+$ shopt -s nocasematch
+$ [[ $resp == sim ]] &amp;&amp; echo igual || echo diferente
+igual
+$ case $resp in sim) echo "caiu no sim";; esac
+caiu no sim</pre>
+
+<div class="tryscript" data-file="continuar.sh" data-stdin="SIM" data-goal="out:Continuando,src:nocasematch">
+<p class="try-task"><strong>Missão:</strong> o usuário respondeu <code>SIM</code>, em maiúsculas, e o script cancelou. Faça o <code>case</code> aceitar a resposta em maiúsculas ou minúsculas ligando uma opção (sem mudar o <code>case</code>).</p>
+<pre class="script">#!/usr/bin/env bash
+read -r -p "Continuar? " resp
+case $resp in
+  sim|s) echo "Continuando" ;;
+  *)     echo "Cancelado" ;;
+esac
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+shopt -s nocasematch
+read -r -p "Continuar? " resp
+case $resp in
+  sim|s) echo "Continuando" ;;
+  *)     echo "Cancelado" ;;
+esac
+</pre>
+</div>
+
+<h3><code>autocd</code> e <code>cdspell</code>: atalhos do terminal</h3>
+<p>Estas só fazem sentido no terminal interativo. Com <code>autocd</code>, digitar só o nome de uma pasta entra nela. Com <code>cdspell</code>, o <code>cd</code> corrige pequenos erros de digitação (uma letra trocada, faltando ou sobrando) e mostra o caminho corrigido:</p>
+
+<pre class="term">$ shopt -s autocd
+$ Documentos
+cd -- Documentos                   « o Bash mostra o cd que ele fez por você
+$ cd ~
+$ shopt -s cdspell
+$ cd Documetos
+Documentos                         « corrigiu "Documetos"
+$ cd ~
+$ cd documentos
+Documentos                         « e a maiúscula também</pre>
+
+<h3>As do <code>~/.bashrc</code> da Ana: <code>histappend</code> e <code>checkwinsize</code></h3>
+<p>O <code>~/.bashrc</code> do Ubuntu/Debian já vem com estas duas ligadas:</p>
+<ul>
+  <li><code>histappend</code>: ao fechar, o Bash <strong>acrescenta</strong> o histórico ao <code>~/.bash_history</code>, em vez de sobrescrever. Sem ela, com dois terminais abertos, o último a fechar apaga o histórico do outro (veja <a href="historico.html">Histórico</a>).</li>
+  <li><code>checkwinsize</code>: depois de cada comando, o Bash confere o tamanho da janela e atualiza <code>LINES</code> e <code>COLUMNS</code>. Assim o texto não "embola" depois que você redimensiona o terminal. (Ligada por padrão desde o Bash 5.0.)</li>
+</ul>
+
+<h3>Para scripts: <code>lastpipe</code> e <code>inherit_errexit</code></h3>
+<ul>
+  <li><code>lastpipe</code> <span class="versao">bash 4.2+</span>: a última parte de um pipe roda no shell atual, então <code>cmd | while read …</code> não perde as variáveis. Só funciona sem controle de jobs (em scripts). Explicação completa em <a href="subshell.html">Subshells</a>.</li>
+  <li><code>inherit_errexit</code> <span class="versao">bash 4.4+</span>: faz o <code>set -e</code> valer também dentro de <code>$( )</code>. Sem ela, um erro dentro da substituição de comando não para nada:</li>
+</ul>
+
+<pre class="file" data-file="herda.sh">#!/usr/bin/env bash
+set -e
+x=$(false; echo "rodou mesmo assim")
+echo "x = $x"
+shopt -s inherit_errexit
+y=$(false; echo "rodou mesmo assim")
+echo "y = $y"
+</pre>
+
+<pre class="term">$ bash herda.sh
+x = rodou mesmo assim              « sem inherit_errexit: o false não parou o $( )
+$ echo $?
+1                                  « com ela, o false parou o $( ), e o set -e parou o script</pre>
+
+<hr>
+
+<h2>As mais úteis, e onde ativar</h2>
+<p>Regra geral: o que muda o <strong>conforto</strong> no terminal vai no <code>~/.bashrc</code> (veja <a href="inicializacao.html">Arquivos de Inicialização</a>); o que muda o <strong>resultado</strong> de comandos vai no começo de cada script que precisa. Um script nunca deve contar com algo do seu <code>.bashrc</code>: ele não é lido por scripts.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Para quê</th><th>Padrão</th><th>Onde ativar</th></tr>
+<tr><td><code>set -euo pipefail</code></td><td>Parar no primeiro erro / variável vazia / falha no pipe</td><td>off</td><td>Script</td></tr>
+<tr><td><code>set -x</code></td><td>Ver o que está rodando</td><td>off</td><td>Script, só para depurar</td></tr>
+<tr><td><code>set -C</code> (<code>noclobber</code>)</td><td>Não apagar arquivos com <code>&gt;</code> sem querer</td><td>off</td><td><code>.bashrc</code> ou script</td></tr>
+<tr><td><code>nullglob</code></td><td>Curinga sem resultado some (laços)</td><td>off</td><td>Script, no trecho do laço</td></tr>
+<tr><td><code>failglob</code></td><td>Curinga sem resultado vira erro</td><td>off</td><td>Script</td></tr>
+<tr><td><code>dotglob</code></td><td><code>*</code> inclui ocultos</td><td>off</td><td>Script, quando precisar</td></tr>
+<tr><td><code>globstar</code></td><td><code>**</code> entra em subpastas</td><td>off</td><td>Os dois</td></tr>
+<tr><td><code>extglob</code></td><td><code>!( )</code>, <code>@( )</code>…</td><td>off em scripts</td><td>Script (no começo); no terminal o pacote bash-completion já liga</td></tr>
+<tr><td><code>nocasematch</code></td><td><code>[[ ]]</code> e <code>case</code> sem maiúsculas</td><td>off</td><td>Script, no trecho</td></tr>
+<tr><td><code>nocaseglob</code></td><td>Curingas sem maiúsculas</td><td>off</td><td><code>.bashrc</code></td></tr>
+<tr><td><code>autocd</code>, <code>cdspell</code></td><td>Atalhos para o <code>cd</code></td><td>off</td><td><code>.bashrc</code></td></tr>
+<tr><td><code>histappend</code></td><td>Não perder histórico</td><td>off (on no <code>.bashrc</code> do Ubuntu)</td><td><code>.bashrc</code></td></tr>
+<tr><td><code>checkwinsize</code></td><td>Acompanhar o tamanho da janela</td><td>on</td><td><code>.bashrc</code></td></tr>
+<tr><td><code>lastpipe</code></td><td>Variáveis do <code>while</code> depois do pipe</td><td>off</td><td>Script</td></tr>
+<tr><td><code>inherit_errexit</code></td><td><code>set -e</code> dentro de <code>$( )</code></td><td>off</td><td>Script, junto com <code>set -e</code></td></tr>
+<tr><td><code>globasciiranges</code></td><td><code>[a-z]</code> só com minúsculas ASCII</td><td>on</td><td>Deixe como está</td></tr>
+</table>
+</div>
+
+<p>Para mudar uma opção só por um trecho e depois voltar ao que era, use um <a href="subshell.html">subshell</a> (<code>( shopt -s dotglob; cp -r origem/* destino/ )</code>) ou guarde o estado com <code>shopt -p</code>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"erro de sintaxe próximo ao token inesperado `('" com <code>!( )</code></strong>
+<pre class="term">$ bash ext.sh
+ext.sh: linha 4: erro de sintaxe próximo ao token inesperado `('
+ext.sh: linha 4: `  ls !(*.txt)'</pre>
+<p><strong>O que aconteceu:</strong> o <code>extglob</code> estava desligado quando o Bash leu a linha 4. No <code>ext.sh</code>, o <code>shopt -s extglob</code> estava <strong>dentro</strong> da mesma função do <code>ls !(*.txt)</code>; a função inteira é lida antes de rodar.</p>
+<p><strong>Como resolver:</strong> mova <code>shopt -s extglob</code> para o começo do script, numa linha própria, fora de funções.</p>
+</div>
+
+<div class="cenario">
+<strong>"nome de opção de shell inválido"</strong>
+<pre class="term">$ shopt -s nada
+bash: shopt: nada: nome de opção de shell inválido
+$ set -o nada
+bash: set: nada: nome de opção inválido</pre>
+<p><strong>O que aconteceu:</strong> erro de digitação, ou a opção é do <strong>outro</strong> quadro (por exemplo, <code>shopt -s pipefail</code>: <code>pipefail</code> é do <code>set -o</code>), ou ela não existe na sua versão do Bash.</p>
+<p><strong>Como resolver:</strong> confira em <code>set -o</code> e em <code>shopt</code>. Para usar o <code>shopt</code> com uma opção do <code>set</code>: <code>shopt -s -o pipefail</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>ls *.pdf</code> listou a pasta inteira</strong>
+<p><strong>O que aconteceu:</strong> o <code>nullglob</code> está ligado e não há nenhum <code>.pdf</code>: o curinga sumiu e sobrou só <code>ls</code>.</p>
+<p><strong>Como confirmar:</strong> <code>shopt nullglob</code>. <strong>Como resolver:</strong> <code>shopt -u nullglob</code> no terminal; nos scripts, ligue o <code>nullglob</code> só em volta do laço.</p>
+</div>
+
+<div class="cenario">
+<strong>Funciona no terminal, mas não no script (ou o contrário)</strong>
+<p><strong>O que aconteceu:</strong> o terminal leu o <code>~/.bashrc</code> (e o bash-completion, que liga o <code>extglob</code>); o script começa com as opções padrão. Também há opções que só valem no terminal (<code>autocd</code>, <code>cdspell</code>) e outras que só valem em scripts (<code>lastpipe</code>).</p>
+<p><strong>Como resolver:</strong> ligue no próprio script tudo o que ele usa. Para comparar, rode <code>shopt -p</code> nos dois lugares.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>set -X</code> / <code>set +X</code></td><td>Liga / desliga a opção de letra X</td></tr>
+<tr><td><code>set -o nome</code> / <code>set +o nome</code></td><td>Liga / desliga pelo nome longo</td></tr>
+<tr><td><code>set -o</code> / <code>set +o</code></td><td>Lista as opções do set / como comandos</td></tr>
+<tr><td><code>echo $-</code></td><td>Letras das opções ligadas</td></tr>
+<tr><td><code>shopt -s nome</code> / <code>shopt -u nome</code></td><td>Liga / desliga</td></tr>
+<tr><td><code>shopt</code> / <code>shopt nome</code></td><td>Lista todas / mostra algumas</td></tr>
+<tr><td><code>shopt -p [nome]</code></td><td>Mostra como comandos (para guardar e restaurar)</td></tr>
+<tr><td><code>shopt -q nome</code></td><td>Só devolve o código: 0 ligada, 1 desligada</td></tr>
+<tr><td><code>shopt -o</code></td><td>Trabalha com as opções do <code>set -o</code></td></tr>
+<tr><td><code>bash --posix</code></td><td>Inicia o Bash no modo POSIX</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ligar e desligar</h3>
+<p>Complete para ligar o <code>globstar</code> e, depois, desligar o <code>dotglob</code>:</p>
+<div class="ex-code">shopt <input data-answer="-s" aria-label="opção" style="width:3em"> globstar<br>shopt <input data-answer="-u" aria-label="opção" style="width:3em"> dotglob</div>
+</div>
+
+<div class="exercise">
+<h3>2. Tudo menos</h3>
+<p>Com <code>extglob</code> ligado, complete para mostrar todos os arquivos, menos os <code>.bak</code>:</p>
+<div class="ex-code">echo <input data-answer="!(*.bak)" aria-label="padrão"></div>
+</div>
+
+<div class="exercise">
+<h3>3. O quadro certo</h3>
+<p>Complete para ligar o <code>pipefail</code>:</p>
+<div class="ex-code"><input data-answer="set -o|shopt -so|shopt -s -o" aria-label="comando"> pipefail</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Um script faz <code>for f in *.jpg; do convert "$f" …; done</code> numa pasta sem nenhum <code>.jpg</code>. Qual opção faz o laço simplesmente não rodar?</p>
+<label><input type="radio" name="q4"> <code>dotglob</code></label>
+<label><input type="radio" name="q4"> <code>nullglob</code></label>
+<label><input type="radio" name="q4"> <code>globstar</code></label>
+<label><input type="radio" name="q4"> <code>noclobber</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. No <code>set</code>, o que faz <code>set +x</code>?</p>
+<label><input type="radio" name="q5"> Desliga o <code>xtrace</code>: no <code>set</code>, o <code>+</code> desliga.</label>
+<label><input type="radio" name="q5"> Liga o <code>xtrace</code>.</label>
+<label><input type="radio" name="q5"> Mostra se o <code>xtrace</code> está ligado.</label>
+<label><input type="radio" name="q5"> Dá erro: o certo é <code>shopt -u x</code>.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">6. Onde faz mais sentido ligar <code>autocd</code> e <code>cdspell</code>?</p>
+<label><input type="radio" name="q6"> No começo de cada script.</label>
+<label><input type="radio" name="q6"> Dentro de funções.</label>
+<label><input type="radio" name="q6"> No <code>~/.bashrc</code>, porque só funcionam no terminal interativo.</label>
+<label><input type="radio" name="q6"> Em lugar nenhum: elas não existem no Bash 5.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>set</code> (opções POSIX: <code>-e -u -x -f -C</code>, <code>-o pipefail</code>, <code>-o posix</code>): <code>-</code> liga, <code>+</code> desliga. <code>$-</code> mostra as letras ligadas.</li>
+  <li><code>shopt</code> (opções do Bash): <code>-s</code> liga, <code>-u</code> desliga, <code>-p</code> mostra como comando, <code>-q</code> só testa.</li>
+  <li>Curingas: <code>nullglob</code> (some), <code>failglob</code> (erro), <code>dotglob</code> (ocultos), <code>globstar</code> (<code>**</code>), <code>extglob</code> (<code>!( ) @( ) ?( ) *( ) +( )</code>), <code>nocaseglob</code>.</li>
+  <li><code>extglob</code> precisa estar ligado numa linha <strong>anterior</strong>, fora da função que o usa.</li>
+  <li>Conforto no <code>~/.bashrc</code>; o que muda resultados, no começo do script.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
