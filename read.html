@@ -76,7 +76,7 @@ Cadastro: Ana Souza, 29 anos.</pre>
 
 <p>O <code>-rp</code> é <code>-r</code> e <code>-p</code> juntos (o <code>p</code> tem que ser o último, porque o texto vem logo depois dele). O <code>-r</code> é o assunto da próxima seção.</p>
 
-<div class="tryscript" data-file="cadastro.sh" data-stdin="Carla\n22\n" data-goal="out:Carla\, 22 anos,src:read +-r?p?">
+<div class="tryscript" data-file="cadastro.sh" data-stdin="Carla\n22\n" data-goal="out:Carla\, 22 anos,src:read .*idade">
 <p class="try-task"><strong>Missão:</strong> o script só pergunta o nome. Acrescente uma pergunta <code>Idade: </code> guardando a resposta em <code>idade</code>, e faça a última linha mostrar <code>Cadastro: Carla, 22 anos.</code> (as respostas <code>Carla</code> e <code>22</code> já estão no campo de entrada).</p>
 <pre class="script">#!/usr/bin/env bash
 read -rp "Nome: " nome
