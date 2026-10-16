@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash ShellCheck — o revisor automático de scripts | Guia Bash</title>
+<meta name="description" content="Aprenda a usar o ShellCheck: instalar, rodar em scripts com problemas reais, entender os avisos mais comuns (SC2086, SC2046, SC2006, SC2164, SC2034, SC2155, SC2162, SC2181, SC1091, SC2010), desligar avisos, .shellcheckrc, -S, -f gcc e -f diff.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">ShellCheck</span></h1>
+
+<p class="intro">O <strong>ShellCheck</strong> é um programa que <strong>lê o seu script e aponta erros</strong> antes de você rodá-lo: aspas esquecidas, <code>cd</code> sem checagem, variáveis com nome errado, armadilhas que só aparecem com um nome de arquivo com espaço. É como ter um colega experiente revisando cada linha. É gratuito, funciona no terminal, no navegador e dentro do editor, e todo script sério deveria passar por ele.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A instalar o ShellCheck e a usá-lo sem instalar nada (shellcheck.net).</li>
+  <li>A ler a saída: linha, coluna, código <code>SCxxxx</code>, gravidade e sugestão.</li>
+  <li>O que significam e como corrigir os avisos mais comuns.</li>
+  <li>A desligar um aviso de propósito (<code># shellcheck disable=</code>, <code>.shellcheckrc</code>).</li>
+  <li>As opções <code>-S</code>, <code>-x</code>, <code>-s</code>, <code>-f gcc</code> e <code>-f diff</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que é e por que usar</h2>
+<p>O Bash aceita muita coisa que "funciona por acaso": <code>mv $f $destino</code> funciona com <code>foto.jpg</code> e quebra com <code>foto de férias.jpg</code>. Você só descobre quando acontece. O ShellCheck faz uma <strong>análise estática</strong>: ele lê o código sem executá-lo (como o <code>bash -n</code> de <a href="depuracao.html">Depurar</a>), mas, em vez de checar só a gramática, conhece centenas de erros e más práticas.</p>
+
+<ul>
+  <li>Cada aviso tem um código (<code>SC2086</code>, <code>SC2164</code>…) e uma página explicativa na wiki do projeto.</li>
+  <li>Ele não muda o seu arquivo (a não ser que você peça, com <code>-f diff</code>).</li>
+  <li>As mensagens são em inglês; esta aula traduz e explica as mais comuns.</li>
+</ul>
+
+<hr>
+
+<h2>Instalar</h2>
+<p>O ShellCheck está nos repositórios de praticamente todo sistema. O nome do pacote muda um pouco:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Comando</th></tr>
+<tr><td>Debian, Ubuntu, Mint</td><td><code>sudo apt install shellcheck</code></td></tr>
+<tr><td>Fedora</td><td><code>sudo dnf install ShellCheck</code></td></tr>
+<tr><td>Arch, Manjaro</td><td><code>sudo pacman -S shellcheck</code></td></tr>
+<tr><td>openSUSE</td><td><code>sudo zypper install ShellCheck</code></td></tr>
+<tr><td>macOS (Homebrew)</td><td><code>brew install shellcheck</code></td></tr>
+<tr><td>Windows</td><td><code>winget install --id koalaman.shellcheck</code> (ou <code>scoop install shellcheck</code>)</td></tr>
+<tr><td>Sem instalar</td><td>Cole o script em <strong>https://www.shellcheck.net</strong> e veja os avisos no navegador.</td></tr>
+</table>
+</div>
+
+<p>Confira a versão. Esta aula usa a 0.11; versões mais antigas (como as dos repositórios de distros de alguns anos atrás) têm menos avisos, mas os principais são os mesmos:</p>
+
+<pre class="term">$ shellcheck --version
+ShellCheck - shell script analysis tool
+version: 0.11.0
+license: GNU General Public License, version 3
+website: https://www.shellcheck.net</pre>
+
+<hr>
+
+<h2>Primeiro uso: o script de fotos da Ana</h2>
+<p>A Ana escreveu um script para mover as fotos de <code>Downloads</code> para <code>Imagens</code>. Ele funciona na máquina dela. Vamos ver o que o ShellCheck acha:</p>
+
+<pre class="file" data-file="organiza.sh">#!/bin/bash
+# organiza.sh — move as fotos de Downloads para Imagens
+origem=~/Downloads
+destino=~/Imagens
+data=`date +%F`
+cd $origem
+for f in $(ls | grep .jpg); do
+  mv $f $destino
+done
+echo "Fotos movidas em $data"
+</pre>
+
+<dl class="anatomy">
+  <dt>shellcheck</dt><dd>O programa.</dd>
+  <dt>organiza.sh</dt><dd>Um ou mais scripts para analisar (<code>shellcheck *.sh</code> também vale).</dd>
+</dl>
+
+<pre class="term">$ shellcheck organiza.sh
+
+In organiza.sh line 5:
+data=`date +%F`
+     ^--------^ SC2006 (style): Use $(...) notation instead of legacy backticks `...`.
+
+Did you mean:
+data=$(date +%F)
+
+
+In organiza.sh line 6:
+cd $origem
+^--------^ SC2164 (warning): Use 'cd ... || exit' or 'cd ... || return' in case cd fails.
+
+Did you mean:
+cd $origem || exit
+
+
+In organiza.sh line 7:
+for f in $(ls | grep .jpg); do
+           ^-- SC2010 (warning): Don't use ls | grep. Use a glob or a for loop with a condition to allow non-alphanumeric filenames.
+
+
+In organiza.sh line 8:
+  mv $f $destino
+     ^-- SC2086 (info): Double quote to prevent globbing and word splitting.
+
+Did you mean:
+  mv "$f" $destino
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2010 -- Don't use ls | grep. Use a glob o...
+  https://www.shellcheck.net/wiki/SC2164 -- Use 'cd ... || exit' or 'cd ... |...
+  https://www.shellcheck.net/wiki/SC2086 -- Double quote to prevent globbing ...
+$ echo $?
+1                                              « 1 = encontrou problemas; 0 = nada a apontar</pre>
+
+<h3>Como ler cada aviso</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>Exemplo</th><th>Significa</th></tr>
+<tr><td>Local</td><td><code>In organiza.sh line 6:</code></td><td>Arquivo e linha.</td></tr>
+<tr><td>A linha</td><td><code>cd $origem</code></td><td>O código, copiado do arquivo.</td></tr>
+<tr><td>A marca</td><td><code>^--------^</code></td><td>Sublinha o trecho exato com problema.</td></tr>
+<tr><td>Código</td><td><code>SC2164</code></td><td>O número do aviso. Busque <code>shellcheck.net/wiki/SC2164</code> para a explicação completa, com exemplos.</td></tr>
+<tr><td>Gravidade</td><td><code>(warning)</code></td><td><code>error</code> (vai quebrar), <code>warning</code> (provável bug), <code>info</code> (pode dar problema), <code>style</code> (dá para escrever melhor).</td></tr>
+<tr><td>Sugestão</td><td><code>Did you mean:</code></td><td>"Você quis dizer:" seguido da linha corrigida, quando há uma correção automática.</td></tr>
+</table>
+</div>
+
+<h3>Os quatro avisos, traduzidos</h3>
+<dl class="anatomy">
+  <dt>SC2006 (style)</dt><dd>"Use <code>$(...)</code> em vez das crases antigas." As crases funcionam, mas não se aninham bem e se confundem com aspas. Veja <a href="substituicao-comando.html">Substituição de Comando</a>.</dd>
+  <dt>SC2164 (warning)</dt><dd>"Use <code>cd ... || exit</code> caso o <code>cd</code> falhe." Se a pasta não existir, o <code>mv</code> roda na pasta errada. É o mesmo perigo do começo de <a href="modo-estrito.html">Modo Estrito</a>.</dd>
+  <dt>SC2010 (warning)</dt><dd>"Não use <code>ls | grep</code>. Use um curinga." A saída do <code>ls</code> é para humanos: nomes com espaço ou quebra de linha se partem. E o <code>.</code> do <code>grep .jpg</code> casa com qualquer caractere.</dd>
+  <dt>SC2086 (info)</dt><dd>"Use aspas duplas para evitar curingas e separação de palavras." Sem aspas, <code>$f</code> com o valor <code>foto de férias.jpg</code> vira três argumentos para o <code>mv</code>.</dd>
+</dl>
+
+<p>Repare que o ShellCheck <strong>não</strong> reclamou de <code>$origem</code> e <code>$destino</code> sem aspas: ele viu que os valores são fixos e sem espaços. Mesmo assim, aspas sempre são o hábito certo.</p>
+
+<h3>A versão corrigida</h3>
+<pre class="file" data-file="organiza.sh">#!/usr/bin/env bash
+# organiza.sh — move as fotos de Downloads para Imagens
+set -euo pipefail
+origem=~/Downloads
+destino=~/Imagens
+data=$(date +%F)
+cd "$origem" || exit 1
+for f in *.jpg; do
+  [[ -e $f ]] || continue
+  mv -- "$f" "$destino"/
+done
+echo "Fotos movidas em $data"
+</pre>
+
+<pre class="term">$ shellcheck organiza.sh
+$ echo $?
+0                                              « silêncio e código 0: nenhum aviso</pre>
+
+<p>O <code>for f in *.jpg</code> usa o <a href="curingas.html">curinga</a> direto, sem <code>ls</code>. A linha <code>[[ -e $f ]] || continue</code> trata o caso de não haver nenhuma foto: aí o curinga não casa e <code>$f</code> fica com o texto literal <code>*.jpg</code>.</p>
+
+<div class="tryscript" data-file="organiza.sh" data-goal="src:\$\(date,src:cd &quot;\$origem&quot; *\|\|,src:mv[^\n]*&quot;\$f&quot;,file:~/Imagens/foto.jpg,absent:~/Downloads/foto.jpg">
+<p class="try-task"><strong>Missão:</strong> o simulador não tem o ShellCheck, mas você já leu os avisos acima. Corrija o script: troque as crases por <code>$( )</code>, acrescente <code>|| exit 1</code> ao <code>cd</code> (com <code>"$origem"</code> entre aspas) e ponha aspas em <code>"$f"</code>. Se quiser ir além, troque o <code>$(ls | grep .jpg)</code> por <code>*.jpg</code>. Rode: a <code>foto.jpg</code> deve ir de <code>Downloads</code> para <code>Imagens</code>.</p>
+<pre class="script">#!/bin/bash
+# organiza.sh — move as fotos de Downloads para Imagens
+origem=~/Downloads
+destino=~/Imagens
+data=`date +%F`
+cd $origem
+for f in $(ls | grep .jpg); do
+  mv $f $destino
+done
+echo "Fotos movidas em $data"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+# organiza.sh — move as fotos de Downloads para Imagens
+set -euo pipefail
+origem=~/Downloads
+destino=~/Imagens
+data=$(date +%F)
+cd "$origem" || exit 1
+for f in *.jpg; do
+  [[ -e $f ]] || continue
+  mv -- "$f" "$destino"/
+done
+echo "Fotos movidas em $data"
+</pre>
+</div>
+
+<hr>
+
+<h2>Mais avisos comuns, num segundo script</h2>
+<p>Outro script da Ana, com outros problemas típicos:</p>
+
+<pre class="file" data-file="contar.sh">#!/bin/bash
+source ~/config.sh
+contar() {
+  local total=$(wc -l &lt; "$1")
+  echo "$total"
+}
+read -p "Arquivo: " arq
+contar "$arq"
+if [ $? -ne 0 ]; then
+  echo "falhou"
+fi
+usuario=ana
+rm -rf "$pasta/"*
+</pre>
+
+<pre class="term">$ shellcheck contar.sh
+
+In contar.sh line 2:
+source ~/config.sh
+       ^---------^ SC1090 (warning): ShellCheck can't follow non-constant source. Use a directive to specify location.
+
+
+In contar.sh line 4:
+  local total=$(wc -l &lt; "$1")
+        ^---^ SC2155 (warning): Declare and assign separately to avoid masking return values.
+
+
+In contar.sh line 7:
+read -p "Arquivo: " arq
+^--^ SC2162 (info): read without -r will mangle backslashes.
+
+
+In contar.sh line 9:
+if [ $? -ne 0 ]; then
+     ^-- SC2181 (style): Check exit code directly with e.g. 'if ! mycmd;', not indirectly with $?.
+
+
+In contar.sh line 12:
+usuario=ana
+^-----^ SC2034 (warning): usuario appears unused. Verify use (or export if used externally).
+
+
+In contar.sh line 13:
+rm -rf "$pasta/"*
+       ^--------^ SC2115 (warning): Use "${var:?}" to ensure this never expands to /* .
+        ^----^ SC2154 (warning): pasta is referenced but not assigned.
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1090 -- ShellCheck can't follow non-const...
+  https://www.shellcheck.net/wiki/SC2034 -- usuario appears unused. Verify us...
+  https://www.shellcheck.net/wiki/SC2115 -- Use "${var:?}" to ensure this nev...</pre>
+
+<p>A última linha merece atenção: <code>$pasta</code> nunca recebeu valor neste arquivo. Se continuar vazia, <code>rm -rf "$pasta/"*</code> vira <code>rm -rf /*</code>. O ShellCheck deu <strong>dois</strong> avisos para ela (SC2154 e SC2115).</p>
+
+<p>E um terceiro script, para completar a coleção:</p>
+
+<pre class="file" data-file="outros.sh">#!/bin/bash
+. ./config.sh
+arquivos=$(ls *.txt)
+wc -l $(cat lista.txt)
+echo "Total: $arquivos"
+</pre>
+
+<pre class="term">$ shellcheck outros.sh
+
+In outros.sh line 2:
+. ./config.sh
+  ^---------^ SC1091 (info): Not following: ./config.sh was not specified as input (see shellcheck -x).
+
+
+In outros.sh line 3:
+arquivos=$(ls *.txt)
+              ^-- SC2035 (info): Use ./*glob* or -- *glob* so names with dashes won't become options.
+
+
+In outros.sh line 4:
+wc -l $(cat lista.txt)
+      ^--------------^ SC2046 (warning): Quote this to prevent word splitting.
+…                                              « encurtado: seguem os links da wiki</pre>
+
+<h3>Tabela dos avisos mais comuns</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Mensagem (resumida)</th><th>O problema</th><th>Como corrigir</th></tr>
+<tr><td><code>SC2086</code></td><td>Double quote to prevent globbing and word splitting</td><td>Variável sem aspas se parte nos espaços e expande curingas.</td><td><code>"$var"</code>. Veja <a href="aspas.html">Aspas</a>.</td></tr>
+<tr><td><code>SC2046</code></td><td>Quote this to prevent word splitting</td><td>O mesmo, com <code>$( )</code> sem aspas.</td><td><code>"$(cmd)"</code>; para uma lista de arquivos, use um array ou <code>mapfile</code>.</td></tr>
+<tr><td><code>SC2006</code></td><td>Use $(...) instead of legacy backticks</td><td>Crases são antigas e difíceis de aninhar.</td><td><code>$(cmd)</code>.</td></tr>
+<tr><td><code>SC2164</code></td><td>Use 'cd ... || exit'</td><td>Se o <code>cd</code> falhar, o resto roda na pasta errada.</td><td><code>cd "$d" || exit 1</code> (ou <code>return</code> numa função).</td></tr>
+<tr><td><code>SC2034</code></td><td>var appears unused</td><td>Variável criada e nunca usada: nome errado ou sobra de código.</td><td>Apague, corrija o nome ou <code>export</code>, se for para outro programa.</td></tr>
+<tr><td><code>SC2154</code></td><td>var is referenced but not assigned</td><td>Usa uma variável que nunca recebeu valor (talvez erro de digitação).</td><td>Corrija o nome, ou dê um padrão: <code>${var:-…}</code>.</td></tr>
+<tr><td><code>SC2155</code></td><td>Declare and assign separately</td><td><code>local x=$(cmd)</code> esconde a falha de <code>cmd</code>.</td><td><code>local x</code> numa linha, <code>x=$(cmd)</code> na outra (<a href="modo-estrito.html">Modo Estrito</a>).</td></tr>
+<tr><td><code>SC2162</code></td><td>read without -r will mangle backslashes</td><td><code>read</code> sem <code>-r</code> come as barras invertidas.</td><td><code>read -r</code>. Veja <a href="read.html">read</a>.</td></tr>
+<tr><td><code>SC2181</code></td><td>Check exit code directly</td><td><code>cmd; if [ $? -ne 0 ]</code> é frágil.</td><td><code>if ! cmd; then</code> (<a href="erros.html">Tratar Erros</a>).</td></tr>
+<tr><td><code>SC2010</code></td><td>Don't use ls | grep</td><td>Parsear o <code>ls</code> quebra com nomes estranhos.</td><td>Curinga: <code>for f in *.jpg</code>.</td></tr>
+<tr><td><code>SC2035</code></td><td>Use ./*glob*</td><td>Um arquivo chamado <code>-rf</code> viraria opção.</td><td><code>./*.txt</code> ou <code>-- *.txt</code>.</td></tr>
+<tr><td><code>SC2115</code></td><td>Use "${var:?}"</td><td><code>rm -rf "$x/"*</code> com <code>x</code> vazia apaga a raiz.</td><td><code>rm -rf "${x:?}/"*</code>: para com erro se <code>x</code> estiver vazia.</td></tr>
+<tr><td><code>SC1090</code> / <code>SC1091</code></td><td>Can't follow source / Not following</td><td>O ShellCheck não abriu o arquivo do <code>source</code>, então não conhece as variáveis dele.</td><td><code>shellcheck -x</code>, ou o comentário <code># shellcheck source=config.sh</code> antes do <code>source</code>.</td></tr>
+<tr><td><code>SC2064</code></td><td>Use single quotes in trap</td><td>Variável expandida na hora de definir o trap.</td><td><code>trap 'rm -f "$tmp"' EXIT</code> (<a href="trap.html">trap</a>).</td></tr>
+<tr><td><code>SC2148</code></td><td>Add a shebang</td><td>Sem shebang, ele não sabe se é Bash ou sh.</td><td><code>#!/usr/bin/env bash</code> na primeira linha.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Desligar um aviso de propósito</h2>
+<p>Às vezes você sabe o que está fazendo. Por exemplo, numa variável com várias opções, você <strong>quer</strong> que ela se parta nos espaços. Diga isso ao ShellCheck com um comentário especial <strong>na linha de cima</strong>:</p>
+
+<pre class="file" data-file="desliga.sh">#!/bin/bash
+opcoes="-l -h"
+# shellcheck disable=SC2086  # quero mesmo separar as opções
+ls $opcoes ~/Documentos
+</pre>
+
+<pre class="term">$ shellcheck desliga.sh
+$ echo $?
+0</pre>
+
+<dl class="anatomy">
+  <dt># shellcheck</dt><dd>Um comentário para o ShellCheck (o Bash o ignora).</dd>
+  <dt>disable=SC2086</dt><dd>Desliga esse aviso só no comando seguinte. Vários: <code>disable=SC2086,SC2046</code>.</dd>
+  <dt># quero mesmo…</dt><dd>Explique o porquê. Daqui a seis meses, você vai agradecer.</dd>
+</dl>
+
+<p>Colocado logo depois do shebang, antes do primeiro comando, o <code>disable</code> vale para o arquivo inteiro. Mesmo assim, prefira resolver o problema; neste exemplo, o melhor seria um array: <code>opcoes=(-l -h); ls "${opcoes[@]}" ~/Documentos</code> (veja <a href="arrays.html">Arrays</a>).</p>
+
+<h3>Configuração para o projeto: <code>.shellcheckrc</code></h3>
+<p>Para regras que valem para todos os scripts de uma pasta, crie um arquivo <code>.shellcheckrc</code> nela (ou em <code>~/.config/shellcheckrc</code>, para todos os seus projetos). Cada linha é uma diretiva, sem o <code># shellcheck</code>:</p>
+
+<pre class="file" data-file=".shellcheckrc"># não reclamar de crases neste projeto antigo
+disable=SC2006
+# sempre seguir os arquivos de "source"
+external-sources=true
+# ligar um aviso opcional: exigir ${var} com chaves
+enable=require-variable-braces
+</pre>
+
+<p>Os avisos opcionais (desligados por padrão) aparecem com <code>shellcheck --list-optional</code>.</p>
+
+<hr>
+
+<h2>Opções úteis</h2>
+
+<h3><code>-S</code>: só a partir de certa gravidade</h3>
+<p><code>-S</code> (<em>severity</em>) esconde os avisos menos graves. Com <code>-S warning</code>, ficam só <code>warning</code> e <code>error</code>:</p>
+
+<pre class="term">$ shellcheck -S warning organiza.sh
+
+In organiza.sh line 6:
+cd $origem
+^--------^ SC2164 (warning): Use 'cd ... || exit' or 'cd ... || return' in case cd fails.
+
+Did you mean:
+cd $origem || exit
+
+
+In organiza.sh line 7:
+for f in $(ls | grep .jpg); do
+           ^-- SC2010 (warning): Don't use ls | grep. Use a glob or a for loop with a condition to allow non-alphanumeric filenames.
+…                                              « encurtado: o style (SC2006) e o info (SC2086) sumiram</pre>
+
+<h3><code>-f gcc</code>: uma linha por aviso</h3>
+<p><code>-f</code> (<em>format</em>) muda o formato da saída. O formato <code>gcc</code> (o mesmo do compilador de C) põe tudo numa linha, <code>arquivo:linha:coluna: gravidade: mensagem [código]</code>, ótimo para editores e para o <code>grep</code>:</p>
+
+<pre class="term">$ shellcheck -f gcc organiza.sh
+organiza.sh:5:6: note: Use $(...) notation instead of legacy backticks `...`. [SC2006]
+organiza.sh:6:1: warning: Use 'cd ... || exit' or 'cd ... || return' in case cd fails. [SC2164]
+organiza.sh:7:12: warning: Don't use ls | grep. Use a glob or a for loop with a condition to allow non-alphanumeric filenames. [SC2010]
+organiza.sh:8:6: note: Double quote to prevent globbing and word splitting. [SC2086]</pre>
+
+<p>Nesse formato, <code>info</code> e <code>style</code> aparecem como <code>note</code>. Outros formatos: <code>-f json1</code> (para programas), <code>-f checkstyle</code> (para ferramentas de CI), <code>-f quiet</code> (nada; só o código de saída).</p>
+
+<h3><code>-f diff</code>: as correções prontas</h3>
+<p>Para os avisos que têm "Did you mean", o ShellCheck pode gerar um <em>diff</em>, um arquivo com as mudanças, que o programa <code>patch</code> aplica:</p>
+
+<pre class="term">$ shellcheck -f diff organiza.sh
+--- a/organiza.sh
++++ b/organiza.sh
+@@ -2,9 +2,9 @@
+ # organiza.sh — move as fotos de Downloads para Imagens
+ origem=~/Downloads
+ destino=~/Imagens
+-data=`date +%F`
+-cd $origem
++data=$(date +%F)
++cd $origem || exit
+ for f in $(ls | grep .jpg); do
+-  mv $f $destino
++  mv "$f" $destino
+ done
+ echo "Fotos movidas em $data"
+$ shellcheck -f diff organiza.sh | patch -p1
+patching file organiza.sh</pre>
+
+<p>Linhas com <code>-</code> saem, linhas com <code>+</code> entram. Repare que o <code>ls | grep</code> (SC2010) não foi corrigido: esse exige reescrever o laço, e só você pode decidir como. Revise sempre o diff antes de aplicar.</p>
+
+<h3>Outras opções</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>O que faz</th></tr>
+<tr><td><code>-x</code></td><td>Segue os arquivos de <code>source</code>/<code>.</code> (resolve SC1091).</td></tr>
+<tr><td><code>-s sh</code> / <code>-s bash</code></td><td>Força o shell-alvo, ignorando o shebang.</td></tr>
+<tr><td><code>-e SC2086,SC2006</code></td><td>Exclui esses avisos (como um <code>disable</code> na linha de comando).</td></tr>
+<tr><td><code>-o all</code></td><td>Liga todos os avisos opcionais.</td></tr>
+<tr><td><code>-W 0</code></td><td>Não mostra os links da wiki no fim.</td></tr>
+</table>
+</div>
+
+<p>Com <code>#!/bin/sh</code>, o ShellCheck também aponta <strong>bashismos</strong>, recursos que não existem no <code>sh</code> (veja <a href="portabilidade.html">POSIX sh e Bashismos</a>):</p>
+
+<pre class="term">$ cat posix.sh
+#!/bin/sh
+if [[ -f frutas.txt ]]; then
+  echo "${HOME,,}"
+fi
+$ shellcheck -f gcc posix.sh
+posix.sh:2:4: warning: In POSIX sh, [[ ]] is undefined. [SC3010]
+posix.sh:3:9: warning: In POSIX sh, case modification is undefined. [SC3059]</pre>
+
+<hr>
+
+<h2>No editor (ilustrativo)</h2>
+<p>O melhor jeito de usar o ShellCheck é deixá-lo rodando enquanto você digita: o editor sublinha o problema na hora, como um corretor ortográfico. Os nomes abaixo são os mais conhecidos; os detalhes de instalação mudam com o tempo, então siga a documentação de cada um.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Editor</th><th>Como</th></tr>
+<tr><td>VS Code / VSCodium</td><td>Extensão "ShellCheck" (de Timon Wong), ou a "Bash IDE", que usa o ShellCheck por baixo.</td></tr>
+<tr><td>Vim / Neovim</td><td>Plugins como ALE ou nvim-lint; ou <code>:!shellcheck %</code> para rodar no arquivo aberto.</td></tr>
+<tr><td>Emacs</td><td>Flycheck (já reconhece o ShellCheck).</td></tr>
+<tr><td>Qualquer um</td><td>O <code>bash-language-server</code> integra o ShellCheck em editores que falam LSP.</td></tr>
+<tr><td>Antes de cada commit</td><td>Um <em>hook</em> do Git (ou o <code>pre-commit</code>) roda <code>shellcheck *.sh</code> e impede o commit se houver avisos.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"shellcheck: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> ele não vem instalado por padrão na maioria dos sistemas.</p>
+<p><strong>Como resolver:</strong> instale pela tabela acima, ou use o site <code>shellcheck.net</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>SC2148: "Tips depend on target shell and yours is unknown"</strong>
+<pre class="term">$ shellcheck sem-shebang.sh
+
+In sem-shebang.sh line 1:
+echo "oi"
+^-- SC2148 (error): Tips depend on target shell and yours is unknown. Add a shebang or a 'shell' directive.</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não tem shebang, e o ShellCheck não sabe se deve julgar como Bash ou sh.</p>
+<p><strong>Como resolver:</strong> acrescente <code>#!/usr/bin/env bash</code>. Para arquivos que só são carregados com <code>source</code> (sem shebang de propósito), use <code># shellcheck shell=bash</code> na primeira linha, ou <code>shellcheck -s bash</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Variáveis "não usadas" que vêm de outro arquivo (SC2034/SC2154)</strong>
+<p><strong>O que aconteceu:</strong> as variáveis são definidas num arquivo carregado com <code>source</code>, e o ShellCheck não o abriu (SC1091).</p>
+<p><strong>Como resolver:</strong> <code>shellcheck -x script.sh</code>. Se o caminho do <code>source</code> é variável (SC1090), indique o arquivo com <code># shellcheck source=./config.sh</code> na linha de cima.</p>
+</div>
+
+<div class="cenario">
+<strong>O ShellCheck não reclamou, mas o script está errado</strong>
+<p><strong>O que aconteceu:</strong> ele acha <strong>padrões</strong> de erro, não erros de lógica. "Somar em vez de subtrair" ou "o arquivo errado" passam sem aviso.</p>
+<p><strong>Como resolver:</strong> teste o script de verdade e depure com <code>bash -x</code> (<a href="depuracao.html">Depurar</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>shellcheck arq.sh</code></td><td>Analisa; código 0 = sem avisos, 1 = há avisos.</td></tr>
+<tr><td><code>shellcheck -S warning</code></td><td>Só <code>warning</code> e <code>error</code> (também <code>error</code>, <code>info</code>, <code>style</code>).</td></tr>
+<tr><td><code>shellcheck -f gcc</code></td><td>Uma linha por aviso.</td></tr>
+<tr><td><code>shellcheck -f diff | patch -p1</code></td><td>Aplica as correções automáticas.</td></tr>
+<tr><td><code>shellcheck -x</code></td><td>Segue os <code>source</code>.</td></tr>
+<tr><td><code>shellcheck -e SCxxxx</code></td><td>Ignora esse aviso.</td></tr>
+<tr><td><code># shellcheck disable=SCxxxx</code></td><td>Ignora o aviso no comando seguinte (ou no arquivo, se vier antes do primeiro comando).</td></tr>
+<tr><td><code># shellcheck source=arq</code></td><td>Diz qual arquivo o <code>source</code> seguinte carrega.</td></tr>
+<tr><td><code>.shellcheckrc</code></td><td>Diretivas para todos os scripts da pasta.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Corrigir o SC2086</h3>
+<p>Complete a linha para que o nome do arquivo não se parta nos espaços:</p>
+<div class="ex-code">rm -- <input data-answer="&quot;$arquivo&quot;|&quot;${arquivo}&quot;" aria-label="variável com aspas"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Corrigir o SC2164</h3>
+<p>Complete para sair do script se o <code>cd</code> falhar:</p>
+<div class="ex-code">cd "$pasta" || <input data-answer="exit|exit 1" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Desligar um aviso</h3>
+<p>Complete o comentário que desliga o SC2086 no comando seguinte:</p>
+<div class="ex-code"># shellcheck <input data-answer="disable=SC2086" aria-label="diretiva"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O ShellCheck mostrou <code>SC2155: Declare and assign separately</code> em <code>local total=$(wc -l &lt; "$1")</code>. Qual é a correção?</p>
+<label><input type="radio" name="q4"> Trocar <code>local</code> por <code>export</code>.</label>
+<label><input type="radio" name="q4"> Pôr aspas em <code>"$(wc -l &lt; "$1")"</code>.</label>
+<label><input type="radio" name="q4"> Escrever <code>local total</code> numa linha e <code>total=$(wc -l &lt; "$1")</code> na seguinte.</label>
+<label><input type="radio" name="q4"> Trocar <code>$( )</code> por crases.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Para ver só os avisos de gravidade <code>warning</code> ou maior, você usa…</p>
+<label><input type="radio" name="q5"> <code>shellcheck -f warning</code></label>
+<label><input type="radio" name="q5"> <code>shellcheck -S warning</code></label>
+<label><input type="radio" name="q5"> <code>shellcheck -e warning</code></label>
+<label><input type="radio" name="q5"> <code>shellcheck -x warning</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. O que o aviso SC1091 ("Not following: ./config.sh") quer dizer?</p>
+<label><input type="radio" name="q6"> Que <code>config.sh</code> não existe.</label>
+<label><input type="radio" name="q6"> Que <code>source</code> não funciona no Bash.</label>
+<label><input type="radio" name="q6"> Que <code>config.sh</code> tem erros.</label>
+<label><input type="radio" name="q6"> Que o ShellCheck não abriu o arquivo do <code>source</code>; use <code>-x</code> para segui-lo.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O ShellCheck lê o script sem executá-lo e aponta erros e más práticas, cada um com um código <code>SCxxxx</code> e uma página na wiki.</li>
+  <li>Os campeões: SC2086/SC2046 (aspas), SC2164 (<code>cd</code> sem <code>||</code>), SC2006 (crases), SC2155 (<code>local x=$( )</code>), SC2162 (<code>read</code> sem <code>-r</code>), SC2181 (<code>$?</code>), SC2010 (<code>ls | grep</code>).</li>
+  <li><code># shellcheck disable=SCxxxx</code> desliga um aviso no comando seguinte; <code>.shellcheckrc</code> configura a pasta toda. Explique sempre o porquê.</li>
+  <li><code>-S warning</code> filtra por gravidade, <code>-f gcc</code> dá uma linha por aviso, <code>-f diff</code> gera as correções, <code>-x</code> segue os <code>source</code>.</li>
+  <li>Instale (ou use shellcheck.net) e ligue no editor: é o hábito que mais melhora seus scripts.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
