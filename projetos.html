@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Projetos — como usar os projetos passo a passo | Guia Bash</title>
+<meta name="description" content="Como usar os projetos do Guia Bash: o que cada um constrói, quais aulas ele pratica, onde rodar (simulador ou seu computador) e como testar scripts com segurança.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Como Usar os Projetos</span></h1>
+
+<p class="intro">As aulas ensinam um recurso de cada vez. Nos projetos você junta tudo para construir um script que resolve um problema de verdade: arrumar a pasta de downloads, fazer backup, ler um log, criar um jogo, uma ferramenta de linha de comando completa e a sua própria configuração do terminal. Cada projeto é construído em etapas, e em cada etapa o script cresce um pouco.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que cada projeto constrói e quais aulas ele pratica.</li>
+  <li>Como uma página de projeto está organizada (etapas, sessões, missões, script completo).</li>
+  <li>Onde rodar: no simulador do guia ou no seu computador, e o que muda.</li>
+  <li>Como testar scripts que mexem em arquivos sem arriscar os seus.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Os seis projetos</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>#</th><th>Projeto</th><th>O que você constrói</th><th>Aulas que pratica</th><th>Nível</th><th>Tempo</th></tr>
+<tr><td>1</td><td><a href="projeto-organizador.html">Organizar Downloads</a></td><td>Um script que separa a pasta Downloads em Imagens, Documentos, Músicas… pela extensão, com modo simulação e resumo.</td><td><a href="for.html">for</a>, <a href="case.html">case</a>, <a href="curingas.html">curingas</a>, <a href="expansao-parametros.html">${ }</a>, <a href="funcoes.html">funções</a>, <a href="arrays-associativos.html">arrays associativos</a>, <a href="redirecionamento.html">redirecionamento</a></td><td>2</td><td>45 min</td></tr>
+<tr><td>2</td><td><a href="projeto-backup.html">Backup com Rotação</a></td><td>Backup de <code>~/Documentos</code> em <code>.tar.gz</code> com data no nome, mantendo só os 5 mais recentes, que falha do jeito certo.</td><td><a href="substituicao-comando.html">$( )</a>, <a href="arrays.html">arrays</a>, <a href="modo-estrito.html">set -euo pipefail</a>, <a href="trap.html">trap</a>, <a href="codigo-saida.html">código de saída</a>, <a href="agendar.html">agendar</a></td><td>2–3</td><td>1h</td></tr>
+<tr><td>3</td><td><a href="projeto-logs.html">Relatório de Logs</a></td><td>Um relatório do log de acesso de um servidor web: por IP, por código HTTP, páginas e horários, na tela ou em CSV.</td><td><a href="ler-linhas.html">ler linhas</a>, <a href="arrays-associativos.html">arrays associativos</a>, <a href="printf.html">printf</a>, <a href="pipes.html">pipes</a>, <a href="ferramentas-texto.html">awk, sort, uniq</a>, <a href="getopts.html">getopts</a></td><td>2–3</td><td>1h15</td></tr>
+<tr><td>4</td><td><a href="projeto-jogo.html">Jogo da Adivinhação</a></td><td>O jogo de adivinhar o número, com níveis, validação da entrada, recorde e cores.</td><td><a href="read.html">read</a>, <a href="while.html">while</a>, <a href="if.html">if</a>, <a href="aritmetica.html">contas</a>, <a href="regex.html">regex</a>, <a href="interativo.html">select e cores</a></td><td>2</td><td>45 min</td></tr>
+<tr><td>5</td><td><a href="projeto-cli.html">Uma Ferramenta de Verdade</a></td><td>O comando <code>tarefas</code> (<code>add</code>, <code>list</code>, <code>done</code>, <code>rm</code>), com ajuda, opções, ShellCheck limpo, instalação e completar com Tab.</td><td><a href="funcoes-retorno.html">funções</a>, <a href="getopts.html">getopts</a>, <a href="heredoc.html">here-docs</a>, <a href="shellcheck.html">ShellCheck</a>, <a href="path.html">PATH</a>, <a href="complete.html">complete</a>, <a href="boas-praticas.html">boas práticas</a></td><td>3</td><td>1h30</td></tr>
+<tr><td>6</td><td><a href="projeto-dotfiles.html">Seus Dotfiles</a></td><td>O seu <code>.bashrc</code> reorganizado em módulos, com funções úteis, prompt com código de saída, histórico melhor, git e instalador.</td><td><a href="inicializacao.html">inicialização</a>, <a href="alias.html">alias</a>, <a href="ps1.html">PS1</a>, <a href="historico.html">histórico</a>, <a href="funcoes.html">funções</a></td><td>2–3</td><td>1h</td></tr>
+</table>
+</div>
+
+<p><strong>Ordem sugerida:</strong> a da tabela. O organizador e o jogo são os mais acessíveis (dá para começar ao terminar o <a href="script-primeiro.html">Nível 2</a>); o backup e os logs introduzem o modo estrito e o <code>awk</code>; a ferramenta e os dotfiles juntam quase tudo do <a href="arrays.html">Nível 3</a>. Mas cada projeto é independente: comece pelo que resolve um problema seu.</p>
+
+<hr>
+
+<h2>Como uma página de projeto está organizada</h2>
+<p>Todos seguem o mesmo roteiro, para você sempre saber onde está:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>O que traz</th></tr>
+<tr><td>Ao terminar você terá</td><td>O resultado final, em poucas linhas.</td></tr>
+<tr><td>Tabela de pré-requisitos</td><td>Tempo, as aulas que ajudam (com links) e onde o projeto roda.</td></tr>
+<tr><td>"Antes de programar"</td><td>O plano: o formato dos dados, a interface, as decisões. Script bom começa no papel.</td></tr>
+<tr><td>Etapas numeradas</td><td>Cada etapa diz <strong>o que</strong> vamos fazer e <strong>por quê</strong>, mostra o código novo, explica cada linha (tabela ou anatomia), mostra a sessão rodando a versão até ali e termina com uma missão "Experimente".</td></tr>
+<tr><td>O script completo</td><td>Todas as etapas juntas, conferido pelo ShellCheck, e uma caixa para você rodar e modificar à vontade.</td></tr>
+<tr><td>Quando não funciona</td><td>Os erros mais prováveis daquele projeto: a mensagem real, a causa e a solução.</td></tr>
+<tr><td>Desafios extras</td><td>Ideias para continuar sozinho, do mais fácil ao mais difícil.</td></tr>
+<tr><td>Exercícios e resumo</td><td>Para fixar.</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Como aproveitar melhor</strong>
+<ul>
+  <li><strong>Digite</strong> o código em vez de copiar. É mais lento, e é exatamente por isso que você aprende: os erros de digitação viram treino de leitura de mensagens de erro.</li>
+  <li>Rode cada versão antes de passar para a próxima e compare a saída com a da página.</li>
+  <li>Faça as missões antes de olhar a solução. Se travar, releia a tabela da etapa: a resposta quase sempre está nela.</li>
+  <li>Quando terminar, faça pelo menos um desafio extra. É o primeiro código que vai ser só seu.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Onde rodar: simulador ou seu computador?</h2>
+
+<p>As caixas "Experimente" rodam no <a href="simulador.html">simulador</a> do guia: um Bash escrito em JavaScript, dentro da página, com uma máquina fictícia (a da Ana, com <code>Downloads</code>, <code>Documentos</code>, <code>acesso.log</code>…). Nada do que você faz nele toca o seu computador. As sessões de terminal das páginas (os quadros pretos com <code>$</code>) foram gravadas no <strong>Bash 5.3 de verdade</strong>, numa máquina igual à da Ana.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Simulador (caixas "Experimente")</th><th>Seu computador</th></tr>
+<tr><td>Risco</td><td>Nenhum: é tudo de mentira, e o botão Recomeçar volta ao início.</td><td>Real: um <code>mv</code> ou <code>rm</code> errado mexe nos seus arquivos.</td></tr>
+<tr><td>Arquivos</td><td>Os da Ana (iguais em todas as páginas).</td><td>Os seus.</td></tr>
+<tr><td>Programas</td><td>O Bash e os comandos de texto e arquivos mais comuns (<code>ls</code>, <code>grep</code>, <code>sed</code>, <code>awk</code>, <code>sort</code>…).</td><td>Tudo o que estiver instalado.</td></tr>
+<tr><td>Não tem</td><td><code>tar</code>, <code>git</code>, <code>shellcheck</code>, <code>cron</code>, rede, editores, cores reais.</td><td>—</td></tr>
+<tr><td>Bom para</td><td>Cada etapa, as missões, experimentar sem medo.</td><td>O projeto inteiro, o uso de verdade.</td></tr>
+</table>
+</div>
+
+<p>Por isso algumas etapas não têm caixa no simulador e são só para o seu computador: o <code>tar</code> do <a href="projeto-backup.html">backup</a>, o <code>shellcheck</code> e a instalação da <a href="projeto-cli.html">ferramenta</a>, o <code>git</code> dos <a href="projeto-dotfiles.html">dotfiles</a>. A página sempre avisa.</p>
+
+<h3>Preparar o seu computador</h3>
+<p>Você precisa de um Bash 4.0 ou mais novo (o ideal é o 5.x) e de um editor de texto. Confira:</p>
+<pre class="term">$ bash --version | head -1
+GNU bash, versão 5.3.9(1)-release (x86_64-pc-linux-gnu)</pre>
+<p>No Linux, você já tem. No macOS, o <code>/bin/bash</code> é o 3.2, antigo demais (sem arrays associativos, sem <code>${x,,}</code>): instale um novo com <code>brew install bash</code>. No Windows, use o WSL. Detalhes em <a href="onde-tem-bash.html">Bash em Cada Sistema</a>. Os projetos de <a href="projeto-backup.html">backup</a> e da <a href="projeto-cli.html">ferramenta</a> também usam o <code>shellcheck</code>; ele está nos repositórios de quase toda distribuição (<code>sudo apt install shellcheck</code> no Debian e Ubuntu, <code>sudo dnf install ShellCheck</code> no Fedora, <code>sudo pacman -S shellcheck</code> no Arch, <code>brew install shellcheck</code> no macOS).</p>
+
+<h3>Uma pasta só para os projetos</h3>
+<p>Crie uma pasta e trabalhe sempre dentro dela:</p>
+<pre class="term">$ mkdir -p ~/projetos-bash
+$ cd ~/projetos-bash
+$ pwd
+/home/ana/projetos-bash</pre>
+
+<div class="try" data-goal="dir:~/projetos-bash/teste/Downloads,cwd:~/projetos-bash" data-solucao="mkdir -p ~/projetos-bash/teste/Downloads;;cd ~/projetos-bash">
+<p class="try-task"><strong>Missão:</strong> crie a pasta <code>~/projetos-bash</code> com uma subpasta <code>teste/Downloads</code> dentro (num comando só, com <code>mkdir -p</code>) e entre em <code>~/projetos-bash</code>.</p>
+</div>
+
+<hr>
+
+<h2>Testar com segurança no seu computador</h2>
+<p>Os projetos <a href="projeto-organizador.html">Organizar Downloads</a>, <a href="projeto-backup.html">Backup</a> e <a href="projeto-dotfiles.html">Dotfiles</a> mexem em arquivos e configurações de verdade. Quatro hábitos evitam sustos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Hábito</th><th>Como</th></tr>
+<tr><td>Teste numa cópia</td><td>Monte uma pasta de mentira com <code>touch</code>: <code>mkdir -p teste/Downloads &amp;&amp; touch teste/Downloads/{foto.jpg,"Nota fiscal.pdf",musica.mp3}</code>. Rode o script nela (todos os projetos aceitam a pasta como argumento).</td></tr>
+<tr><td>Ensaie antes</td><td>Use o modo simulação quando o script tiver (<code>organizar.sh -n</code>), ou rode com <code>bash -x</code> para ver cada comando antes de confiar. Veja <a href="depuracao.html">Depurar</a>.</td></tr>
+<tr><td>Confira a sintaxe sem rodar</td><td><code>bash -n script.sh</code> só lê o script e acusa erros como um <code>fi</code> esquecido. E <code>shellcheck script.sh</code> pega os erros que o Bash aceita calado.</td></tr>
+<tr><td>Guarde o original</td><td>Antes de mexer no <code>.bashrc</code>: <code>cp ~/.bashrc ~/.bashrc.original</code>, e deixe um terminal aberto enquanto testa.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ bash -n organizar.sh &amp;&amp; echo "sintaxe ok"
+sintaxe ok
+$ ./organizar.sh -n teste/Downloads          « ensaio na pasta de teste
+iria mover: foto.jpg -&gt; Imagens/
+iria mover: musica.mp3 -&gt; Músicas/
+iria mover: Nota fiscal.pdf -&gt; Documentos/
+
+Resumo:
+    1  Imagens
+    1  Documentos
+    1  Músicas
+    3  arquivos no total</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>A saída no meu computador é diferente da página</strong>
+<p><strong>O que aconteceu:</strong> o mais comum é a <strong>língua</strong>: com o sistema em inglês, as mensagens de erro saem em inglês (<code>No such file or directory</code> em vez de <code>Arquivo ou diretório inexistente</code>). Outras diferenças: a data e a hora, a ordem dos arquivos (depende do <code>LANG</code>) e programas que não são os do GNU (no macOS, <code>sed -i</code> e <code>date</code> têm outras opções). <strong>Como confirmar:</strong> <code>echo $LANG</code> e <code>bash --version</code>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>Permissão negada</code> ao rodar <code>./script.sh</code></strong>
+<pre class="term">$ ./organizar.sh
+bash: ./organizar.sh: Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> falta a permissão de execução. <strong>Como resolver:</strong> <code>chmod +x organizar.sh</code>, ou rode com <code>bash organizar.sh</code>. Veja <a href="executar.html">Formas de Executar</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>declare: -A: opção inválida</code>, <code>${x,,}: substituição incorreta</code></strong>
+<p><strong>O que aconteceu:</strong> você está rodando um Bash 3.2 (o <code>/bin/bash</code> do macOS). <strong>Como resolver:</strong> instale um Bash novo e use o shebang <code>#!/usr/bin/env bash</code>, que pega o primeiro <code>bash</code> do PATH. Veja <a href="onde-tem-bash.html">Bash em Cada Sistema</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>A caixa "Experimente" não reconhece um comando</strong>
+<p><strong>O que aconteceu:</strong> o simulador não tem todos os programas (veja a tabela acima). Quando a página mostra um comando só num quadro de sessão, sem caixa, é porque ele precisa do seu computador.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. Você vai testar o organizador no seu computador pela primeira vez. Qual é o jeito mais seguro?</p>
+<label><input type="radio" name="q1"> Rodar direto na sua pasta Downloads; se der errado, desfaz à mão.</label>
+<label><input type="radio" name="q1"> Criar uma pasta de teste com arquivos vazios (<code>touch</code>) e rodar primeiro com <code>-n</code>.</label>
+<label><input type="radio" name="q1"> Rodar como root.</label>
+<label><input type="radio" name="q1"> Rodar duas vezes seguidas.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">2. Por que o projeto de backup não tem caixa "Experimente" para o <code>tar</code>?</p>
+<label><input type="radio" name="q2"> Porque o <code>tar</code> é perigoso.</label>
+<label><input type="radio" name="q2"> Porque o <code>tar</code> não funciona no Bash 5.</label>
+<label><input type="radio" name="q2"> Porque o backup só roda como root.</label>
+<label><input type="radio" name="q2"> Porque o simulador não tem o programa <code>tar</code>; essa parte roda no seu computador.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Só conferir a sintaxe</h3>
+<p>Complete o comando que lê o script e acusa erros de sintaxe <strong>sem executá-lo</strong>:</p>
+<div class="ex-code">bash <input data-answer="-n" aria-label="opção"> organizar.sh</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Num Mac, o script do jogo dá <code>declare: -A: opção inválida</code>. O que fazer?</p>
+<label><input type="radio" name="q4"> Instalar um Bash novo (<code>brew install bash</code>) e usar <code>#!/usr/bin/env bash</code>.</label>
+<label><input type="radio" name="q4"> Trocar <code>-A</code> por <code>-a</code>.</label>
+<label><input type="radio" name="q4"> Rodar com <code>sh</code>.</label>
+<label><input type="radio" name="q4"> Apagar o <code>declare</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Seis projetos, cada um construído em etapas, com missões no simulador e o script completo no fim.</li>
+  <li>O simulador é seguro para cada etapa; o projeto inteiro (com <code>tar</code>, <code>git</code>, <code>shellcheck</code>) roda no seu computador.</li>
+  <li>No seu computador: uma pasta de projetos, testes numa cópia, <code>-n</code>/<code>bash -x</code> antes de confiar e o original sempre guardado.</li>
+  <li>Comece pelo <a href="projeto-organizador.html">Organizar Downloads</a>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
