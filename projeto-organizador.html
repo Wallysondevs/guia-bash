@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projeto Organizar Downloads — script que arruma a pasta por tipo | Guia Bash</title>
+<meta name="description" content="Projeto passo a passo: um script Bash que separa a pasta Downloads em Imagens, Documentos, Músicas, Compactados e Outros, com modo simulação, nomes com espaço, sem sobrescrever, resumo com array associativo e log.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Organizar Downloads</span></h1>
+
+<p class="intro">Toda pasta Downloads vira bagunça: fotos, PDFs, músicas e arquivos compactados misturados. Neste projeto você escreve, em seis etapas, um script que separa tudo em subpastas pelo tipo do arquivo. No caminho ele ganha um modo de "só mostrar", aprende a lidar com nomes com espaço, nunca apaga um arquivo por cima de outro, faz um resumo do que fez e guarda um registro (log).</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Um script <code>organizar.sh</code> que move cada arquivo de <code>~/Downloads</code> para <code>Imagens/</code>, <code>Documentos/</code>, <code>Músicas/</code>, <code>Compactados/</code> ou <code>Outros/</code>.</li>
+  <li>Um <strong>modo simulação</strong> (<code>-n</code>) que mostra o que seria feito sem mover nada.</li>
+  <li>Proteção contra nomes com espaço e contra sobrescrever arquivos.</li>
+  <li>Um resumo no final ("2 Imagens, 1 Músicas…") feito com um array associativo.</li>
+  <li>Um arquivo <code>~/organizar.log</code> com tudo o que foi movido.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>45 min</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="script-primeiro.html">Seu Primeiro Script</a>, <a href="for.html">for</a>, <a href="case.html">case</a>, <a href="expansao-parametros.html">Expansão de Parâmetros</a>, <a href="funcoes.html">Funções</a>. A etapa 5 usa <a href="arrays-associativos.html">Arrays Associativos</a>.</td></tr>
+<tr><td>Onde roda</td><td>Nas caixas "Experimente" desta página (o simulador já tem a pasta <code>Downloads</code> da Ana) ou no seu computador, <strong>sempre com <code>-n</code> primeiro</strong>. Veja <a href="projetos.html">Como Usar os Projetos</a>.</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Você vai praticar</strong>
+<ul>
+  <li><code>for arq in "$pasta"/*</code>: percorrer arquivos do jeito seguro.</li>
+  <li><code>case</code> com vários padrões por linha para classificar extensões.</li>
+  <li><code>${arq##*/}</code> e <code>${nome,,}</code>: pegar o nome e passar para minúsculas.</li>
+  <li><code>declare -A</code> para contar por categoria.</li>
+  <li>Mensagens de erro na saída de erro (<code>&gt;&amp;2</code>) e código de saída.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes de programar: o plano</h2>
+<p>Um script bom começa no papel. A pergunta é: <strong>como o computador sabe o tipo de um arquivo?</strong> O jeito mais simples é olhar a <strong>extensão</strong>, o pedaço depois do último ponto (<code>.jpg</code>, <code>.pdf</code>). Não é infalível (nada impede alguém de chamar um PDF de <code>foto.jpg</code>), mas é o que o gerenciador de arquivos faz na maioria das vezes, e é suficiente aqui.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Extensões</th><th>Vai para a pasta</th></tr>
+<tr><td><code>.jpg .jpeg .png .gif .webp</code></td><td><code>Imagens/</code></td></tr>
+<tr><td><code>.pdf .odt .docx .txt .csv</code></td><td><code>Documentos/</code></td></tr>
+<tr><td><code>.mp3 .ogg .flac .wav</code></td><td><code>Músicas/</code></td></tr>
+<tr><td><code>.zip .tar .gz .xz .7z</code></td><td><code>Compactados/</code></td></tr>
+<tr><td>qualquer outra (ou sem extensão)</td><td><code>Outros/</code></td></tr>
+</table>
+</div>
+
+<p>As subpastas ficam <strong>dentro</strong> de <code>~/Downloads</code> (<code>~/Downloads/Imagens</code>, e não a <code>~/Imagens</code> da Ana). Assim o script nunca mexe em nada fora da pasta que você mandou organizar. A pasta da Ana começa assim:</p>
+
+<pre class="term">$ ls Downloads
+foto.jpg          manual.pdf  ubuntu-26.04-desktop-amd64.iso
+fotos-viagem.zip  musica.mp3</pre>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Etapa 1 — Dizer o tipo de cada arquivo (sem mexer em nada)</h3>
+<p><strong>O que vamos fazer e por quê:</strong> antes de mover qualquer coisa, o script só <em>mostra</em> para onde cada arquivo iria. É a parte mais importante (a classificação) e, como não altera nada, dá para testar à vontade.</p>
+
+<pre class="file" data-file="organizar.sh">#!/usr/bin/env bash
+# organizar.sh — versão 1: só mostra o tipo de cada arquivo
+origem=~/Downloads
+
+for arq in "$origem"/*; do
+  nome=${arq##*/}
+  case ${nome,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp) pasta=Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  pasta=Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        pasta=Músicas ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      pasta=Compactados ;;
+    *)                               pasta=Outros ;;
+  esac
+  echo "$nome -&gt; $pasta"
+done
+</pre>
+
+<p>Linha por linha:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>origem=~/Downloads</code></td><td>Guarda a pasta numa variável. O <code>~</code> sem aspas vira <code>/home/ana</code>. Se um dia quiser organizar outra pasta, muda só aqui.</td></tr>
+<tr><td><code>for arq in "$origem"/*</code></td><td>O curinga <code>*</code> fica <strong>fora</strong> das aspas (para ser expandido) e a variável fica <strong>dentro</strong> (para um espaço no caminho não quebrar nada). Cada volta, <code>arq</code> recebe um caminho completo, como <code>/home/ana/Downloads/foto.jpg</code>. Veja <a href="curingas.html">Curingas</a>.</td></tr>
+<tr><td><code>nome=${arq##*/}</code></td><td>Apaga do começo até a última <code>/</code>: sobra só <code>foto.jpg</code>. É o <code>basename</code> sem chamar programa nenhum. Veja <a href="expansao-parametros.html">Expansão de Parâmetros</a>.</td></tr>
+<tr><td><code>case ${nome,,} in</code></td><td>Compara o nome <strong>em minúsculas</strong> (<code>,,</code>) com os padrões. Assim <code>FOTO.JPG</code> e <code>foto.jpg</code> caem no mesmo lugar.</td></tr>
+<tr><td><code>*.jpg|*.jpeg|… )</code></td><td>Vários padrões separados por <code>|</code> ("ou"). O primeiro que casar vence; o <code>;;</code> encerra o ramo. Veja <a href="case.html">case</a>.</td></tr>
+<tr><td><code>*) pasta=Outros ;;</code></td><td>O "senão": qualquer nome que não casou antes.</td></tr>
+</table>
+</div>
+
+<dl class="anatomy">
+  <dt>${</dt><dd>Início de uma expansão de parâmetro.</dd>
+  <dt>nome</dt><dd>A variável.</dd>
+  <dt>,,</dt><dd>"Passe tudo para minúsculas" (<code>^^</code> faria maiúsculas). <span class="versao">bash 4.0+</span></dd>
+  <dt>}</dt><dd>Fim. O valor da variável não muda: só o texto usado no <code>case</code>.</dd>
+</dl>
+
+<pre class="term">$ chmod +x organizar.sh
+$ ./organizar.sh
+foto.jpg -&gt; Imagens
+fotos-viagem.zip -&gt; Compactados
+manual.pdf -&gt; Documentos
+musica.mp3 -&gt; Músicas
+ubuntu-26.04-desktop-amd64.iso -&gt; Outros      « .iso não está em nenhuma lista: caiu no *)
+$ echo $?
+0</pre>
+<p>Cada linha é uma volta do <code>for</code>. A ordem é a ordem alfabética do curinga. O código de saída <code>0</code> é o do último comando do script (o <code>echo</code>).</p>
+
+<div class="tryscript" data-file="organizar.sh" data-setup="touch Downloads/logo.svg" data-goal="out:logo.svg -&gt; Imagens">
+<p class="try-task"><strong>Missão:</strong> apareceu um <code>logo.svg</code> nos Downloads da Ana e ele está indo para <code>Outros</code>. Faça os arquivos <code>.svg</code> irem para <code>Imagens</code> e clique em Rodar.</p>
+<pre class="script">#!/usr/bin/env bash
+origem=~/Downloads
+
+for arq in "$origem"/*; do
+  nome=${arq##*/}
+  case ${nome,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp) pasta=Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  pasta=Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        pasta=Músicas ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      pasta=Compactados ;;
+    *)                               pasta=Outros ;;
+  esac
+  echo "$nome -&gt; $pasta"
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+origem=~/Downloads
+
+for arq in "$origem"/*; do
+  nome=${arq##*/}
+  case ${nome,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp|*.svg) pasta=Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  pasta=Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        pasta=Músicas ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      pasta=Compactados ;;
+    *)                               pasta=Outros ;;
+  esac
+  echo "$nome -&gt; $pasta"
+done
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 2 — Mover de verdade, com um modo simulação (<code>-n</code>)</h3>
+<p><strong>O que vamos fazer e por quê:</strong> agora o script move os arquivos. Mas um script que move coisas precisa de um "ensaio": com <code>-n</code> (de <em>no-act</em>, "não faça", a mesma letra que o <code>make -n</code> e o <code>rsync -n</code> usam) ele só conta o que faria. Aproveitamos para tirar a classificação de dentro do laço e colocá-la numa <strong>função</strong>.</p>
+
+<pre class="file" data-file="organizar.sh">#!/usr/bin/env bash
+# organizar.sh — versão 2: move de verdade, ou só simula com -n
+simular=0
+if [[ $1 == -n ]]; then
+  simular=1
+  shift
+fi
+origem=${1:-~/Downloads}
+
+tipo_de() {
+  case ${1,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp) echo Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  echo Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        echo Músicas ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      echo Compactados ;;
+    *)                               echo Outros ;;
+  esac
+}
+
+for arq in "$origem"/*; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  pasta=$(tipo_de "$nome")
+  if (( simular )); then
+    echo "iria mover: $nome -&gt; $pasta/"
+  else
+    mkdir -p "$origem/$pasta"
+    mv -- "$arq" "$origem/$pasta/"
+    echo "movido: $nome -&gt; $pasta/"
+  fi
+done
+</pre>
+
+<p>O que é novo:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>if [[ $1 == -n ]]; then simular=1; shift; fi</code></td><td>Se o primeiro argumento é <code>-n</code>, liga a simulação e o descarta com <code>shift</code>: o que vier depois passa a ser o <code>$1</code>. Veja <a href="argumentos.html">Argumentos</a>. (Para várias opções, o certo é o <a href="getopts.html">getopts</a>; com uma só, o <code>if</code> basta.)</td></tr>
+<tr><td><code>origem=${1:-~/Downloads}</code></td><td>"Use o <code>$1</code>; se ele estiver vazio, use <code>~/Downloads</code>." Agora dá para chamar <code>./organizar.sh ~/Desktop</code>.</td></tr>
+<tr><td><code>tipo_de() { … echo Imagens … }</code></td><td>Uma função que recebe um nome em <code>$1</code> e <strong>escreve</strong> a pasta na saída. Veja <a href="funcoes-retorno.html">local, return e Saída</a>.</td></tr>
+<tr><td><code>pasta=$(tipo_de "$nome")</code></td><td>Captura o que a função escreveu. Veja <a href="substituicao-comando.html">Substituição de Comando</a>.</td></tr>
+<tr><td><code>[[ -f $arq ]] || continue</code></td><td>Se não for um arquivo comum (é uma pasta, como a <code>Imagens/</code> que o próprio script cria), pula para a próxima volta. Sem isso, na segunda execução o script tentaria mover <code>Imagens</code> para <code>Outros/Imagens</code>!</td></tr>
+<tr><td><code>(( simular ))</code></td><td>Na aritmética, 0 é falso e qualquer outro número é verdadeiro. Veja <a href="aritmetica.html">Contas</a>.</td></tr>
+<tr><td><code>mkdir -p</code></td><td>Cria a pasta se faltar e fica quieto se ela já existe.</td></tr>
+<tr><td><code>mv -- "$arq" …</code></td><td>O <code>--</code> avisa ao <code>mv</code> que as opções acabaram. Sem ele, um arquivo chamado <code>-f.txt</code> seria lido como a opção <code>-f</code>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./organizar.sh -n
+iria mover: foto.jpg -&gt; Imagens/
+iria mover: fotos-viagem.zip -&gt; Compactados/
+iria mover: manual.pdf -&gt; Documentos/
+iria mover: musica.mp3 -&gt; Músicas/
+iria mover: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+$ ls Downloads
+foto.jpg          manual.pdf  ubuntu-26.04-desktop-amd64.iso      « nada mudou: era só ensaio
+fotos-viagem.zip  musica.mp3
+$ ./organizar.sh
+movido: foto.jpg -&gt; Imagens/
+movido: fotos-viagem.zip -&gt; Compactados/
+movido: manual.pdf -&gt; Documentos/
+movido: musica.mp3 -&gt; Músicas/
+movido: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+$ ls Downloads
+Compactados  Documentos  Imagens  Músicas  Outros
+$ ls Downloads/Imagens
+foto.jpg
+$ ./organizar.sh                       « rodar de novo: não sobrou arquivo solto
+$ echo $?
+0</pre>
+<p>Repare na última execução: não apareceu nada, porque em <code>Downloads</code> só há pastas e o <code>[[ -f ]] || continue</code> pulou todas. Rodar o script duas vezes não estraga nada. Essa propriedade tem nome: o script é <strong>idempotente</strong>.</p>
+
+<div class="tryscript" data-file="organizar.sh" data-setup="touch Downloads/aula.mp4 Downloads/trailer.MKV" data-goal="file:~/Downloads/Vídeos/aula.mp4,file:~/Downloads/Vídeos/trailer.MKV">
+<p class="try-task"><strong>Missão:</strong> a Ana baixou dois vídeos (<code>aula.mp4</code> e <code>trailer.MKV</code>). Crie a categoria <code>Vídeos</code> para <code>.mp4</code>, <code>.mkv</code> e <code>.webm</code> e rode o script (sem <code>-n</code>) para movê-los.</p>
+<pre class="script">#!/usr/bin/env bash
+simular=0
+if [[ $1 == -n ]]; then
+  simular=1
+  shift
+fi
+origem=${1:-~/Downloads}
+
+tipo_de() {
+  case ${1,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp) echo Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  echo Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        echo Músicas ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      echo Compactados ;;
+    *)                               echo Outros ;;
+  esac
+}
+
+for arq in "$origem"/*; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  pasta=$(tipo_de "$nome")
+  if (( simular )); then
+    echo "iria mover: $nome -&gt; $pasta/"
+  else
+    mkdir -p "$origem/$pasta"
+    mv -- "$arq" "$origem/$pasta/"
+    echo "movido: $nome -&gt; $pasta/"
+  fi
+done
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+simular=0
+if [[ $1 == -n ]]; then
+  simular=1
+  shift
+fi
+origem=${1:-~/Downloads}
+
+tipo_de() {
+  case ${1,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp) echo Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  echo Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        echo Músicas ;;
+    *.mp4|*.mkv|*.webm)              echo Vídeos ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      echo Compactados ;;
+    *)                               echo Outros ;;
+  esac
+}
+
+for arq in "$origem"/*; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  pasta=$(tipo_de "$nome")
+  if (( simular )); then
+    echo "iria mover: $nome -&gt; $pasta/"
+  else
+    mkdir -p "$origem/$pasta"
+    mv -- "$arq" "$origem/$pasta/"
+    echo "movido: $nome -&gt; $pasta/"
+  fi
+done
+</pre>
+</div>
+<p>Dica: escreva <code>-n</code> no campo de argumentos para ensaiar antes; depois apague e rode de verdade.</p>
+</li>
+
+<li>
+<h3>Etapa 3 — Testar com nomes difíceis (espaços, maiúsculas, sem extensão)</h3>
+<p><strong>O que vamos fazer e por quê:</strong> arquivos de verdade têm nomes como <code>Nota fiscal março.pdf</code>. Script que só foi testado com <code>foto.jpg</code> quebra no primeiro nome com espaço. Vamos criar quatro arquivos "malvados" e comparar o nosso laço com o erro mais comum de todos, o <code>for arq in $(ls)</code>.</p>
+
+<pre class="file" data-file="errado.sh">#!/usr/bin/env bash
+# versão ERRADA, só para ver o problema
+for arq in $(ls ~/Downloads); do
+  echo "arquivo: $arq"
+done
+</pre>
+
+<pre class="term">$ cd Downloads
+$ touch "Nota fiscal março.pdf" "Foto da praia.JPG" LEIAME "backup do site.tar.gz"
+$ cd
+$ ./errado.sh
+arquivo: backup                « um nome virou três "arquivos"
+arquivo: do
+arquivo: site.tar.gz
+arquivo: Foto
+arquivo: da
+arquivo: praia.JPG
+arquivo: foto.jpg
+arquivo: fotos-viagem.zip
+arquivo: LEIAME
+arquivo: manual.pdf
+arquivo: musica.mp3
+arquivo: Nota
+arquivo: fiscal
+arquivo: março.pdf
+arquivo: ubuntu-26.04-desktop-amd64.iso</pre>
+<p>A saída do <code>$(ls)</code> é <strong>um texto só</strong>, e o Bash o corta em palavras nos espaços (a <em>separação de palavras</em>, controlada pelo <code>IFS</code>). <code>Nota fiscal março.pdf</code> virou <code>Nota</code>, <code>fiscal</code> e <code>março.pdf</code>; um <code>mv</code> com esses pedaços daria "Arquivo ou diretório inexistente" três vezes. Já o curinga <code>"$origem"/*</code> entrega <strong>cada nome inteiro</strong> como uma palavra, e as aspas em <code>"$arq"</code> o mantêm inteiro dali em diante:</p>
+
+<pre class="term">$ ./organizar.sh -n
+iria mover: backup do site.tar.gz -&gt; Compactados/      « .gz casou com *.gz
+iria mover: Foto da praia.JPG -&gt; Imagens/              « JPG virou jpg no ${1,,}
+iria mover: foto.jpg -&gt; Imagens/
+iria mover: fotos-viagem.zip -&gt; Compactados/
+iria mover: LEIAME -&gt; Outros/                          « sem extensão: caiu no *)
+iria mover: manual.pdf -&gt; Documentos/
+iria mover: musica.mp3 -&gt; Músicas/
+iria mover: Nota fiscal março.pdf -&gt; Documentos/
+iria mover: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+$ ./organizar.sh
+movido: backup do site.tar.gz -&gt; Compactados/
+…
+movido: Nota fiscal março.pdf -&gt; Documentos/
+movido: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+$ ls Downloads/Documentos
+ manual.pdf  'Nota fiscal março.pdf'</pre>
+<p>(A segunda execução foi encurtada com <code>…</code>: são as mesmas linhas, com "movido" no lugar de "iria mover".) As aspas simples em volta de <code>'Nota fiscal março.pdf'</code> não fazem parte do nome: é o <code>ls</code> mostrando, no terminal, como você teria que digitar esse nome. Veja <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<div class="tip">
+<strong>E os arquivos ocultos?</strong>
+<p>O <code>*</code> não pega nomes que começam com ponto (<code>.config</code>). Para uma pasta de downloads isso é bom: arquivos ocultos costumam ser de programas. Se quisesse incluí-los, bastaria <code>shopt -s dotglob</code> no começo do script. Veja <a href="shopt.html">Opções do Shell</a>.</p>
+</div>
+
+<div class="tryscript" data-file="mover-docs.sh" data-setup="touch 'Downloads/Nota fiscal.pdf'" data-goal="file:~/Downloads/Documentos/Nota fiscal.pdf">
+<p class="try-task"><strong>Missão:</strong> este script tenta mover os PDFs para <code>Documentos/</code>, mas falha com <code>Nota fiscal.pdf</code>. Rode, leia os erros e conserte o laço (troque o <code>$(ls …)</code> por um curinga e coloque aspas onde faltam).</p>
+<pre class="script">#!/usr/bin/env bash
+origem=~/Downloads
+mkdir -p $origem/Documentos
+for nome in $(ls $origem); do
+  case $nome in
+    *.pdf) mv $origem/$nome $origem/Documentos/ ;;
+  esac
+done
+ls $origem/Documentos
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+origem=~/Downloads
+mkdir -p "$origem/Documentos"
+for arq in "$origem"/*; do
+  nome=${arq##*/}
+  case $nome in
+    *.pdf) mv -- "$arq" "$origem/Documentos/" ;;
+  esac
+done
+ls "$origem/Documentos"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 4 — Nunca sobrescrever um arquivo</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o <code>mv</code>, por padrão, <strong>substitui sem perguntar</strong> um arquivo de mesmo nome no destino. Veja o que a versão 2 faz quando a Ana baixa outra <code>foto.jpg</code> depois de já ter organizado a primeira:</p>
+
+<pre class="term">$ ./organizar.sh
+movido: foto.jpg -&gt; Imagens/
+movido: fotos-viagem.zip -&gt; Compactados/
+movido: manual.pdf -&gt; Documentos/
+movido: musica.mp3 -&gt; Músicas/
+movido: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+$ ls -l Downloads/Imagens
+total 0
+-rw-rw-r-- 1 ana ana 49152 out 15 08:47 foto.jpg       « a foto original: 49152 bytes
+$ echo "foto da festa" &gt; Downloads/foto.jpg
+$ ./organizar.sh
+movido: foto.jpg -&gt; Imagens/
+$ ls -l Downloads/Imagens
+total 4
+-rw-rw-r-- 1 ana ana 14 out 15 10:31 foto.jpg          « a original sumiu para sempre</pre>
+<p>Nenhuma mensagem de erro, código de saída 0, e a foto original foi perdida. É o pior tipo de defeito: silencioso. A correção tem duas camadas:</p>
+
+<pre class="file" data-file="organizar.sh (trecho novo da versão 4)">for arq in "$origem"/*; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  pasta=$(tipo_de "$nome")
+  destino=$origem/$pasta
+  if [[ -e $destino/$nome ]]; then
+    echo "pulado: $nome (já existe em $pasta/)"
+    continue
+  fi
+  if (( simular )); then
+    echo "iria mover: $nome -&gt; $pasta/"
+  else
+    mkdir -p "$destino"
+    mv -n -- "$arq" "$destino/"
+    echo "movido: $nome -&gt; $pasta/"
+  fi
+done
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>Por quê</th></tr>
+<tr><td><code>if [[ -e $destino/$nome ]]</code></td><td><code>-e</code> = "existe" (arquivo, pasta, qualquer coisa). Se já existe, avisa e pula com <code>continue</code>. É esta checagem que <strong>conta</strong> para o usuário o que aconteceu. Veja <a href="testes.html">Testes</a>.</td></tr>
+<tr><td><code>mv -n</code></td><td><em>no-clobber</em>, "não amasse": se o destino existir, o <code>mv</code> não faz nada. É a rede de segurança caso o arquivo apareça entre a checagem e o <code>mv</code>.</td></tr>
+<tr><td><code>destino=$origem/$pasta</code></td><td>Só para não repetir <code>"$origem/$pasta"</code> três vezes.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./organizar.sh
+movido: foto.jpg -&gt; Imagens/
+movido: fotos-viagem.zip -&gt; Compactados/
+movido: manual.pdf -&gt; Documentos/
+movido: musica.mp3 -&gt; Músicas/
+movido: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+$ echo "foto da festa" &gt; Downloads/foto.jpg
+$ ./organizar.sh
+pulado: foto.jpg (já existe em Imagens/)
+$ ls -l Downloads/Imagens Downloads/foto.jpg
+-rw-rw-r-- 1 ana ana   14 out 15 10:31 Downloads/foto.jpg     « a nova ficou onde estava
+
+Downloads/Imagens:
+total 0
+-rw-rw-r-- 1 ana ana 49152 out 15 08:47 foto.jpg              « a original está a salvo</pre>
+
+<div class="warning">
+<strong>Por que não confiar só no <code>mv -n</code>?</strong>
+<p>Porque ele é silencioso: quando se recusa a mover, não escreve nada e ainda sai com código <code>0</code> (no GNU coreutils 9.7 do laboratório). O script diria "movido" e o arquivo continuaria lá. Por isso a checagem com <code>[[ -e ]]</code> vem antes.</p>
+</div>
+
+<div class="tryscript" data-file="organizar.sh" data-setup="mkdir -p Downloads/Imagens;;echo antiga &gt; Downloads/Imagens/foto.jpg;;echo nova &gt; Downloads/foto.jpg" data-goal="contains:~/Downloads/Imagens/foto.jpg=antiga,out:pulado">
+<p class="try-task"><strong>Missão:</strong> já existe uma <code>Imagens/foto.jpg</code> (com o texto "antiga") e há outra <code>foto.jpg</code> solta em Downloads. Rode como está e veja a antiga ser perdida. Depois clique em Recomeçar, acrescente a checagem com <code>[[ -e ]]</code> que escreve <code>pulado: …</code> e rode de novo.</p>
+<pre class="script">#!/usr/bin/env bash
+origem=~/Downloads
+for arq in "$origem"/*.jpg; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  destino=$origem/Imagens
+  mkdir -p "$destino"
+  mv -- "$arq" "$destino/"
+  echo "movido: $nome -&gt; Imagens/"
+done
+cat "$origem/Imagens/foto.jpg"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+origem=~/Downloads
+for arq in "$origem"/*.jpg; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  destino=$origem/Imagens
+  if [[ -e $destino/$nome ]]; then
+    echo "pulado: $nome (já existe em Imagens/)"
+    continue
+  fi
+  mkdir -p "$destino"
+  mv -n -- "$arq" "$destino/"
+  echo "movido: $nome -&gt; Imagens/"
+done
+cat "$origem/Imagens/foto.jpg"
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 5 — Um resumo no final (array associativo)</h3>
+<p><strong>O que vamos fazer e por quê:</strong> com 200 arquivos, ninguém lê 200 linhas. Queremos terminar com "2 Imagens, 1 Músicas…". Precisamos de um contador <strong>por nome de pasta</strong>, e é exatamente isso que um array associativo é: uma tabela em que o índice é um texto. Veja <a href="arrays-associativos.html">Arrays Associativos</a>.</p>
+
+<pre class="file" data-file="organizar.sh (trechos novos da versão 5)">declare -A conta                 # no começo do script
+
+    # dentro do laço, no ramo "pulado", antes do continue:
+    (( conta[Pulados]++ ))
+
+  # dentro do laço, na última linha (vale para mover e para simular):
+  (( conta[$pasta]++ ))
+
+# depois do laço:
+echo
+echo "Resumo:"
+total=0
+for p in Imagens Documentos Músicas Compactados Outros Pulados; do
+  if [[ -v conta[$p] ]]; then
+    printf '%5d  %s\n' "${conta[$p]}" "$p"
+    (( total += conta[$p] ))
+  fi
+done
+printf '%5d  %s\n' "$total" "arquivos no total"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>declare -A conta</code></td><td>Cria o array <strong>associativo</strong>. Sem o <code>-A</code>, o Bash trataria <code>conta[Imagens]</code> como índice numérico 0 e somaria tudo no mesmo lugar. <span class="versao">bash 4.0+</span></td></tr>
+<tr><td><code>(( conta[$pasta]++ ))</code></td><td>Soma 1 na posição daquela pasta. Uma posição que não existia vale 0.</td></tr>
+<tr><td><code>for p in Imagens … Pulados</code></td><td>Percorremos as categorias numa ordem fixa. O <code>"${!conta[@]}"</code> também listaria as chaves, mas numa ordem que o Bash escolhe (não alfabética nem de chegada).</td></tr>
+<tr><td><code>[[ -v conta[$p] ]]</code></td><td>"Esta posição existe?" Assim só aparecem as categorias que tiveram arquivos.</td></tr>
+<tr><td><code>printf '%5d  %s\n'</code></td><td>Número alinhado à direita em 5 colunas, dois espaços, o nome. Veja <a href="printf.html">printf</a>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./organizar.sh -n
+iria mover: backup do site.tar.gz -&gt; Compactados/
+iria mover: Foto da praia.JPG -&gt; Imagens/
+…
+iria mover: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+
+Resumo:
+    2  Imagens
+    2  Documentos
+    1  Músicas
+    2  Compactados
+    2  Outros
+    9  arquivos no total</pre>
+<p>(Encurtado com <code>…</code>: são as mesmas nove linhas da etapa 3.) O resumo também funciona no modo simulação, porque o <code>(( conta[$pasta]++ ))</code> fica fora do <code>if (( simular ))</code>.</p>
+
+<div class="tip">
+<strong>Por que o número vem antes do nome?</strong>
+<p>Para alinhar. O <code>printf</code> do Bash mede a largura de <code>%-12s</code> em <strong>bytes</strong>, e o "ú" de "Músicas" ocupa 2 bytes em UTF-8. Com o nome na frente, a linha de Músicas sairia um espaço mais curta:</p>
+<pre class="term">$ printf "[%-10s]\n" Músicas Imagens
+[Músicas  ]
+[Imagens   ]</pre>
+<p>Com o número primeiro (<code>%5d</code>), só números são alinhados, e eles nunca têm acento.</p>
+</div>
+
+<div class="tryscript" data-file="contar.sh" data-goal="out:2 jpg,out:1 pdf">
+<p class="try-task"><strong>Missão:</strong> este script conta os arquivos de <code>~/Downloads</code> pela extensão, mas falta o resumo. Escreva o laço que mostra cada extensão e quantos arquivos ela tem, no formato <code>2 jpg</code> (a ordem das linhas não importa). Dica: <code>for ext in "${!conta[@]}"</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+declare -A conta
+touch ~/Downloads/capa.jpg
+for arq in ~/Downloads/*; do
+  nome=${arq##*/}
+  ext=${nome##*.}
+  (( conta[$ext]++ ))
+done
+# escreva o resumo aqui
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+declare -A conta
+touch ~/Downloads/capa.jpg
+for arq in ~/Downloads/*; do
+  nome=${arq##*/}
+  ext=${nome##*.}
+  (( conta[$ext]++ ))
+done
+for ext in "${!conta[@]}"; do
+  echo "${conta[$ext]} $ext"
+done
+</pre>
+</div>
+</li>
+
+<li>
+<h3>Etapa 6 — Log e erros bem dados</h3>
+<p><strong>O que vamos fazer e por quê:</strong> daqui a um mês, a Ana vai procurar "onde foi parar aquele PDF?". Um <strong>log</strong> (registro) com data e hora responde. E se ela digitar a pasta errada, o script deve dizer isso claramente, na <strong>saída de erro</strong>, e terminar com um código diferente de 0, para quem chamou (outro script, o cron) saber que falhou.</p>
+
+<pre class="file" data-file="organizar.sh (trechos novos da versão 6)">log=~/organizar.log
+
+registrar() {
+  printf '%s %s\n' "$(date '+%F %T')" "$*" &gt;&gt; "$log"
+}
+
+if [[ ! -d $origem ]]; then
+  echo "organizar: a pasta '$origem' não existe" &gt;&amp;2
+  exit 1
+fi
+
+    # no ramo "pulado":
+    (( simular )) || registrar "PULADO $nome (já existe em $pasta/)"
+
+    # depois do mv:
+    registrar "$nome -&gt; $pasta/"
+</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>O que faz</th></tr>
+<tr><td><code>date '+%F %T'</code></td><td>Data e hora no formato <code>2026-10-15 10:31:06</code> (<code>%F</code> = ano-mês-dia, <code>%T</code> = hora:min:seg). Esse formato se ordena certo com <code>sort</code>.</td></tr>
+<tr><td><code>"$*"</code></td><td>Todos os argumentos da função juntos num texto só. Veja <a href="argumentos.html">Argumentos</a>.</td></tr>
+<tr><td><code>&gt;&gt; "$log"</code></td><td>Acrescenta no fim do arquivo (cria se não existir). Com <code>&gt;</code>, cada linha apagaria a anterior. Veja <a href="redirecionamento.html">Redirecionamento</a>.</td></tr>
+<tr><td><code>&gt;&amp;2</code></td><td>Manda a mensagem para a saída de erro (descritor 2). Ela continua aparecendo na tela, mas não se mistura com a saída normal num pipe ou num <code>&gt; arquivo</code>.</td></tr>
+<tr><td><code>exit 1</code></td><td>Termina o script com código 1 = "falhou". Veja <a href="codigo-saida.html">Código de Saída</a>.</td></tr>
+<tr><td><code>(( simular )) || registrar …</code></td><td>"Se não estiver simulando, registre." Um ensaio não deve sujar o log.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ./organizar.sh
+movido: backup do site.tar.gz -&gt; Compactados/
+…
+movido: ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+
+Resumo:
+    2  Imagens
+    2  Documentos
+    1  Músicas
+    2  Compactados
+    2  Outros
+    9  arquivos no total
+$ echo "foto da festa" &gt; Downloads/foto.jpg
+$ ./organizar.sh
+pulado: foto.jpg (já existe em Imagens/)
+
+Resumo:
+    1  Pulados
+    1  arquivos no total
+$ cat organizar.log
+2026-10-15 10:31:06 backup do site.tar.gz -&gt; Compactados/
+2026-10-15 10:31:06 Foto da praia.JPG -&gt; Imagens/
+2026-10-15 10:31:06 foto.jpg -&gt; Imagens/
+2026-10-15 10:31:06 fotos-viagem.zip -&gt; Compactados/
+2026-10-15 10:31:06 LEIAME -&gt; Outros/
+2026-10-15 10:31:06 manual.pdf -&gt; Documentos/
+2026-10-15 10:31:06 musica.mp3 -&gt; Músicas/
+2026-10-15 10:31:06 Nota fiscal março.pdf -&gt; Documentos/
+2026-10-15 10:31:06 ubuntu-26.04-desktop-amd64.iso -&gt; Outros/
+2026-10-15 10:31:06 PULADO foto.jpg (já existe em Imagens/)
+$ ./organizar.sh ~/Dowloads
+organizar: a pasta '/home/ana/Dowloads' não existe      « erro de digitação: Dowloads
+$ echo $?
+1</pre>
+<p>Agora "onde foi parar a nota fiscal?" tem resposta: <code>grep -i nota organizar.log</code>. E o código 1 permite usar o script em cadeia: <code>./organizar.sh &amp;&amp; echo pronto</code> só diz "pronto" se deu certo. Veja <a href="operadores.html">; &amp;&amp; ||</a>.</p>
+
+<div class="tryscript" data-file="organizar.sh" data-args="/tmp/nao-existe" data-goal="err:não existe,exit:2">
+<p class="try-task"><strong>Missão:</strong> o script está recebendo uma pasta que não existe, mas a mensagem sai na saída normal e o código é 0. Faça a mensagem ir para a saída de erro e o script sair com código <strong>2</strong> (o código que muitos programas usam para "uso errado").</p>
+<pre class="script">#!/usr/bin/env bash
+origem=${1:-~/Downloads}
+
+if [[ ! -d $origem ]]; then
+  echo "organizar: a pasta '$origem' não existe"
+fi
+
+echo "organizando $origem…"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+origem=${1:-~/Downloads}
+
+if [[ ! -d $origem ]]; then
+  echo "organizar: a pasta '$origem' não existe" &gt;&amp;2
+  exit 2
+fi
+
+echo "organizando $origem…"
+</pre>
+</div>
+</li>
+
+</ol>
+
+<hr>
+
+<h2>O script completo</h2>
+<p>Juntando as seis etapas. Ele passa no <a href="shellcheck.html">ShellCheck</a> sem nenhum aviso.</p>
+
+<pre class="file" data-file="organizar.sh">#!/usr/bin/env bash
+# organizar.sh — arruma uma pasta (padrão: ~/Downloads) em subpastas por tipo.
+# Uso: organizar.sh [-n] [PASTA]      -n = simulação: só mostra, não move nada
+
+simular=0
+if [[ $1 == -n ]]; then
+  simular=1
+  shift
+fi
+origem=${1:-~/Downloads}
+log=~/organizar.log
+declare -A conta
+
+registrar() {
+  printf '%s %s\n' "$(date '+%F %T')" "$*" &gt;&gt; "$log"
+}
+
+tipo_de() {
+  case ${1,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp) echo Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  echo Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        echo Músicas ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      echo Compactados ;;
+    *)                               echo Outros ;;
+  esac
+}
+
+if [[ ! -d $origem ]]; then
+  echo "organizar: a pasta '$origem' não existe" &gt;&amp;2
+  exit 1
+fi
+
+for arq in "$origem"/*; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  pasta=$(tipo_de "$nome")
+  destino=$origem/$pasta
+  if [[ -e $destino/$nome ]]; then
+    echo "pulado: $nome (já existe em $pasta/)"
+    (( simular )) || registrar "PULADO $nome (já existe em $pasta/)"
+    (( conta[Pulados]++ ))
+    continue
+  fi
+  if (( simular )); then
+    echo "iria mover: $nome -&gt; $pasta/"
+  else
+    mkdir -p "$destino"
+    mv -n -- "$arq" "$destino/"
+    echo "movido: $nome -&gt; $pasta/"
+    registrar "$nome -&gt; $pasta/"
+  fi
+  (( conta[$pasta]++ ))
+done
+
+echo
+echo "Resumo:"
+total=0
+for p in Imagens Documentos Músicas Compactados Outros Pulados; do
+  if [[ -v conta[$p] ]]; then
+    printf '%5d  %s\n' "${conta[$p]}" "$p"
+    (( total += conta[$p] ))
+  fi
+done
+printf '%5d  %s\n' "$total" "arquivos no total"
+</pre>
+
+<pre class="term">$ shellcheck organizar.sh
+$ echo $?
+0</pre>
+
+<div class="tryscript" data-file="organizar.sh" data-args="-n">
+<p class="try-task"><strong>Brinque à vontade:</strong> o script completo, com <code>-n</code> no campo de argumentos. Rode, depois apague o <code>-n</code> e rode de novo; crie arquivos com <code>touch</code> no começo do script para testar outros nomes.</p>
+<pre class="script">#!/usr/bin/env bash
+# organizar.sh — arruma uma pasta (padrão: ~/Downloads) em subpastas por tipo.
+# Uso: organizar.sh [-n] [PASTA]      -n = simulação: só mostra, não move nada
+
+simular=0
+if [[ $1 == -n ]]; then
+  simular=1
+  shift
+fi
+origem=${1:-~/Downloads}
+log=~/organizar.log
+declare -A conta
+
+registrar() {
+  printf '%s %s\n' "$(date '+%F %T')" "$*" &gt;&gt; "$log"
+}
+
+tipo_de() {
+  case ${1,,} in
+    *.jpg|*.jpeg|*.png|*.gif|*.webp) echo Imagens ;;
+    *.pdf|*.odt|*.docx|*.txt|*.csv)  echo Documentos ;;
+    *.mp3|*.ogg|*.flac|*.wav)        echo Músicas ;;
+    *.zip|*.tar|*.gz|*.xz|*.7z)      echo Compactados ;;
+    *)                               echo Outros ;;
+  esac
+}
+
+if [[ ! -d $origem ]]; then
+  echo "organizar: a pasta '$origem' não existe" &gt;&amp;2
+  exit 1
+fi
+
+for arq in "$origem"/*; do
+  [[ -f $arq ]] || continue
+  nome=${arq##*/}
+  pasta=$(tipo_de "$nome")
+  destino=$origem/$pasta
+  if [[ -e $destino/$nome ]]; then
+    echo "pulado: $nome (já existe em $pasta/)"
+    (( simular )) || registrar "PULADO $nome (já existe em $pasta/)"
+    (( conta[Pulados]++ ))
+    continue
+  fi
+  if (( simular )); then
+    echo "iria mover: $nome -&gt; $pasta/"
+  else
+    mkdir -p "$destino"
+    mv -n -- "$arq" "$destino/"
+    echo "movido: $nome -&gt; $pasta/"
+    registrar "$nome -&gt; $pasta/"
+  fi
+  (( conta[$pasta]++ ))
+done
+
+echo
+echo "Resumo:"
+total=0
+for p in Imagens Documentos Músicas Compactados Outros Pulados; do
+  if [[ -v conta[$p] ]]; then
+    printf '%5d  %s\n' "${conta[$p]}" "$p"
+    (( total += conta[$p] ))
+  fi
+done
+printf '%5d  %s\n' "$total" "arquivos no total"
+</pre>
+</div>
+
+<h2>Usar no seu computador</h2>
+<p>Salve o script, dê permissão e <strong>ensaie primeiro</strong>:</p>
+<pre class="term">$ chmod +x organizar.sh
+$ ./organizar.sh -n            « leia a lista com calma
+$ ./organizar.sh               « só então de verdade</pre>
+<p>Se a sua pasta se chama <code>~/Transferências</code> (comum em sistemas em português de Portugal) ou <code>~/Download</code>, passe-a como argumento: <code>./organizar.sh ~/Transferências</code>. Para chamar o script de qualquer pasta, só com o nome, coloque-o em <code>~/.local/bin</code> (veja <a href="path.html">PATH</a> e o projeto <a href="projeto-cli.html">Uma Ferramenta de Verdade</a>).</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Permissão negada" ao rodar <code>./organizar.sh</code></strong>
+<pre class="term">$ ./organizar.sh
+bash: ./organizar.sh: Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não tem permissão de execução. <strong>Como resolver:</strong> <code>chmod +x organizar.sh</code>, ou rode com <code>bash organizar.sh</code>. Veja <a href="executar.html">Formas de Executar</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Tudo vai para <code>Outros</code></strong>
+<p><strong>O que aconteceu:</strong> provavelmente os padrões do <code>case</code> estão entre aspas (<code>"*.jpg"</code>) ou o <code>${nome,,}</code> virou <code>$nome</code> e os arquivos têm extensão maiúscula. Entre aspas, o <code>*</code> é um asterisco de verdade, não um curinga. <strong>Como confirmar:</strong> rode com <code>bash -x organizar.sh -n</code> e olhe as linhas <code>+ case …</code>. Veja <a href="depuracao.html">Depurar</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"iria mover: * -&gt; Outros/"</strong>
+<p><strong>O que aconteceu:</strong> a pasta estava vazia e o curinga, sem nada para casar, ficou como o texto <code>*</code>. O <code>[[ -f $arq ]] || continue</code> do script final evita isso (um arquivo chamado <code>*</code> não existe). Outra saída é <code>shopt -s nullglob</code>, que faz o curinga sem resultado sumir. Veja <a href="curingas.html">Curingas</a>.</p>
+</div>
+
+<div class="cenario">
+<strong><code>declare: -A: opção inválida</code></strong>
+<p><strong>O que aconteceu:</strong> você está no macOS, cujo <code>/bin/bash</code> é a versão 3.2, sem arrays associativos (nem <code>${x,,}</code>). <strong>Como confirmar:</strong> <code>bash --version</code>. <strong>Como resolver:</strong> instale um Bash novo (<code>brew install bash</code>) e use <code>#!/usr/bin/env bash</code>, que pega o primeiro <code>bash</code> do PATH. Veja <a href="onde-tem-bash.html">Bash em Cada Sistema</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Não apareceu nada</strong>
+<p><strong>O que aconteceu:</strong> nas versões 2 a 4 (sem resumo), é o esperado quando não há arquivo solto: só há pastas, e todas são puladas. Confira com <code>echo $?</code> (deve ser 0) e <code>ls ~/Downloads</code>.</p>
+</div>
+
+<hr>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li><strong>Renomear em vez de pular:</strong> se <code>foto.jpg</code> já existe, mova como <code>foto (1).jpg</code>, <code>foto (2).jpg</code>… Dica: <code>${nome%.*}</code> é o nome sem extensão e <code>${nome##*.}</code>, a extensão.</li>
+  <li><strong>Configuração fora do código:</strong> leia as regras de um arquivo <code>~/.config/organizar.conf</code> com linhas <code>jpg=Imagens</code>, usando <code>while IFS== read -r ext pasta</code> (veja <a href="ler-linhas.html">Ler Arquivos Linha a Linha</a>).</li>
+  <li><strong>Por idade:</strong> com a opção <code>-d 30</code>, mexa só nos arquivos com mais de 30 dias (<code>find "$origem" -maxdepth 1 -type f -mtime +30</code>).</li>
+  <li><strong>Pelo conteúdo:</strong> use <code>file --mime-type -b "$arq"</code> (que diz <code>image/jpeg</code>, <code>application/pdf</code>…) em vez da extensão.</li>
+  <li><strong>Desfazer:</strong> escreva <code>desorganizar.sh</code>, que lê o log e devolve cada arquivo ao lugar.</li>
+  <li><strong>Automático:</strong> rode toda noite com o cron (veja <a href="agendar.html">Agendar Scripts</a>).</li>
+</ul>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só o nome</h3>
+<p><code>arq</code> vale <code>/home/ana/Downloads/manual.pdf</code>. Complete para guardar só <code>manual.pdf</code> em <code>nome</code>, sem chamar programa nenhum:</p>
+<div class="ex-code">nome=<input data-answer="${arq##*/}" aria-label="expansão"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Por que o script usa <code>for arq in "$origem"/*</code> e não <code>for arq in $(ls $origem)</code>?</p>
+<label><input type="radio" name="q2"> Porque o <code>ls</code> não funciona dentro de scripts.</label>
+<label><input type="radio" name="q2"> Porque o curinga é mais rápido para pastas grandes, e só por isso.</label>
+<label><input type="radio" name="q2"> Porque a saída do <code>$(ls)</code> é cortada nos espaços, e "Nota fiscal.pdf" viraria dois itens.</label>
+<label><input type="radio" name="q2"> Porque o <code>ls</code> mostra os arquivos ocultos.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Não amassar</h3>
+<p>Complete a opção do <code>mv</code> que se recusa a substituir um arquivo que já existe no destino:</p>
+<div class="ex-code">mv <input data-answer="-n|--no-clobber|-n --" aria-label="opção"> "$arq" "$destino/"</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Sem a linha <code>[[ -f $arq ]] || continue</code>, o que aconteceria na <strong>segunda</strong> vez que o script rodasse?</p>
+<label><input type="radio" name="q4"> Nada de diferente.</label>
+<label><input type="radio" name="q4"> As pastas que ele criou (<code>Imagens</code>, <code>Documentos</code>…) seriam tratadas como arquivos sem extensão e movidas para <code>Outros/</code>.</label>
+<label><input type="radio" name="q4"> O script daria erro de sintaxe.</label>
+<label><input type="radio" name="q4"> Os arquivos ocultos seriam movidos.</label>
+</div>
+
+<div class="exercise">
+<h3>5. Contar por chave</h3>
+<p>Complete a linha que declara um array em que o índice é um texto (como <code>conta[Imagens]</code>):</p>
+<div class="ex-code">declare <input data-answer="-A" aria-label="opção"> conta</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. A mensagem "a pasta não existe" foi para <code>&gt;&amp;2</code>. Qual é a vantagem?</p>
+<label><input type="radio" name="q6"> Em <code>./organizar.sh &gt; lista.txt</code>, o erro ainda aparece na tela em vez de se esconder no arquivo.</label>
+<label><input type="radio" name="q6"> A mensagem sai em vermelho.</label>
+<label><input type="radio" name="q6"> O script termina sozinho.</label>
+<label><input type="radio" name="q6"> O <code>&gt;&amp;2</code> grava a mensagem no log.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Percorra arquivos com <code>for arq in "$pasta"/*</code>, nunca com <code>$(ls)</code>, e mantenha <code>"$arq"</code> entre aspas.</li>
+  <li>Um <code>case ${nome,,}</code> com vários padrões por linha classifica extensões em qualquer caixa.</li>
+  <li>Script que mexe em arquivos merece um modo de ensaio (<code>-n</code>) e nunca deve sobrescrever: <code>[[ -e ]]</code> para avisar, <code>mv -n</code> como rede.</li>
+  <li><code>declare -A</code> conta por categoria; <code>printf '%5d'</code> alinha.</li>
+  <li>Erro vai para <code>&gt;&amp;2</code> com <code>exit</code> diferente de 0; o histórico vai para um log com <code>&gt;&gt;</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
