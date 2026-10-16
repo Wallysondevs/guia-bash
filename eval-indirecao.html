@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash eval, Indireção e nameref — ${!nome}, declare -n e printf -v | Guia Bash</title>
+<meta name="description" content="O que o eval faz e por que ele é perigoso (com uma demonstração de injeção inofensiva), e as alternativas seguras do Bash: indireção ${!nome}, nameref com declare -n, printf -v, arrays associativos e ${!prefixo*}.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">eval, Indireção e nameref</span></h1>
+
+<p class="intro">Às vezes o <strong>nome</strong> de uma variável só é conhecido quando o script roda: "guarde o total na variável cujo nome veio no argumento", "mostre o valor do campo que o usuário escolheu". O jeito antigo de resolver isso é o <code>eval</code>, que é poderoso e perigoso. O Bash moderno tem jeitos seguros para quase todos os casos: <code>${!nome}</code>, <code>declare -n</code>, <code>printf -v</code> e arrays associativos.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que o <code>eval</code> faz: lê o texto de novo, como se fosse uma linha de comando.</li>
+  <li>Por que ele é perigoso, com uma injeção de verdade (e inofensiva) por um nome de arquivo.</li>
+  <li>Ler uma variável pelo nome com <code>${!nome}</code> e listar variáveis com <code>${!prefixo*}</code>.</li>
+  <li>Escrever numa variável pelo nome com <code>printf -v</code>, <code>declare</code> e <code>declare -n</code> (nameref).</li>
+  <li>Quando um array associativo resolve melhor, e quando o <code>eval</code> é aceitável.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O problema: o nome da variável está numa variável</h2>
+<p>A Ana tem as variáveis <code>cidade=Recife</code> e <code>estado=PE</code>. Um script pergunta "qual campo você quer ver?" e guarda a resposta em <code>campo</code>. Se a resposta for <code>cidade</code>, o script precisa mostrar <code>Recife</code>. Mas <code>$campo</code> devolve só a palavra <code>cidade</code>:</p>
+
+<pre class="term">$ campo=cidade
+$ cidade=Recife
+$ echo "$campo"
+cidade                             « o valor de campo é o NOME da outra variável</pre>
+
+<p>É como um bilhete que diz "a chave está na gaveta 3": você precisa ler o bilhete e, <strong>depois</strong>, ir à gaveta. Essa "segunda leitura" se chama <strong>indireção</strong>.</p>
+
+<hr>
+
+<h2>O que o <code>eval</code> faz</h2>
+<p><code>eval</code> ("avaliar") junta seus argumentos num texto e manda o Bash <strong>ler esse texto de novo</strong>, como uma linha de comando nova, com todas as expansões, aspas, <code>|</code>, <code>;</code> e <code>&gt;</code>.</p>
+
+<p>Um exemplo onde isso faz diferença: um comando com pipe guardado numa variável. Sem <code>eval</code>, o <code>|</code> não é pipe, é só um caractere dentro do valor:</p>
+
+<pre class="term">$ cmd="ls Documentos | head -2"
+$ $cmd
+ls: opção inválida -- “2”
+Tente "ls --help" para mais informações.
+$ eval "$cmd"
+acesso.log
+alunos.csv</pre>
+
+<ul>
+  <li><code>$cmd</code>: o Bash expandiu a variável e separou as palavras: <code>ls</code>, <code>Documentos</code>, <code>|</code>, <code>head</code>, <code>-2</code>. O <code>ls</code> recebeu tudo como argumento e reclamou do <code>-2</code>. Operadores como <code>|</code> só são reconhecidos <strong>antes</strong> das expansões (veja <a href="ordem-expansoes.html">A Ordem das Expansões</a>).</li>
+  <li><code>eval "$cmd"</code>: o texto <code>ls Documentos | head -2</code> foi lido de novo, do zero. Agora o <code>|</code> é um pipe.</li>
+</ul>
+
+<p>E a indireção com <code>eval</code>:</p>
+
+<pre class="term">$ eval echo "\$$campo"
+Recife</pre>
+
+<dl class="anatomy">
+  <dt>eval</dt><dd>"Leia o resultado de novo, como comando."</dd>
+  <dt>echo</dt><dd>O comando que vai rodar na segunda leitura.</dd>
+  <dt>"\$$campo"</dt><dd>Na <strong>primeira</strong> leitura, <code>\$</code> vira um <code>$</code> comum e <code>$campo</code> vira <code>cidade</code>: sobra o texto <code>$cidade</code>. Na <strong>segunda</strong> leitura (a do <code>eval</code>), <code>$cidade</code> vira <code>Recife</code>.</dd>
+</dl>
+
+<p>Funciona, mas repare: o <code>eval</code> trata o <strong>valor</strong> de uma variável como <strong>código</strong>. Se esse valor vier de fora (um argumento, um nome de arquivo, uma resposta do usuário), quem escreveu o valor escreve código no seu script.</p>
+
+<hr>
+
+<h2>Por que o <code>eval</code> é perigoso: uma injeção</h2>
+<p>Vamos ver o problema acontecer. A pasta <code>recebidos</code> tem três arquivos que chegaram de fora. Um deles tem um nome "esquisito", e nomes de arquivo no Linux podem ter quase qualquer caractere, inclusive <code>;</code> e <code>&gt;</code>:</p>
+
+<pre class="term">$ ls recebidos
+ foto.jpg   notas.txt  'x; echo INVADIDO &gt; aviso.txt'   « o 3º é UM nome de arquivo, com espaços, ; e &gt;</pre>
+<p>(O <code>ls</code> põe aspas em volta do nome que tem espaços, e um espaço na frente dos outros para alinhar.)</p>
+
+<p>Um script quer guardar cada nome em variáveis numeradas (<code>arquivo_1</code>, <code>arquivo_2</code>…) e usa <code>eval</code> para criar o nome da variável:</p>
+
+<pre class="file" data-file="relatorio.sh">#!/usr/bin/env bash
+i=0
+for f in recebidos/*; do
+  i=$((i + 1))
+  eval "arquivo_$i=$f"
+done
+echo "arquivo_1 = $arquivo_1"
+</pre>
+
+<pre class="term">$ bash relatorio.sh
+arquivo_1 = recebidos/foto.jpg     « parece normal…
+$ cat aviso.txt
+INVADIDO                           « …mas um arquivo foi criado pelo NOME de outro arquivo!</pre>
+
+<p>Com <code>bash -x</code> (veja <a href="depuracao.html">Depurar</a>) dá para ver o que o <code>eval</code> recebeu na terceira volta:</p>
+
+<pre class="term">$ bash -x relatorio.sh
+…                                  « encurtado: as duas primeiras voltas
++ i=3
++ eval 'arquivo_3=recebidos/x; echo INVADIDO &gt; aviso.txt'
+++ arquivo_3=recebidos/x
+++ echo INVADIDO
++ echo 'arquivo_1 = recebidos/foto.jpg'
+arquivo_1 = recebidos/foto.jpg</pre>
+
+<p>O <code>;</code> do nome do arquivo encerrou a atribuição, e o resto virou um <strong>comando</strong>. Aqui ele só escreveu "INVADIDO" num arquivo, mas poderia ser <code>rm -rf ~</code>. E não houve erro nenhum: o script terminou com código 0. Isso se chama <strong>injeção de comando</strong>.</p>
+
+<div class="warning">
+<strong>Regra prática</strong>
+<p>Nunca passe para o <code>eval</code> um texto que contenha dados de fora (argumentos, nomes de arquivo, entrada do usuário, conteúdo de arquivos ou da internet). Para quase tudo o que se faz com <code>eval</code>, existe uma forma segura, que você vai ver agora.</p>
+</div>
+
+<hr>
+
+<h2>Ler pelo nome: <code>${!nome}</code></h2>
+<p>A <strong>expansão indireta</strong> <code>${!nome}</code> faz a "segunda leitura" sem rodar código nenhum: pega o valor de <code>nome</code> e usa como <strong>nome</strong> da variável a ler.</p>
+
+<dl class="anatomy">
+  <dt>${</dt><dd>Início da <a href="expansao-parametros.html">expansão de parâmetro</a>.</dd>
+  <dt>!</dt><dd>"Indireto": use o valor como nome de outra variável.</dd>
+  <dt>campo</dt><dd>A variável que guarda o nome (<code>cidade</code>).</dd>
+  <dt>}</dt><dd>Fim. O resultado é o valor de <code>$cidade</code>.</dd>
+</dl>
+
+<pre class="term">$ echo "${!campo}"
+Recife</pre>
+
+<p>Se o valor não for um nome de variável válido, o Bash dá erro em vez de executar alguma coisa:</p>
+
+<pre class="term">$ x=nome-invalido; echo "${!x}"
+bash: nome-invalido: nome de variável inválido</pre>
+
+<div class="try" data-setup="campo=estado;;cidade=Recife;;estado=PE" data-goal="ran:\$\{!campo\},out:PE" data-solucao="echo &quot;${!campo}&quot;">
+<p class="try-task"><strong>Missão:</strong> já existem as variáveis <code>cidade</code>, <code>estado</code> e <code>campo</code>. A variável <code>campo</code> guarda o <strong>nome</strong> de uma das outras duas. Mostre o valor da variável cujo nome está em <code>campo</code>, sem <code>eval</code> e sem escrever o nome dela.</p>
+</div>
+
+<h3>Listar variáveis pelo começo do nome: <code>${!prefixo*}</code></h3>
+<p>Com <code>*</code> ou <code>@</code> no fim, o <code>!</code> muda de sentido: <code>${!cor_*}</code> devolve os <strong>nomes</strong> de todas as variáveis que começam com <code>cor_</code>. Junte com <code>${!v}</code> para ver os valores:</p>
+
+<pre class="term">$ declare "cor_fundo=azul" "cor_texto=branco"
+$ echo "${!cor_*}"
+cor_fundo cor_texto
+$ for v in ${!cor_@}; do echo "$v = ${!v}"; done
+cor_fundo = azul
+cor_texto = branco</pre>
+
+<p>A diferença entre <code>*</code> e <code>@</code> é a mesma de <code>$*</code> e <code>$@</code>: entre aspas, <code>"${!cor_@}"</code> dá uma palavra por nome. Como nomes de variáveis não têm espaço, na prática as duas formas se comportam igual.</p>
+
+<hr>
+
+<h2>Escrever pelo nome</h2>
+<p>Ler era fácil. E para <strong>atribuir</strong> a uma variável cujo nome está em outra? <code>${!nome}=valor</code> não existe. Há três ferramentas.</p>
+
+<h3><code>printf -v nome</code></h3>
+<p>O <code>printf -v</code> guarda o resultado na variável indicada, em vez de mostrar na tela (veja <a href="printf.html">printf</a>). O nome pode ser montado com outras variáveis, e o <strong>valor nunca é executado</strong>:</p>
+
+<pre class="term">$ printf -v "total_$campo" "%d" 42
+$ echo "$total_cidade"
+42</pre>
+
+<p>O mesmo script da injeção, consertado:</p>
+
+<pre class="file" data-file="seguro.sh">#!/usr/bin/env bash
+i=0
+for f in recebidos/*; do
+  i=$((i + 1))
+  printf -v "arquivo_$i" "%s" "$f"
+done
+echo "arquivo_1 = $arquivo_1"
+echo "arquivo_3 = $arquivo_3"
+</pre>
+
+<pre class="term">$ bash seguro.sh
+arquivo_1 = recebidos/foto.jpg
+arquivo_3 = recebidos/x; echo INVADIDO &gt; aviso.txt   « o nome inteiro virou só um valor
+$ ls aviso.txt
+ls: não foi possível acessar 'aviso.txt': Arquivo ou diretório inexistente   « nada foi executado</pre>
+
+<h3><code>declare</code> e <code>local</code> com nome montado</h3>
+<p><code>declare "nome=valor"</code> também aceita um nome montado na hora, e dentro de funções o <code>local</code> faz o mesmo. O texto depois do <code>=</code> é só valor, não é lido de novo como comando:</p>
+
+<pre class="term">$ declare "cor_$campo=verde"
+$ echo "$cor_cidade"
+verde</pre>
+
+<p>Cuidado: dentro de uma função, <code>declare</code> cria uma variável <strong>local</strong>. Para criar uma global de dentro de uma função, use <code>declare -g</code>.</p>
+
+<h3>nameref: <code>declare -n</code> <span class="versao">bash 4.3+</span></h3>
+<p>Um <strong>nameref</strong> (<em>name reference</em>, "referência pelo nome") é uma variável que funciona como um <strong>apelido</strong> de outra. Tudo o que você lê ou escreve nela, na verdade, lê ou escreve na outra:</p>
+
+<pre class="term">$ declare -n ref=cidade
+$ echo "$ref"
+Recife                             « lê cidade
+$ ref=Salvador
+$ echo "$cidade"
+Salvador                           « escrever em ref mudou cidade</pre>
+
+<p>O uso mais comum é numa <a href="funcoes.html">função</a> que devolve o resultado numa variável escolhida por quem chama, sem <code>$( )</code> (que criaria um <a href="subshell.html">subshell</a>):</p>
+
+<pre class="term">$ saudar() {
+&gt;   local -n saida=$2
+&gt;   saida="Olá, $1"
+&gt; }
+$ saudar Ana msg
+$ echo "$msg"
+Olá, Ana</pre>
+
+<dl class="anatomy">
+  <dt>local -n</dt><dd>Cria um nameref local da função (<code>local</code> aceita as mesmas opções de <code>declare</code>).</dd>
+  <dt>saida=$2</dt><dd>O apelido aponta para a variável cujo nome veio no 2º argumento (<code>msg</code>).</dd>
+  <dt>saida="Olá, $1"</dt><dd>Escrever em <code>saida</code> escreve em <code>msg</code>, lá fora.</dd>
+</dl>
+
+<p>Também funciona com arrays: <code>local -n lista=$1</code> e depois <code>"${lista[@]}"</code> percorre o array cujo nome foi passado. Mais sobre devolver valores em <a href="funcoes-retorno.html">local, return e Saída</a>.</p>
+
+<div class="tryscript" data-file="guardar.sh" data-goal="out:cor = azul,src:(printf -v|local -n|declare -n)">
+<p class="try-task"><strong>Missão:</strong> a função <code>guardar</code> usa <code>eval</code> para pôr um valor na variável cujo nome vem no 1º argumento. Reescreva a função <strong>sem <code>eval</code></strong>, com <code>printf -v</code> ou com um nameref (<code>local -n</code>). A saída deve continuar <code>cor = azul</code>.</p>
+<pre class="script">#!/usr/bin/env bash
+guardar() {
+  eval "$1=\$2"
+}
+guardar cor "azul"
+echo "cor = $cor"
+</pre>
+<pre class="solucao">#!/usr/bin/env bash
+guardar() {
+  printf -v "$1" '%s' "$2"
+}
+guardar cor "azul"
+echo "cor = $cor"
+</pre>
+</div>
+
+<hr>
+
+<h2>Muitas vezes, a resposta é um array associativo</h2>
+<p>Se você está criando <code>idade_Ana</code>, <code>idade_Bruno</code>, <code>idade_Carla</code>… o que você quer, na verdade, é <strong>uma</strong> variável com várias chaves. É exatamente o que um <a href="arrays-associativos.html">array associativo</a> faz, sem indireção nenhuma:</p>
+
+<pre class="term">$ declare -A idade=([Ana]=29 [Bruno]=34)
+$ quem=Bruno
+$ echo "${idade[$quem]}"
+34</pre>
+
+<p>E, para guardar uma lista de nomes de arquivo, um array comum é mais simples que <code>arquivo_1</code>, <code>arquivo_2</code>…: <code>arquivos+=("$f")</code> dentro do laço, e <code>"${arquivos[2]}"</code> para o terceiro.</p>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você quer…</th><th>Use</th><th>Seguro com dados de fora?</th></tr>
+<tr><td>Ler a variável cujo nome está em <code>v</code></td><td><code>"${!v}"</code></td><td>Sim</td></tr>
+<tr><td>Atribuir à variável cujo nome está em <code>v</code></td><td><code>printf -v "$v" '%s' "$valor"</code></td><td>Sim</td></tr>
+<tr><td>Uma função que devolve resultado numa variável escolhida</td><td><code>local -n saida=$1</code> (4.3+)</td><td>Sim</td></tr>
+<tr><td>Criar variáveis com nome montado</td><td><code>declare "pre_$x=$valor"</code></td><td>Sim, se <code>$x</code> for um nome válido</td></tr>
+<tr><td>Vários valores identificados por um texto</td><td>Array associativo <code>declare -A</code></td><td>Sim (a melhor opção)</td></tr>
+<tr><td>Listar variáveis por prefixo</td><td><code>"${!prefixo@}"</code></td><td>Sim</td></tr>
+<tr><td>Rodar um comando guardado numa variável</td><td>Uma <a href="funcoes.html">função</a> ou um array: <code>cmd=(ls -l); "${cmd[@]}"</code></td><td>Sim</td></tr>
+<tr><td>Rodar código que um programa confiável gerou</td><td><code>eval "$(programa)"</code></td><td>Só se o programa for confiável</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando o <code>eval</code> é aceitável</h2>
+<p>O <code>eval</code> não é proibido; ele é a ferramenta certa quando o texto a executar é <strong>código de verdade, vindo de uma fonte confiável</strong>. Os exemplos clássicos são programas que <strong>imprimem comandos de shell</strong> para você rodar:</p>
+
+<pre class="term">$ dircolors -b | head -c 60; echo
+LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do</pre>
+
+<p>O <code>dircolors -b</code> imprime uma atribuição de <code>LS_COLORS</code> (as cores do <code>ls</code>), e o <code>~/.bashrc</code> de muitas distribuições roda <code>eval "$(dircolors -b)"</code>. O mesmo vale para <code>eval "$(ssh-agent -s)"</code> e para ferramentas como gerenciadores de versão, que pedem um <code>eval "$(ferramenta init bash)"</code>.</p>
+
+<p>Se você realmente precisa montar código com um valor de fora, deixe o Bash pôr as aspas por você: <code>${f@Q}</code> (ou <code>printf '%q'</code>) devolve o valor já protegido para ser lido de novo:</p>
+
+<pre class="term">$ f="recebidos/x; echo INVADIDO &gt; aviso.txt"
+$ echo "${f@Q}"
+'recebidos/x; echo INVADIDO &gt; aviso.txt'
+$ eval "a=${f@Q}"
+$ echo "a = $a"
+a = recebidos/x; echo INVADIDO &gt; aviso.txt   « virou só um valor, nada foi executado</pre>
+
+<p>Mesmo assim, se houver uma alternativa da tabela acima, prefira ela: é mais fácil de ler e de revisar. O <a href="shellcheck.html">ShellCheck</a> ajuda a encontrar <code>eval</code> e variáveis sem aspas.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"expansão indireta inválida"</strong>
+<pre class="term">$ unset -v nada; echo "[${!nada}]"
+bash: nada: expansão indireta inválida</pre>
+<p><strong>O que aconteceu:</strong> a variável que deveria guardar o nome (<code>nada</code>) está vazia ou não existe, então não há para onde apontar.</p>
+<p><strong>Como resolver:</strong> confira se ela tem valor antes: <code>[[ -n $campo ]] &amp;&amp; echo "${!campo}"</code>. Com <code>${!campo:-padrão}</code> você tem um valor padrão quando a variável <strong>apontada</strong> estiver vazia.</p>
+</div>
+
+<div class="cenario">
+<strong>"nome de variável inválido"</strong>
+<pre class="term">$ x=nome-invalido; echo "${!x}"
+bash: nome-invalido: nome de variável inválido
+$ declare -n r2=nome-ruim
+bash: declare: `nome-ruim': nome de variável inválido para referência de nome</pre>
+<p><strong>O que aconteceu:</strong> nomes de variável só podem ter letras, números e <code>_</code>, e não podem começar com número. Hífen, espaço e ponto não valem.</p>
+<p><strong>Como resolver:</strong> se o "nome" vem de um dado qualquer (um nome de arquivo, uma resposta), use um array associativo: <code>declare -A dados; dados["nome-ruim"]=1</code> aceita qualquer texto como chave.</p>
+</div>
+
+<div class="cenario">
+<strong>"referência circular de nome" num nameref</strong>
+<pre class="term">$ zerar() { local -n v=$1; v=0; }
+$ v=5
+$ zerar v
+bash: local: aviso: v referência circular de nome
+bash: aviso: v referência circular de nome
+bash: aviso: v: excedido o tamanho máximo de nameref (8)</pre>
+<p><strong>O que aconteceu:</strong> o nameref dentro da função se chama <code>v</code> e quem chamou pediu para ele apontar para… <code>v</code>. Ele aponta para si mesmo.</p>
+<p><strong>Como resolver:</strong> dê ao nameref um nome que dificilmente alguém vai usar fora, por exemplo com o nome da função: <code>local -n _zerar_ref=$1</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Uma variável não foi criada e nenhum erro apareceu</strong>
+<p><strong>O que aconteceu:</strong> com <code>declare "x_$i=…"</code> dentro de uma função, a variável é local e some quando a função termina.</p>
+<p><strong>Como resolver:</strong> <code>declare -g "x_$i=…"</code>, ou <code>printf -v</code>, que cria no escopo atual visível (global, se não houver uma local com o mesmo nome).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>O que faz</th></tr>
+<tr><td><code>eval "texto"</code></td><td>Lê o texto de novo como comando (perigoso com dados de fora)</td></tr>
+<tr><td><code>${!nome}</code></td><td>Valor da variável cujo nome está em <code>nome</code></td></tr>
+<tr><td><code>${!prefixo*}</code> / <code>${!prefixo@}</code></td><td>Nomes das variáveis que começam com o prefixo</td></tr>
+<tr><td><code>printf -v nome fmt valores</code></td><td>Atribui a uma variável indicada pelo nome</td></tr>
+<tr><td><code>declare "nome=valor"</code> / <code>declare -g</code></td><td>Cria variável com nome montado / global de dentro de função</td></tr>
+<tr><td><code>declare -n ref=nome</code> / <code>local -n</code></td><td>Nameref: apelido de outra variável (4.3+)</td></tr>
+<tr><td><code>declare -A mapa</code></td><td>Array associativo: chaves de texto</td></tr>
+<tr><td><code>${var@Q}</code> / <code>printf '%q'</code></td><td>Valor com aspas, seguro para ser lido de novo</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ler pelo nome</h3>
+<p>A variável <code>qual</code> contém <code>HOME</code>. Complete para mostrar o valor de <code>$HOME</code> usando <code>qual</code>:</p>
+<div class="ex-code">echo "<input data-answer="${!qual}" aria-label="expansão">"</div>
+</div>
+
+<div class="exercise">
+<h3>2. Escrever pelo nome</h3>
+<p>Complete para guardar <code>10</code> na variável cujo nome está em <code>$alvo</code>, sem <code>eval</code>:</p>
+<div class="ex-code">printf <input data-answer="-v" aria-label="opção" style="width:3em"> "$alvo" '%s' 10</div>
+</div>
+
+<div class="exercise">
+<h3>3. O apelido</h3>
+<p>Complete a função para que <code>lista</code> seja um nameref para o array cujo nome veio em <code>$1</code>:</p>
+<div class="ex-code">contar() { local <input data-answer="-n" aria-label="opção" style="width:3em"> lista=$1; echo "${#lista[@]}"; }</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Por que <code>eval "arquivo_$i=$f"</code> é perigoso num laço sobre arquivos recebidos?</p>
+<label><input type="radio" name="q4"> Porque o <code>eval</code> é lento.</label>
+<label><input type="radio" name="q4"> Porque <code>arquivo_$i</code> não é um nome válido.</label>
+<label><input type="radio" name="q4"> Porque um nome de arquivo com <code>;</code> vira um comando que o script executa.</label>
+<label><input type="radio" name="q4"> Porque o <code>eval</code> não funciona dentro de laços.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Você está criando <code>preco_arroz</code>, <code>preco_feijao</code>, <code>preco_cafe</code>… com nomes que vêm de um arquivo. Qual a melhor alternativa?</p>
+<label><input type="radio" name="q5"> <code>eval "preco_$item=$valor"</code></label>
+<label><input type="radio" name="q5"> Um array associativo: <code>declare -A preco; preco[$item]=$valor</code></label>
+<label><input type="radio" name="q5"> Um nameref para cada item.</label>
+<label><input type="radio" name="q5"> <code>export preco_$item</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. Em qual situação o <code>eval</code> é aceitável?</p>
+<label><input type="radio" name="q6"> Para montar um comando com a resposta digitada pelo usuário.</label>
+<label><input type="radio" name="q6"> Para ler uma variável pelo nome.</label>
+<label><input type="radio" name="q6"> Para atribuir a uma variável pelo nome.</label>
+<label><input type="radio" name="q6"> Para rodar os comandos que um programa confiável imprime, como <code>eval "$(dircolors -b)"</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>eval</code> lê um texto de novo como comando: dados de fora viram código (injeção).</li>
+  <li>Para ler pelo nome: <code>${!nome}</code>. Para listar por prefixo: <code>${!prefixo@}</code>.</li>
+  <li>Para escrever pelo nome: <code>printf -v</code>, <code>declare</code> (<code>-g</code> em funções) ou nameref <code>declare -n</code>/<code>local -n</code>.</li>
+  <li>Muitas variáveis com nomes parecidos? Use um array associativo.</li>
+  <li><code>eval</code> só com código confiável (<code>eval "$(dircolors -b)"</code>); se precisar proteger um valor, <code>${var@Q}</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

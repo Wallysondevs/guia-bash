@@ -199,15 +199,8 @@ fim                                « o laço não rodou nenhuma vez</pre>
 <strong>A pegadinha do <code>nullglob</code></strong>
 <p>Se o curinga some, o comando fica <strong>sem argumento</strong>. E vários comandos sem argumento agem sobre a pasta atual:</p>
 <pre class="term">$ ls *.pdf
-Área de trabalho
-Documentos
-Downloads
-frutas.txt
-Imagens
-Modelos
-Música
-Público
-Vídeos                             « virou só "ls": listou tudo!</pre>
+'Área de trabalho'   Downloads    Imagens   Música    Vídeos
+ Documentos          frutas.txt   Modelos   Público   « virou só "ls": listou tudo!</pre>
 <p>Com <code>nullglob</code>, um <code>ls *.pdf</code> lista tudo e um <code>grep texto *.log</code> fica esperando o teclado. Por isso ele é ótimo em laços de scripts e perigoso no terminal. Ligue-o só no script, e de preferência só no trecho que precisa.</p>
 </div>
 
@@ -275,9 +268,7 @@ acesso.log alunos.csv notas.txt                « começa com uma ou mais letras
 $ echo ?(notas).txt
 notas.txt
 $ ls !(*.odt|projetos)
-acesso.log
-alunos.csv
-notas.txt</pre>
+acesso.log  alunos.csv  notas.txt</pre>
 
 <p>O <code>!( )</code> é o mais usado: "apague tudo menos os <code>.conf</code>" vira <code>rm -- !(*.conf)</code>. Confira sempre antes com <code>echo</code>.</p>
 
