@@ -1883,14 +1883,17 @@
      5b. Padrões (curingas e extglob). O padrão é uma string em que
      caracteres citados vêm escapados com "\".
      ------------------------------------------------------------------ */
+  // classes Unicode criadas em tempo de execução (navegadores antigos não entendem \p{…} literal)
+  function reU(src) { try { return new RegExp(src, "u"); } catch (e) { return new RegExp(src.replace(/\\p\{Lu\}/g, "A-ZÀ-ÖØ-Þ").replace(/\\p\{Ll\}/g, "a-zß-öø-ÿ").replace(/\\p\{L\}/g, "A-Za-zÀ-ÖØ-öø-ÿ").replace(/\\p\{N\}/g, "0-9")); } }
+  var RE_L = reU("^\\p{L}$"), RE_LN = reU("^[\\p{L}0-9]$"), RE_LU = reU("^\\p{Lu}$"), RE_LL = reU("^\\p{Ll}$"), RE_W = reU("^[\\p{L}0-9_]$");
   var CLASSES = {
-    alpha: function (c) { return /\p{L}/u.test(c); }, digit: function (c) { return /[0-9]/.test(c); },
-    alnum: function (c) { return /[\p{L}0-9]/u.test(c); }, upper: function (c) { return /\p{Lu}/u.test(c); },
-    lower: function (c) { return /\p{Ll}/u.test(c); }, space: function (c) { return /[ \t\n\r\f\v]/.test(c); },
+    alpha: function (c) { return RE_L.test(c); }, digit: function (c) { return /[0-9]/.test(c); },
+    alnum: function (c) { return RE_LN.test(c); }, upper: function (c) { return RE_LU.test(c); },
+    lower: function (c) { return RE_LL.test(c); }, space: function (c) { return /[ \t\n\r\f\v]/.test(c); },
     blank: function (c) { return c === " " || c === "\t"; }, punct: function (c) { return /[!-\/:-@\[-`{-~]/.test(c); },
     xdigit: function (c) { return /[0-9A-Fa-f]/.test(c); }, cntrl: function (c) { return /[\x00-\x1f\x7f]/.test(c); },
     print: function (c) { return !/[\x00-\x1f\x7f]/.test(c); }, graph: function (c) { return !/[\x00-\x20\x7f]/.test(c); },
-    word: function (c) { return /[\p{L}0-9_]/u.test(c); }
+    word: function (c) { return RE_W.test(c); }
   };
   function compilarPadrao(p, ext) {
     var toks = [], i = 0;
@@ -4428,9 +4431,10 @@
     return { m: m, e: ex - 1075 };
   }
   // arredonda x·10^p para inteiro (meio para o par), x >= 0
+  function potBig(n) { var r = BigInt(1), dez = BigInt(10); for (var i = 0; i < n; i++) r *= dez; return r; }
   function escalaExata(x, p) {
     var d = decompor(x), num = d.m, den = BigInt(1);
-    if (p >= 0) num *= BigInt(10) ** BigInt(p); else den *= BigInt(10) ** BigInt(-p);
+    if (p >= 0) num *= potBig(p); else den *= potBig(-p);
     if (d.e >= 0) num <<= BigInt(d.e); else den <<= BigInt(-d.e);
     var q = num / den, r = num % den, dobro = r * BigInt(2);
     if (dobro > den || (dobro === den && (q & BigInt(1)))) q += BigInt(1);
@@ -6918,6 +6922,7 @@
     var v = parseFloat(m[1].replace(dec, "."));
     return v * Math.pow(1024, " KMGTPE".indexOf((m[2] || " ").toUpperCase()));
   }
+  var RE_DICT = (function () { try { return new RegExp("[^\\p{L}\\p{N}\\s]", "gu"); } catch (e) { return /[^A-Za-z0-9À-ÿ\s]/g; } })();
   var MESES_SORT = { jan: 1, fev: 2, feb: 2, mar: 3, abr: 4, apr: 4, mai: 5, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, set: 9, sep: 9, out: 10, oct: 10, nov: 11, dez: 12, dec: 12 };
   EXT.sort = function* (args, io) {
     var g = getopt(args, "ktoST", { numeric: "n", reverse: "r", unique: "u", key: "k=", "field-separator": "t=", "ignore-case": "f", "human-numeric-sort": "h", "version-sort": "V", "month-sort": "M", "random-sort": "R", output: "o=", stable: "s", check: "c", "general-numeric-sort": "g", "ignore-leading-blanks": "b", "zero-terminated": "z", "dictionary-order": "d" }, { validas: "nrukt foshVMRcgbzdCS", multi: "k" });
@@ -6965,7 +6970,7 @@
       if (mes) { var ma = MESES_SORT[a.trim().slice(0, 3).toLowerCase()] || 0, mb = MESES_SORT[b.trim().slice(0, 3).toLowerCase()] || 0; return ma - mb; }
       if (blank) { a = a.replace(/^\s+/, ""); b = b.replace(/^\s+/, ""); }
       if (fold) { a = a.toUpperCase(); b = b.toUpperCase(); }
-      if (/d/.test(op) || o.d) { a = a.replace(/[^\p{L}\p{N}\s]/gu, ""); b = b.replace(/[^\p{L}\p{N}\s]/gu, ""); }
+      if (/d/.test(op) || o.d) { a = a.replace(RE_DICT, ""); b = b.replace(RE_DICT, ""); }
       return cmpTxt(a, b);
     }
     function cmp(a, b) {
@@ -8120,7 +8125,7 @@
   /* ---------- bc (decimais de precisão arbitrária) ---------- */
   function Dec(v, s) { this.v = v; this.s = s; } // valor = v / 10^s
   var B10 = HAS_BIG ? BigInt(10) : 10;
-  function pot10(n) { return HAS_BIG ? BigInt(10) ** BigInt(n) : Math.pow(10, n); }
+  function pot10(n) { if (!HAS_BIG) return Math.pow(10, n); var r = BigInt(1), dez = BigInt(10); for (var i = 0; i < n; i++) r *= dez; return r; }
   function decEscala(d, s) { if (s === d.s) return d; if (s > d.s) return new Dec(d.v * pot10(s - d.s), s); return new Dec(d.v / pot10(d.s - s), s); }
   function decDe(txt) { txt = txt.toUpperCase(); var neg = txt[0] === "-"; if (neg) txt = txt.slice(1); var i = txt.indexOf("."), s = i < 0 ? 0 : txt.length - i - 1; var dig = (txt.replace(".", "") || "0"); var v = BigInt(dig); return new Dec(neg ? -v : v, s); }
   function decStr(d, obase) {
