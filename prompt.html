@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Prompt — lendo o ana@notebook:~$ parte por parte | Guia Bash</title>
+<meta name="description" content="Aprenda a ler o prompt do Bash: usuário, máquina, pasta (~), o $ e o # do root. Como o prompt muda com o cd, o prompt secundário > (PS2) dos comandos incompletos e como sair de um prompt travado em aspas abertas.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Bash <span class="hl">Lendo o Prompt</span></h1>
+
+<p class="intro">O <strong>prompt</strong> é o texto que o Bash mostra antes do cursor, como <code>ana@notebook:~$</code>. Ele quer dizer "pode digitar", mas também conta quem você é, em que máquina está e em que pasta. Saber lê-lo evita os erros mais comuns de quem começa: rodar um comando na pasta errada, como o usuário errado, ou ficar preso num <code>&gt;</code> sem saber por quê.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que significa cada pedaço de <code>ana@notebook:~$</code>.</li>
+  <li>A diferença entre <code>$</code> e <code>#</code> (usuário comum × root).</li>
+  <li>Como o prompt acompanha o <code>cd</code> e o que é o <code>~</code>.</li>
+  <li>O prompt secundário <code>&gt;</code> (<code>PS2</code>): quando aparece e como sair dele.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O prompt, parte por parte</h2>
+<p>Abra um terminal. Antes de você digitar qualquer coisa, aparece:</p>
+
+<pre class="term">$ </pre>
+
+<p>No guia, o prompt é desenhado como na janela acima: <code>ana@notebook:~$</code>. Leia da esquerda para a direita:</p>
+
+<dl class="anatomy">
+  <dt>ana</dt><dd>O <strong>usuário</strong>: quem está usando este shell. É a resposta do <code>whoami</code>.</dd>
+  <dt>@notebook</dt><dd>A <strong>máquina</strong>. O <code>@</code> se lê "em": "ana em notebook". É a resposta do <code>hostname</code>.</dd>
+  <dt>:~</dt><dd>Os dois-pontos separam; depois vem a <strong>pasta atual</strong>. <code>~</code> (til) é a pasta pessoal, <code>/home/ana</code>.</dd>
+  <dt>$</dt><dd>O fim do prompt: "usuário comum, pode digitar". Vira <code>#</code> para o administrador (root).</dd>
+</dl>
+
+<p>Depois do <code>$</code> vem um espaço e o cursor. Tudo o que você digitar a partir dali é o comando.</p>
+
+<div class="warning">
+<strong>O prompt não faz parte do comando</strong>
+<p>Ao copiar um comando de um tutorial, não copie o <code>$</code> nem o <code>ana@notebook:~$</code>. Se você digitar <code>$ ls</code>, o Bash tenta rodar um comando chamado <code>$</code>. Os botões "copiar" deste guia já copiam só o comando.</p>
+</div>
+
+<h3>De onde vem esse texto?</h3>
+<p>O prompt é montado pelo Bash a partir de uma variável chamada <code>PS1</code> (de <em>prompt string 1</em>, "texto do prompt 1"). Na Ana, ela é definida no arquivo <code>.bashrc</code>:</p>
+
+<pre class="term">$ echo "$PS1"
+\u@\h:\w\$                         « o "molde" do prompt</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Vira</th><th>Origem do nome</th></tr>
+<tr><td><code>\u</code></td><td><code>ana</code></td><td><em>user</em>, usuário</td></tr>
+<tr><td><code>@</code> e <code>:</code></td><td>eles mesmos</td><td>texto fixo</td></tr>
+<tr><td><code>\h</code></td><td><code>notebook</code></td><td><em>host</em>, máquina</td></tr>
+<tr><td><code>\w</code></td><td><code>~</code>, <code>~/Documentos</code>…</td><td><em>working directory</em>, pasta atual</td></tr>
+<tr><td><code>\$</code></td><td><code>$</code> ou <code>#</code></td><td><code>#</code> se você for root</td></tr>
+</table>
+</div>
+
+<p>Cada sistema monta o seu prompt de um jeito: o do Fedora é <code>[ana@notebook ~]$</code>, o do macOS com zsh é <code>ana@MacBook ~ %</code>. As partes são as mesmas, em outra ordem. Mudar cores e conteúdo do prompt é o assunto de <a href="ps1.html">Personalizar o Prompt (PS1)</a>.</p>
+
+<hr>
+
+<h2>O prompt muda com o <code>cd</code></h2>
+<p>A parte entre <code>:</code> e <code>$</code> acompanha a pasta onde você está. Cada <code>cd</code> ("mudar de pasta") muda o prompt seguinte:</p>
+
+<pre class="term">$ cd Documentos
+$ cd projetos/site
+$ cd /etc
+$ cd /
+$ cd "Área de trabalho"
+$ cd</pre>
+
+<p>Leia o prompt de cada linha acima, de cima para baixo:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Prompt</th><th>Onde a Ana está</th></tr>
+<tr><td><code>ana@notebook:~$</code></td><td><code>/home/ana</code>, a pasta pessoal</td></tr>
+<tr><td><code>ana@notebook:~/Documentos$</code></td><td><code>/home/ana/Documentos</code></td></tr>
+<tr><td><code>ana@notebook:~/Documentos/projetos/site$</code></td><td>Duas pastas mais fundo</td></tr>
+<tr><td><code>ana@notebook:/etc$</code></td><td><code>/etc</code>, fora da pasta pessoal: o caminho aparece inteiro, sem <code>~</code></td></tr>
+<tr><td><code>ana@notebook:/$</code></td><td><code>/</code>, a raiz de tudo</td></tr>
+<tr><td><code>ana@notebook:~/Área de trabalho$</code></td><td>Uma pasta com espaços: o prompt mostra sem aspas</td></tr>
+</table>
+</div>
+
+<p>O último <code>cd</code>, sem nada, levou de volta à pasta pessoal, e o prompt voltou a <code>~</code>.</p>
+
+<h3>O til <code>~</code></h3>
+<p>O <code>~</code> é um apelido curto para a sua pasta pessoal. Ele também funciona dentro dos comandos: o Bash troca <code>~</code> pelo caminho antes de executar.</p>
+
+<pre class="term">$ echo ~
+/home/ana
+$ echo $HOME
+/home/ana                          « a variável HOME guarda o mesmo caminho</pre>
+
+<p>Mais sobre caminhos e o <code>cd</code> em <a href="navegar.html">Navegar (pwd, cd)</a>.</p>
+
+<div class="try" data-goal="cwd:~/Documentos/projetos" data-solucao="cd Documentos/projetos">
+<p class="try-task"><strong>Missão:</strong> entre na pasta <code>Documentos/projetos</code> e observe como o prompt mudou. Confira com <code>pwd</code>.</p>
+</div>
+
+<hr>
+
+<h2><code>$</code> ou <code>#</code>: usuário comum ou root</h2>
+<p>O último caractere do prompt é um aviso importante. <code>$</code> quer dizer usuário comum: você só pode mexer nos seus arquivos. <code>#</code> quer dizer que você é o <strong>root</strong>, o administrador, que pode mexer em tudo, inclusive apagar o sistema. Exemplo <strong>ilustrativo</strong> (o simulador não tem <code>sudo</code>):</p>
+
+<pre class="term">$ sudo -i
+[sudo] senha para ana:             « a senha não aparece enquanto você digita
+#> whoami
+root
+#> exit
+exit                               « volta a ser a ana, com o prompt terminando em $</pre>
+
+<p>Repare como o prompt muda: <code>root@notebook:~#</code>. O nome é outro, a pasta pessoal é outra (<code>~</code> agora é <code>/root</code>) e o fim é <code>#</code>. Quando vir <code>#</code>, desacelere e leia o comando duas vezes antes de apertar <kbd>Enter</kbd>.</p>
+
+<div class="tip">
+<strong>Tutoriais usam <code>$</code> e <code>#</code> do mesmo jeito</strong>
+<p>Na internet, um comando escrito como <code># apt update</code> quer dizer "rode como root" (o <code>#</code> não é para digitar). E <code>$ ls</code> quer dizer "rode como usuário comum". Cuidado: dentro de um script, <code>#</code> no começo da linha é um comentário.</p>
+</div>
+
+<hr>
+
+<h2>O prompt secundário: <code>&gt;</code></h2>
+<p>Às vezes, depois do <kbd>Enter</kbd>, em vez do resultado aparece só um <code>&gt;</code>. Isso não é um erro: é o <strong>prompt secundário</strong>, guardado na variável <code>PS2</code>. O Bash está dizendo: "o comando ainda não terminou, continue".</p>
+
+<pre class="term">$ echo "$PS2"
+&gt;                                  « um sinal de maior e um espaço</pre>
+
+<p>Ele aparece quando a linha está incompleta. Os casos mais comuns:</p>
+
+<h3>Aspas abertas</h3>
+<pre class="term">$ echo "Olá
+&gt; mundo"
+Olá
+mundo</pre>
+<p>A aspa aberta na primeira linha só fechou na segunda. Tudo entre as aspas, inclusive a quebra de linha, virou um argumento só.</p>
+
+<h3>Um comando que pede continuação</h3>
+<p>Um <code>|</code> no fim da linha, ou um <code>for</code> sem <code>done</code>, também deixam o comando "em aberto":</p>
+
+<pre class="term">$ cat frutas.txt |
+&gt; sort -u
+banana
+laranja
+maçã
+uva
+$ for fruta in banana uva
+&gt; do
+&gt;   echo "Eu gosto de $fruta"
+&gt; done
+Eu gosto de banana
+Eu gosto de uva</pre>
+
+<p>No <code>for</code>, o Bash só executa depois do <code>done</code>; até lá, cada <kbd>Enter</kbd> mostra um novo <code>&gt;</code>. Escrever assim, em várias linhas, é útil para comandos longos. O <code>for</code> tem aula própria: <a href="for.html">for</a>. O <code>|</code> está em <a href="pipes.html">Pipes</a>.</p>
+
+<h3>A barra invertida no fim</h3>
+<p>Como você viu em <a href="sintaxe.html">Anatomia de um Comando</a>, uma <code>\</code> no fim da linha pede continuação de propósito.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>O que deixou a linha incompleta</th><th>Exemplo</th><th>Como completar</th></tr>
+<tr><td>Aspa dupla ou simples aberta</td><td><code>echo "Olá</code></td><td>Feche a aspa</td></tr>
+<tr><td><code>|</code>, <code>&amp;&amp;</code> ou <code>||</code> no fim</td><td><code>cat frutas.txt |</code></td><td>Digite o próximo comando</td></tr>
+<tr><td><code>\</code> no fim</td><td><code>wc -l \</code></td><td>Continue o comando</td></tr>
+<tr><td>Bloco sem fechar</td><td><code>for … do</code> sem <code>done</code>, <code>if</code> sem <code>fi</code>, <code>{</code> sem <code>}</code></td><td>Digite o fechamento</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="ran:^\s*for,outre:banana\nuva" data-solucao="for fruta in banana uva; do echo $fruta; done">
+<p class="try-task"><strong>Missão:</strong> digite um <code>for</code> em várias linhas, apertando <kbd>Enter</kbd> no fim de cada uma: <code>for fruta in banana uva</code>, depois <code>do</code>, depois <code>echo $fruta</code>, depois <code>done</code>. Repare no <code>&gt;</code> em cada linha de continuação.</p>
+</div>
+
+<hr>
+
+<h2>Preso no <code>&gt;</code>: como sair</h2>
+<p>O problema é quando você <strong>não queria</strong> continuar. O caso clássico é o apóstrofo do português: <code>d'água</code> abre uma aspa simples que nunca fecha.</p>
+
+<pre class="term">$ echo Copo d'água
+&gt; e gelo                          « o Bash ainda espera a aspa fechar
+&gt; ^C                              « Ctrl+C: desiste do comando
+$ echo $?
+130                                « 130 = interrompido pelo Ctrl+C</pre>
+
+<p>Aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>: o comando inteiro é descartado, nada é executado, e o prompt normal volta. O código <code>130</code> registra que a linha foi interrompida. Depois, digite de novo do jeito certo:</p>
+
+<pre class="term">$ echo "Copo d'água"
+Copo d'água                        « a aspa simples dentro das duplas é só uma letra
+$ echo Copo d\'água
+Copo d'água                        « ou a barra invertida antes do apóstrofo</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma de sair</th><th>O que acontece</th><th>Use quando…</th></tr>
+<tr><td>Completar (fechar a aspa, digitar <code>done</code>…)</td><td>O comando roda</td><td>Você queria mesmo um comando de várias linhas.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Descarta tudo, volta ao prompt <code>$</code></td><td>Foi engano. <strong>É a forma mais segura.</strong></td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Avisa "acabou o texto": o Bash dá erro de sintaxe e volta</td><td>Evite: fora do <code>&gt;</code>, ele fecha o terminal.</td></tr>
+</table>
+</div>
+
+<p>As aspas têm várias outras armadilhas e soluções: <a href="aspas.html">Aspas e Escapes</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O terminal "não responde": só aparece <code>&gt;</code></strong>
+<pre class="term">$ echo "Relatório de vendas
+&gt;
+&gt;</pre>
+<p><strong>O que aconteceu:</strong> uma aspa (ou um bloco) ficou aberta. O Bash não travou: está esperando o fim do comando.</p>
+<p><strong>Como resolver:</strong> <kbd>Ctrl</kbd>+<kbd>C</kbd> e digite de novo. Use a seta <kbd>↑</kbd> para trazer a linha de volta e corrigir.</p>
+</div>
+
+<div class="cenario">
+<strong>"encontrado EOF inesperado"</strong>
+<pre class="term">$ echo 'it's
+&gt;
+bash: encontrado EOF inesperado enquanto procurava por `'' correspondente</pre>
+<p>(No terminal, a mensagem aparece na mesma linha do <code>&gt;</code>, logo depois dele.)</p>
+<p><strong>O que aconteceu:</strong> no <code>&gt;</code>, alguém apertou <kbd>Ctrl</kbd>+<kbd>D</kbd> (fim do texto, em inglês <em>end of file</em>, EOF). O Bash procurava a aspa que fecha e encontrou o fim. Em scripts, o mesmo erro aparece quando falta fechar uma aspa no arquivo, com o nome do script e a linha.</p>
+<p><strong>Como resolver:</strong> feche a aspa. Para um apóstrofo, use aspas duplas em volta (<code>"it's"</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>Rodei o comando na pasta errada</strong>
+<p><strong>O que aconteceu:</strong> o prompt mostrava outra pasta, e o comando trabalhou nela. Um <code>rm *</code> no lugar errado é o pior caso.</p>
+<p><strong>Como evitar:</strong> olhe a parte entre <code>:</code> e <code>$</code> antes de comandos que mudam arquivos, ou confira com <code>pwd</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O meu prompt é diferente do guia</strong>
+<p><strong>O que aconteceu:</strong> cada sistema (e cada pessoa) configura o <code>PS1</code> de um jeito. Pode ter cores, hora, o ramo do git, ou ser só <code>$</code> (no <code>sh</code>) ou <code>%</code> (no zsh).</p>
+<p><strong>Como resolver:</strong> nada a resolver; identifique as mesmas partes (usuário, máquina, pasta, <code>$</code>). Se o prompt for <code>%</code> ou estiver muito diferente, confira se você está no Bash (<a href="terminal-shell.html">Terminal e Shell</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Elemento</th><th>Significado</th></tr>
+<tr><td><code>ana</code></td><td>Usuário (<code>\u</code>)</td></tr>
+<tr><td><code>@notebook</code></td><td>Máquina (<code>\h</code>)</td></tr>
+<tr><td><code>:~</code>, <code>:/etc</code></td><td>Pasta atual (<code>\w</code>); <code>~</code> = pasta pessoal</td></tr>
+<tr><td><code>$</code> / <code>#</code></td><td>Usuário comum / root (<code>\$</code>)</td></tr>
+<tr><td><code>&gt; </code></td><td>Prompt secundário (<code>PS2</code>): o comando continua</td></tr>
+<tr><td><code>echo "$PS1"</code></td><td>Mostra o molde do prompt</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Desiste da linha e volta ao prompt (código 130)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. O prompt é <code>bruno@servidor:/var/log$</code>. Onde Bruno está?</p>
+<label><input type="radio" name="q1"> Na pasta pessoal dele.</label>
+<label><input type="radio" name="q1"> Na máquina "bruno", pasta "servidor".</label>
+<label><input type="radio" name="q1"> Na pasta <code>/var/log</code> da máquina "servidor".</label>
+<label><input type="radio" name="q1"> Na pasta <code>/home/bruno/var/log</code>.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. O prompt terminou em <code>#</code>. O que isso indica?</p>
+<label><input type="radio" name="q2"> Que o comando anterior deu erro.</label>
+<label><input type="radio" name="q2"> Que você é o root (administrador).</label>
+<label><input type="radio" name="q2"> Que a linha é um comentário.</label>
+<label><input type="radio" name="q2"> Que o comando continua na próxima linha.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">3. Você digitou <code>echo Bom dia, D'Ávila</code> e apareceu <code>&gt;</code>. Qual é a saída mais segura?</p>
+<label><input type="radio" name="q3"> Fechar o terminal.</label>
+<label><input type="radio" name="q3"> Apertar <kbd>Enter</kbd> várias vezes.</label>
+<label><input type="radio" name="q3"> Digitar <code>exit</code>.</label>
+<label><input type="radio" name="q3"> Apertar <kbd>Ctrl</kbd>+<kbd>C</kbd> e redigitar com aspas duplas.</label>
+</div>
+
+<div class="exercise">
+<h3>4. O molde do prompt</h3>
+<p>Complete para ver o molde do prompt principal:</p>
+<div class="ex-code">echo "$<input data-answer="PS1" aria-label="variável">"</div>
+</div>
+
+<div class="exercise">
+<h3>5. O apóstrofo</h3>
+<p>Complete para mostrar <code>Copo d'água</code> sem cair no <code>&gt;</code>:</p>
+<div class="ex-code">echo <input data-answer="&quot;Copo d'água&quot;|Copo d\'água" aria-label="argumento"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>ana@notebook:~$</code> = usuário @ máquina : pasta, e <code>$</code> (comum) ou <code>#</code> (root).</li>
+  <li>A pasta do prompt muda a cada <code>cd</code>; <code>~</code> é a pasta pessoal.</li>
+  <li>O prompt vem da variável <code>PS1</code>; personalizar é assunto de <a href="ps1.html">PS1</a>.</li>
+  <li><code>&gt;</code> (<code>PS2</code>) quer dizer "comando incompleto": aspa aberta, <code>|</code> no fim, <code>\</code>, bloco sem fechar.</li>
+  <li>Preso no <code>&gt;</code>? <kbd>Ctrl</kbd>+<kbd>C</kbd> e redigite.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
