@@ -195,40 +195,34 @@ declare -a campos=([0]="Ana" [1]="29" [2]="Recife" [3]=$'9.5\n')     « o \n fic
 <h3><code>-d ''</code>: nomes de arquivo com qualquer caractere</h3>
 <p>Nomes de arquivo podem ter espaços e até quebras de linha. O jeito 100% seguro de passar uma lista de nomes entre programas é separá-los pelo caractere <strong>nulo</strong> (o byte zero, que nenhum nome pode conter). O <code>find -print0</code> faz isso, e o <code>mapfile -d ''</code> lê exatamente esse formato: <code>''</code> (texto vazio) quer dizer "o delimitador é o nulo".</p>
 
+<p>Para ver a diferença, a Ana cria um arquivo com espaços no nome dentro de <code>Documentos</code>:</p>
+
+<pre class="term">$ touch "Documentos/lista de compras.txt"</pre>
+
 <dl class="anatomy">
   <dt>mapfile -t</dt><dd>Lê sem o delimitador no fim.</dd>
   <dt>-d ''</dt><dd>Corta no caractere nulo, não na quebra de linha.</dd>
-  <dt>pastas</dt><dd>O array.</dd>
+  <dt>docs</dt><dd>O array.</dd>
   <dt>&lt; &lt;(find … -print0)</dt><dd>Lê a saída do <code>find</code>, que termina cada nome com um nulo. O <code>&lt;( )</code> é explicado logo abaixo.</dd>
 </dl>
 
-<pre class="term">$ mapfile -t -d '' pastas &lt; &lt;(find . -mindepth 1 -maxdepth 1 -type d -print0)
-$ echo "${#pastas[@]} pastas"
-8 pastas
-$ printf '[%s]\n' "${pastas[@]}"
-[./Documentos]
-[./Música]
-[./Área de trabalho]          « inteiro, com os espaços
-[./Downloads]
-[./Modelos]
-[./Público]
-[./Vídeos]
-[./Imagens]</pre>
+<pre class="term">$ mapfile -t -d '' docs &lt; &lt;(find Documentos -name '*.txt' -print0)
+$ echo "${#docs[@]} arquivos"
+2 arquivos
+$ printf '[%s]\n' "${docs[@]}"
+[Documentos/notas.txt]
+[Documentos/lista de compras.txt]     « inteiro, com os espaços</pre>
 
 <p>Os colchetes no <code>printf</code> mostram onde cada elemento começa e termina. A ordem é a que o <code>find</code> encontrou no disco (não é alfabética). Compare com o jeito ingênuo, que separa nos espaços:</p>
 
-<pre class="term">$ errado=($(find . -mindepth 1 -maxdepth 1 -type d))
-$ echo "${#errado[@]} pastas"
-10 pastas                      « 10?! Há só 8 pastas
+<pre class="term">$ errado=($(find Documentos -name '*.txt'))
+$ echo "${#errado[@]} arquivos"
+4 arquivos                            « 4?! Há só 2 arquivos .txt
 $ printf '[%s]\n' "${errado[@]}"
-[./Documentos]
-[./Música]
-[./Área]                       « "Área de trabalho" virou
-[de]                           « três elementos
-[trabalho]
-…</pre>
-
-<p>(Encurtamos a segunda listagem com <code>…</code>.)</p>
+[Documentos/notas.txt]
+[Documentos/lista]                    « "lista de compras.txt"
+[de]                                  « virou três elementos
+[compras.txt]</pre>
 
 <h3><code>-O</code>: continuar um array que já existe</h3>
 <p>Normalmente o <code>mapfile</code> <strong>apaga</strong> o array antes de preencher. O <code>-O N</code> (<em>origin</em>, origem) começa a gravar no índice N e mantém o que havia antes. Usando o tamanho atual como origem, você acrescenta no fim:</p>
@@ -365,7 +359,7 @@ mapfile: uso: mapfile [-d delim] [-n número] [-O origem] [-s número] [-t] [-u 
 </div>
 
 <div class="cenario">
-<strong>"Área de trabalho" virou três elementos</strong>
+<strong>"lista de compras.txt" virou três elementos</strong>
 <p><strong>O que aconteceu:</strong> o array foi montado com <code>a=($(comando))</code>, que separa nos espaços e ainda expande curingas.</p>
 <p><strong>Como resolver:</strong> <code>mapfile -t a &lt; &lt;(comando)</code> para uma linha por elemento, ou <code>mapfile -t -d '' a &lt; &lt;(find … -print0)</code> para nomes de arquivo.</p>
 </div>
@@ -381,7 +375,7 @@ mapfile: uso: mapfile [-d delim] [-n número] [-O origem] [-s número] [-t] [-u 
 <tr><td><code>-n N</code></td><td>Lê no máximo N linhas (0 = todas)</td><td><code>mapfile -t -n 10 a &lt; arq</code></td></tr>
 <tr><td><code>-s N</code></td><td>Pula as N primeiras linhas</td><td><code>mapfile -t -s 1 a &lt; dados.csv</code></td></tr>
 <tr><td><code>-d C</code></td><td>Usa o caractere C como separador</td><td><code>mapfile -t -d , a &lt; &lt;(printf 'x,y')</code></td></tr>
-<tr><td><code>-d ''</code></td><td>Separador nulo (par do <code>find -print0</code>)</td><td><code>mapfile -t -d '' a &lt; &lt;(find . -print0)</code></td></tr>
+<tr><td><code>-d ''</code></td><td>Separador nulo (par do <code>find -print0</code>)</td><td><code>mapfile -t -d '' a &lt; &lt;(find Documentos -print0)</code></td></tr>
 <tr><td><code>-O N</code></td><td>Começa no índice N sem apagar o resto</td><td><code>mapfile -t -O "${#a[@]}" a &lt; mais.txt</code></td></tr>
 <tr><td><code>-C f -c N</code></td><td>Chama a função <code>f</code> a cada N linhas</td><td><code>mapfile -t -C progresso -c 1000 a &lt; arq</code></td></tr>
 <tr><td><code>-u FD</code></td><td>Lê do descritor FD em vez da entrada padrão</td><td><code>mapfile -t -u 3 a 3&lt; arq</code></td></tr>
