@@ -26,7 +26,7 @@
 var fs = require("fs"), path = require("path"), cp = require("child_process"), crypto = require("crypto");
 var sim = require(path.join(__dirname, "..", "sim.js"));
 var DIR = __dirname, CACHE = path.join(DIR, ".cache-lab.json");
-var LAB = path.join(process.env.HOME || "/home/wallyson", "guia-bash-lab", "lab");
+var LAB = path.join(process.env.HOME || "/home/ana", "guia-bash-lab", "lab");
 
 function lerCasos(filtro) {
   var casos = [];

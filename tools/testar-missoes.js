@@ -23,7 +23,7 @@ var fs = require("fs"), path = require("path"), cp = require("child_process"), c
 var RAIZ = path.join(__dirname, "..");
 var BashSim = require(path.join(RAIZ, "assets", "bashsim.js"));
 var sim = require(path.join(__dirname, "sim.js"));
-var LAB = path.join(process.env.HOME || "/home/wallyson", "guia-bash-lab", "lab");
+var LAB = path.join(process.env.HOME || "/home/ana", "guia-bash-lab", "lab");
 var CACHE = path.join(__dirname, ".cache-missoes.json");
 
 function decodificar(s) {
