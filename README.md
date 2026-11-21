@@ -34,6 +34,7 @@ CONTRIBUINDO.md            como escrever uma aula
 node tools/testar-missoes.js --sem-lab   # todas as missões, só no simulador
 node tools/testar-missoes.js             # idem, comparando os scripts com o Bash real (precisa do laboratório)
 node tools/testes/rodar.js               # bateria diferencial (precisa do laboratório)
+bash tools/checar-privacidade.sh             # páginas e histórico; lista extra: PROIBIDO=lista.txt
 ```
 
 ## Publicar no GitHub Pages
